@@ -1,0 +1,96 @@
+﻿--- DB INSPECTION START ---
+Connected!
+
+Columns for tblPalabrasClave:
+[
+  {
+    name: 'IdPalabraClave',
+    Type: 'int',
+    max_length: 4,
+    is_nullable: false,
+    is_identity: true
+  },
+  {
+    name: 'Consecutivo',
+    Type: 'int',
+    max_length: 4,
+    is_nullable: true,
+    is_identity: false
+  },
+  {
+    name: 'PalabraClave',
+    Type: 'varchar',
+    max_length: 250,
+    is_nullable: true,
+    is_identity: false
+  },
+  {
+    name: 'FechaAct',
+    Type: 'datetime',
+    max_length: 8,
+    is_nullable: true,
+    is_identity: false
+  },
+  {
+    name: 'Status',
+    Type: 'int',
+    max_length: 4,
+    is_nullable: true,
+    is_identity: false
+  }
+]
+
+Columns for tblReglasPalabrasClave:
+[
+  {
+    name: 'IdReglaPalabraClave',
+    Type: 'int',
+    max_length: 4,
+    is_nullable: false,
+    is_identity: true
+  },
+  {
+    name: 'IdPalabraClave',
+    Type: 'int',
+    max_length: 4,
+    is_nullable: true,
+    is_identity: false
+  },
+  {
+    name: 'Consecutivo',
+    Type: 'int',
+    max_length: 4,
+    is_nullable: true,
+    is_identity: false
+  },
+  {
+    name: 'Regla',
+    Type: 'varchar',
+    max_length: -1,
+    is_nullable: true,
+    is_identity: false
+  },
+  {
+    name: 'IdPerfil',
+    Type: 'int',
+    max_length: 4,
+    is_nullable: true,
+    is_identity: false
+  },
+  {
+    name: 'Status',
+    Type: 'int',
+    max_length: 4,
+    is_nullable: true,
+    is_identity: false
+  },
+  {
+    name: 'FechaAct',
+    Type: 'datetime',
+    max_length: 8,
+    is_nullable: true,
+    is_identity: false
+  }
+]
+
+--- DB INSPECTION END ---
