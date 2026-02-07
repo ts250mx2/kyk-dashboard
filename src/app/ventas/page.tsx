@@ -181,6 +181,7 @@ export default function SalesPage() {
                         <ResultsDisplay
                             data={results}
                             sql="Reporte de Ventas por Filtros"
+                            question={`Ventas ${groupBy !== 'detalle' ? `por ${groupBy}` : ''} del ${fechaInicio} al ${fechaFin} ${sucursal !== 'all' ? `(Sucursal: ${sucursales.find(s => s.IdTienda.toString() === sucursal)?.Tienda || sucursal})` : '(Todas las sucursales)'}`}
                             visualization="table"
                         />
                     </div>
