@@ -28,10 +28,11 @@ type MenuSection = {
 
 const menuSections: MenuSection[] = [
     {
-        title: "Principal",
-        emoji: "🚀",
+        title: "Dashboard",
+        emoji: "📊",
         items: [
-            { name: "Chat con IA", emoji: "🤖", href: "/dashboard" },
+            { name: "Vista General", emoji: "🏠", href: "/dashboard" },
+            { name: "Chat con IA", emoji: "🤖", href: "/dashboard/chat" },
         ]
     },
     {
