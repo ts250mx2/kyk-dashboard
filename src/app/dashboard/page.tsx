@@ -23,7 +23,10 @@ import {
     Package,
     FileSpreadsheet,
     FileDown,
-    RotateCcw
+    RotateCcw,
+    LayoutGrid,
+    Rows,
+    Columns
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { LoadingScreen } from '@/components/ui/loading-screen';
@@ -96,6 +99,11 @@ export default function DashboardPage() {
     const [returnItems, setReturnItems] = useState<any[]>([]);
     const [loadingReturnItems, setLoadingReturnItems] = useState(false);
     const [returnItemsSortConfig, setReturnItemsSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
+
+    // UI State for Minimize/Maximize and Positioning
+    const [isChartMinimized, setIsChartMinimized] = useState(false);
+    const [isDetailsMinimized, setIsDetailsMinimized] = useState(false);
+    const [layoutPosition, setLayoutPosition] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
 
     const fetchData = async () => {
         setLoading(true);
@@ -900,10 +908,59 @@ export default function DashboardPage() {
                 </button>
             </div>
 
+            {/* Layout Controls */}
+            <div className="flex items-center justify-end gap-2 mb-4 bg-slate-100/50 p-1 self-end">
+                <button
+                    onClick={() => setLayoutPosition('top')}
+                    className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all",
+                        layoutPosition === 'top' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                    )}
+                >
+                    <Rows size={14} className="rotate-180" /> Arriba
+                </button>
+                <button
+                    onClick={() => setLayoutPosition('bottom')}
+                    className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all",
+                        layoutPosition === 'bottom' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                    )}
+                >
+                    <Rows size={14} /> Abajo
+                </button>
+                <button
+                    onClick={() => setLayoutPosition('left')}
+                    className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all",
+                        layoutPosition === 'left' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                    )}
+                >
+                    <Columns size={14} className="rotate-180" /> Izquierda
+                </button>
+                <button
+                    onClick={() => setLayoutPosition('right')}
+                    className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all",
+                        layoutPosition === 'right' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                    )}
+                >
+                    <Columns size={14} /> Derecha
+                </button>
+            </div>
+
             {/* Bottom Section: Chart + Details */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className={cn(
+                "flex gap-4",
+                (layoutPosition === 'left' || layoutPosition === 'right') ? "flex-col lg:grid lg:grid-cols-3" :
+                    layoutPosition === 'top' ? "flex-col-reverse" : "flex-col",
+                layoutPosition === 'left' && "lg:flex-row-reverse"
+            )}>
                 {/* Chart Card */}
-                <div className="lg:col-span-2 bg-white p-5 rounded-none border border-slate-100 shadow-sm relative">
+                <div className={cn(
+                    "bg-white p-5 rounded-none border border-slate-100 shadow-sm relative transition-all duration-300",
+                    (layoutPosition === 'left' || layoutPosition === 'right') && "lg:col-span-2",
+                    layoutPosition === 'left' && "lg:order-2"
+                )}>
                     <div className="flex items-center justify-between mb-4">
                         <div>
                             <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">{config.title}</h3>
@@ -911,7 +968,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center gap-4">
                             {/* Sub-metric Selector */}
-                            {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones') && (
+                            {!isChartMinimized && (selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones') && (
                                 <div className="flex items-center bg-slate-100 p-1 rounded-none">
                                     {selectedMetric === 'ventas' ? (
                                         <>
@@ -979,221 +1036,240 @@ export default function DashboardPage() {
                                 </div>
                             )}
 
-                            <div className="flex items-center bg-slate-100 p-1 rounded-none">
-                                <button
-                                    onClick={() => setChartType('bar')}
-                                    className={cn(
-                                        "px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all",
-                                        chartType === 'bar' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                                    )}
-                                >
-                                    Barras
-                                </button>
-                                <button
-                                    onClick={() => setChartType('pie')}
-                                    className={cn(
-                                        "px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all",
-                                        chartType === 'pie' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                                    )}
-                                >
-                                    Pastel
-                                </button>
-                            </div>
-                            <div className="p-2 bg-slate-100 rounded-none">
-                                {selectedMetric === 'ventas' && <ShoppingCart size={20} className="text-slate-400" />}
-                                {selectedMetric === 'aperturas' && <Store size={20} className="text-slate-400" />}
-                                {selectedMetric === 'cancelaciones' && <AlertCircle size={20} className="text-slate-400" />}
-                                {selectedMetric === 'retiros' && <Wallet size={20} className="text-slate-400" />}
-                            </div>
+                            {!isChartMinimized && (
+                                <div className="flex items-center bg-slate-100 p-1 rounded-none">
+                                    <button
+                                        onClick={() => setChartType('bar')}
+                                        className={cn(
+                                            "px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all",
+                                            chartType === 'bar' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                        )}
+                                    >
+                                        Barras
+                                    </button>
+                                    <button
+                                        onClick={() => setChartType('pie')}
+                                        className={cn(
+                                            "px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all",
+                                            chartType === 'pie' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                        )}
+                                    >
+                                        Pastel
+                                    </button>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={() => setIsChartMinimized(!isChartMinimized)}
+                                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors rounded-none"
+                            >
+                                {isChartMinimized ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                            </button>
                         </div>
                     </div>
 
-                    <div className="h-[400px] w-full">
-                        {loading ? (
-                            <div className="h-full flex items-center justify-center">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4050B4]"></div>
-                            </div>
-                        ) : (
-                            <ResponsiveContainer width="100%" height="100%">
-                                {chartType === 'bar' ? (
-                                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                                        <XAxis
-                                            dataKey="Tienda"
-                                            axisLine={false}
-                                            tickLine={false}
-                                            tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 700 }}
-                                            interval={0}
-                                            angle={-45}
-                                            textAnchor="end"
-                                            height={80}
-                                        />
-                                        <YAxis
-                                            axisLine={false}
-                                            tickLine={false}
-                                            tick={{ fill: '#94A3B8', fontSize: 11, fontWeight: 700 }}
-                                            tickFormatter={(val) => {
-                                                if (selectedMetric === 'aperturas') return val.toString();
-                                                if (subMetric === 'Operaciones' || subMetric === 'Cantidad') return val.toString();
-                                                return `$${val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val}`;
-                                            }}
-                                        />
-                                        <Tooltip
-                                            cursor={{ fill: 'transparent' }}
-                                            content={({ active, payload }) => {
-                                                if (active && payload && payload.length) {
-                                                    const value = payload[0].value as number;
-                                                    const formatted = (subMetric === 'Operaciones' || subMetric === 'Cantidad' || selectedMetric === 'aperturas')
-                                                        ? value.toString()
-                                                        : formatCurrency(value);
-                                                    return (
-                                                        <div className="bg-slate-900 text-white p-3 rounded-none shadow-2xl border border-white/10">
-                                                            <p className="text-[10px] font-bold text-white/50 uppercase mb-1">{payload[0].payload.Tienda}</p>
-                                                            <p className="text-sm font-black">{formatted}</p>
-                                                        </div>
-                                                    );
-                                                }
-                                                return null;
-                                            }}
-                                        />
-                                        <Bar
-                                            dataKey={subMetric}
-                                            radius={[0, 0, 0, 0]}
-                                            barSize={40}
-                                            onClick={(data) => handleStoreClick(data.payload)}
-                                            className="cursor-pointer shadow-lg outline-none"
-                                        >
-                                            {chartData.map((entry: any, index: number) => (
-                                                <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} fillOpacity={0.9} />
-                                            ))}
-                                        </Bar>
-                                    </BarChart>
-                                ) : (
-                                    <PieChart>
-                                        <Pie
-                                            data={chartData}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={0}
-                                            outerRadius={140}
-                                            paddingAngle={2}
-                                            dataKey={subMetric}
-                                            nameKey="Tienda"
-                                            stroke="none"
-                                            onClick={(data) => handleStoreClick(data.payload)}
-                                            className="cursor-pointer outline-none"
-                                        >
-                                            {chartData.map((entry: any, index: number) => (
-                                                <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip
-                                            content={({ active, payload }) => {
-                                                if (active && payload && payload.length) {
-                                                    const value = payload[0].value as number;
-                                                    const formatted = (subMetric === 'Operaciones' || subMetric === 'Cantidad' || selectedMetric === 'aperturas')
-                                                        ? value.toString()
-                                                        : formatCurrency(value);
-                                                    return (
-                                                        <div className="bg-slate-900 text-white p-3 rounded-none shadow-2xl border border-white/10">
-                                                            <p className="text-[10px] font-bold text-white/50 uppercase mb-1">{payload[0].name}</p>
-                                                            <p className="text-sm font-black">{formatted}</p>
-                                                        </div>
-                                                    );
-                                                }
-                                                return null;
-                                            }}
-                                        />
-                                        <Legend verticalAlign="bottom" height={36} />
-                                    </PieChart>
-                                )}
-                            </ResponsiveContainer>
-                        )}
-                    </div>
+                    {!isChartMinimized && (
+                        <div className="h-[400px] w-full animate-in fade-in slide-in-from-top-2 duration-300">
+                            {loading ? (
+                                <div className="h-full flex items-center justify-center">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4050B4]"></div>
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    {chartType === 'bar' ? (
+                                        <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                            <XAxis
+                                                dataKey="Tienda"
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 700 }}
+                                                interval={0}
+                                                angle={-45}
+                                                textAnchor="end"
+                                                height={80}
+                                            />
+                                            <YAxis
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fill: '#94A3B8', fontSize: 11, fontWeight: 700 }}
+                                                tickFormatter={(val) => {
+                                                    if (selectedMetric === 'aperturas') return val.toString();
+                                                    if (subMetric === 'Operaciones' || subMetric === 'Cantidad') return val.toString();
+                                                    return `$${val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val}`;
+                                                }}
+                                            />
+                                            <Tooltip
+                                                cursor={{ fill: 'transparent' }}
+                                                content={({ active, payload }) => {
+                                                    if (active && payload && payload.length) {
+                                                        const value = payload[0].value as number;
+                                                        const formatted = (subMetric === 'Operaciones' || subMetric === 'Cantidad' || selectedMetric === 'aperturas')
+                                                            ? value.toString()
+                                                            : formatCurrency(value);
+                                                        return (
+                                                            <div className="bg-slate-900 text-white p-3 rounded-none shadow-2xl border border-white/10">
+                                                                <p className="text-[10px] font-bold text-white/50 uppercase mb-1">{payload[0].payload.Tienda}</p>
+                                                                <p className="text-sm font-black">{formatted}</p>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                }}
+                                            />
+                                            <Bar
+                                                dataKey={subMetric}
+                                                radius={[0, 0, 0, 0]}
+                                                barSize={40}
+                                                onClick={(data) => handleStoreClick(data.payload)}
+                                                className="cursor-pointer shadow-lg outline-none"
+                                            >
+                                                {chartData.map((entry: any, index: number) => (
+                                                    <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} fillOpacity={0.9} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    ) : (
+                                        <PieChart>
+                                            <Pie
+                                                data={chartData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={0}
+                                                outerRadius={140}
+                                                paddingAngle={2}
+                                                dataKey={subMetric}
+                                                nameKey="Tienda"
+                                                stroke="none"
+                                                onClick={(data) => handleStoreClick(data.payload)}
+                                                className="cursor-pointer outline-none"
+                                            >
+                                                {chartData.map((entry: any, index: number) => (
+                                                    <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip
+                                                content={({ active, payload }) => {
+                                                    if (active && payload && payload.length) {
+                                                        const value = payload[0].value as number;
+                                                        const formatted = (subMetric === 'Operaciones' || subMetric === 'Cantidad' || selectedMetric === 'aperturas')
+                                                            ? value.toString()
+                                                            : formatCurrency(value);
+                                                        return (
+                                                            <div className="bg-slate-900 text-white p-3 rounded-none shadow-2xl border border-white/10">
+                                                                <p className="text-[10px] font-bold text-white/50 uppercase mb-1">{payload[0].name}</p>
+                                                                <p className="text-sm font-black">{formatted}</p>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                }}
+                                            />
+                                            <Legend verticalAlign="bottom" height={36} />
+                                        </PieChart>
+                                    )}
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Details Card */}
-                <div className="bg-white p-5 rounded-none border border-slate-100 shadow-sm flex flex-col h-full">
-                    <div className="mb-4">
-                        <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
-                            Detalle {selectedMetric === 'ventas' ? 'Ventas' :
-                                selectedMetric === 'aperturas' ? 'Aperturas' :
-                                    selectedMetric === 'cancelaciones' ? 'Cancelaciones' :
-                                        selectedMetric === 'devoluciones' ? 'Devoluciones' : 'Retiros'}
-                        </h3>
-                        <p className="text-[13px] text-slate-500 font-medium">Desglose de rendimiento</p>
+                <div className={cn(
+                    "bg-white p-5 rounded-none border border-slate-100 shadow-sm flex flex-col transition-all duration-300",
+                    (layoutPosition === 'left' || layoutPosition === 'right') ? "lg:col-span-1 h-[530px]" : "h-full",
+                    layoutPosition === 'left' && "lg:order-1"
+                )}>
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+                                Detalle {selectedMetric === 'ventas' ? 'Ventas' :
+                                    selectedMetric === 'aperturas' ? 'Aperturas' :
+                                        selectedMetric === 'cancelaciones' ? 'Cancelaciones' :
+                                            selectedMetric === 'devoluciones' ? 'Devoluciones' : 'Retiros'}
+                            </h3>
+                            <p className="text-[13px] text-slate-500 font-medium">Desglose de rendimiento</p>
+                        </div>
+                        <button
+                            onClick={() => setIsDetailsMinimized(!isDetailsMinimized)}
+                            className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 transition-colors rounded-none border border-slate-100"
+                        >
+                            {isDetailsMinimized ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                        </button>
                     </div>
 
-                    <div className="flex-1 space-y-3 overflow-y-auto pr-2 no-scrollbar">
-                        {loading ? (
-                            Array(5).fill(0).map((_, i) => (
-                                <div key={i} className="h-16 bg-slate-50 rounded-none animate-pulse" />
-                            ))
-                        ) : (
-                            chartData.map((item: any, index: number) => {
-                                const storeColor = getStoreColor(item.Tienda);
-                                return (
-                                    <div
-                                        key={item.Tienda}
-                                        onClick={() => handleStoreClick(item)}
-                                        className={cn(
-                                            "flex flex-col p-3 bg-slate-50 rounded-none border border-slate-100 group transition-all outline-none",
-                                            (selectedMetric === 'ventas' || selectedMetric === 'aperturas') ? "cursor-pointer hover:bg-white hover:border-[#4050B4] hover:shadow-lg hover:shadow-[#4050B4]/10" : "hover:bg-white hover:border-slate-200 hover:shadow-lg hover:shadow-slate-200/20"
-                                        )}
-                                    >
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <div
-                                                    className="w-8 h-8 rounded-none flex items-center justify-center border shadow-sm font-black text-[10px]"
-                                                    style={{ backgroundColor: `${storeColor}10`, borderColor: `${storeColor}20`, color: storeColor }}
-                                                >
-                                                    {item.Tienda.substring(0, 2).toUpperCase()}
+                    {!isDetailsMinimized && (
+                        <div className="flex-1 flex flex-row flex-wrap gap-4 pb-4 no-scrollbar justify-start animate-in fade-in slide-in-from-top-2 duration-300 overflow-y-auto">
+                            {loading ? (
+                                Array(5).fill(0).map((_, i) => (
+                                    <div key={i} className="h-24 min-w-[200px] flex-1 max-w-[400px] bg-slate-50 rounded-none animate-pulse" />
+                                ))
+                            ) : (
+                                chartData.map((item: any, index: number) => {
+                                    const storeColor = getStoreColor(item.Tienda);
+                                    return (
+                                        <div
+                                            key={item.Tienda}
+                                            onClick={() => handleStoreClick(item)}
+                                            className={cn(
+                                                "flex flex-col p-3 bg-slate-50 rounded-none border border-slate-100 group transition-all outline-none w-full sm:min-w-[200px] flex-1 sm:max-w-[400px]",
+                                                (selectedMetric === 'ventas' || selectedMetric === 'aperturas') ? "cursor-pointer hover:bg-white hover:border-[#4050B4] hover:shadow-lg hover:shadow-[#4050B4]/10" : "hover:bg-white hover:border-slate-200 hover:shadow-lg hover:shadow-slate-200/20"
+                                            )}
+                                        >
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div
+                                                        className="w-8 h-8 rounded-none flex items-center justify-center border shadow-sm font-black text-[10px]"
+                                                        style={{ backgroundColor: `${storeColor}10`, borderColor: `${storeColor}20`, color: storeColor }}
+                                                    >
+                                                        {item.Tienda.substring(0, 2).toUpperCase()}
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[12px] font-black text-slate-700 leading-none">{item.Tienda}</span>
+                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">Sucursal</span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[12px] font-black text-slate-700 leading-none">{item.Tienda}</span>
-                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">Sucursal</span>
-                                                </div>
+                                                {(selectedMetric !== 'ventas' && selectedMetric !== 'cancelaciones') && (
+                                                    <div className="text-right">
+                                                        <div className="text-sm font-black text-slate-900">
+                                                            {selectedMetric === 'aperturas' ? item.Total : formatCurrency(item.Total)}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                            {(selectedMetric !== 'ventas' && selectedMetric !== 'cancelaciones') && (
-                                                <div className="text-right">
-                                                    <div className="text-sm font-black text-slate-900">
-                                                        {selectedMetric === 'aperturas' ? item.Total : formatCurrency(item.Total)}
+
+                                            {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones') && (
+                                                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/50">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
+                                                            {selectedMetric === 'ventas' ? 'Ventas' : selectedMetric === 'cancelaciones' ? 'Cancelaciones' : 'Devoluciones'}
+                                                        </span>
+                                                        <span className="text-[11px] font-black text-slate-900">
+                                                            {formatCurrency(item.Total)}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-col border-x border-slate-200/50 px-2">
+                                                        <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
+                                                            {selectedMetric === 'ventas' ? 'Ops' : 'Cant'}
+                                                        </span>
+                                                        <span className="text-[11px] font-black text-slate-600">
+                                                            {selectedMetric === 'ventas' ? item.Operaciones : item.Cantidad}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-col text-right">
+                                                        <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Promedio</span>
+                                                        <span className="text-[11px] font-black text-emerald-600">
+                                                            {formatCurrency(selectedMetric === 'ventas' ? item.TicketPromedio : item.Promedio)}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
-
-                                        {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones') && (
-                                            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/50">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
-                                                        {selectedMetric === 'ventas' ? 'Ventas' : selectedMetric === 'cancelaciones' ? 'Cancelaciones' : 'Devoluciones'}
-                                                    </span>
-                                                    <span className="text-[11px] font-black text-slate-900">
-                                                        {formatCurrency(item.Total)}
-                                                    </span>
-                                                </div>
-                                                <div className="flex flex-col border-x border-slate-200/50 px-2">
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
-                                                        {selectedMetric === 'ventas' ? 'Ops' : 'Cant'}
-                                                    </span>
-                                                    <span className="text-[11px] font-black text-slate-600">
-                                                        {selectedMetric === 'ventas' ? item.Operaciones : item.Cantidad}
-                                                    </span>
-                                                </div>
-                                                <div className="flex flex-col text-right">
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Promedio</span>
-                                                    <span className="text-[11px] font-black text-emerald-600">
-                                                        {formatCurrency(selectedMetric === 'ventas' ? item.TicketPromedio : item.Promedio)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })
-                        )}
-                    </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
