@@ -22,7 +22,8 @@ import {
     ChevronDown,
     Package,
     FileSpreadsheet,
-    FileDown
+    FileDown,
+    RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -45,7 +46,7 @@ export default function DashboardPage() {
     const [fechaFin, setFechaFin] = useState(new Date().toISOString().split('T')[0]);
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
-    const [selectedMetric, setSelectedMetric] = useState<'ventas' | 'aperturas' | 'cancelaciones' | 'retiros'>('ventas');
+    const [selectedMetric, setSelectedMetric] = useState<'ventas' | 'aperturas' | 'cancelaciones' | 'retiros' | 'devoluciones'>('ventas');
     const [chartType, setChartType] = useState<'bar' | 'pie'>('bar');
     const [subMetric, setSubMetric] = useState<string>('Total');
 
@@ -82,6 +83,19 @@ export default function DashboardPage() {
     const [loadingWithdrawals, setLoadingWithdrawals] = useState(false);
     const [withdrawalSortConfig, setWithdrawalSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({ key: 'Fecha Retiro', direction: 'desc' });
 
+    // Return Modal
+    const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+    const [returnDetails, setReturnDetails] = useState<any[]>([]);
+    const [loadingReturns, setLoadingReturns] = useState(false);
+    const [returnSortConfig, setReturnSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({ key: 'Fecha', direction: 'desc' });
+
+    // Return Items Modal
+    const [isReturnItemsModalOpen, setIsReturnItemsModalOpen] = useState(false);
+    const [selectedReturn, setSelectedReturn] = useState<any>(null);
+    const [returnItems, setReturnItems] = useState<any[]>([]);
+    const [loadingReturnItems, setLoadingReturnItems] = useState(false);
+    const [returnItemsSortConfig, setReturnItemsSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
+
     const fetchData = async () => {
         setLoading(true);
         try {
@@ -107,7 +121,7 @@ export default function DashboardPage() {
     }, [selectedMetric]);
 
     const handleStoreClick = async (store: any) => {
-        if (selectedMetric !== 'ventas' && selectedMetric !== 'aperturas' && selectedMetric !== 'cancelaciones' && selectedMetric !== 'retiros') return;
+        if (selectedMetric !== 'ventas' && selectedMetric !== 'aperturas' && selectedMetric !== 'cancelaciones' && selectedMetric !== 'retiros' && selectedMetric !== 'devoluciones') return;
 
         setSelectedStoreData(store);
         setSearchTerm('');
@@ -160,6 +174,33 @@ export default function DashboardPage() {
             } finally {
                 setLoadingWithdrawals(false);
             }
+        } else if (selectedMetric === 'devoluciones') {
+            setIsReturnModalOpen(true);
+            setLoadingReturns(true);
+            try {
+                const res = await fetch(`/api/dashboard/returns-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&idTienda=${store.IdTienda}`);
+                const json = await res.json();
+                setReturnDetails(json);
+            } catch (error) {
+                console.error('Error fetching return details:', error);
+            } finally {
+                setLoadingReturns(false);
+            }
+        }
+    };
+
+    const handleReturnRowClick = async (item: any) => {
+        setSelectedReturn(item);
+        setIsReturnItemsModalOpen(true);
+        setLoadingReturnItems(true);
+        try {
+            const res = await fetch(`/api/dashboard/return-items?idTienda=${selectedStoreData.IdTienda}&idDevolucionVenta=${item['Folio Devolucion']}`);
+            const json = await res.json();
+            setReturnItems(json);
+        } catch (error) {
+            console.error('Error fetching return items:', error);
+        } finally {
+            setLoadingReturnItems(false);
         }
     };
 
@@ -261,6 +302,55 @@ export default function DashboardPage() {
     const sortedWithdrawals = [...filteredWithdrawals].sort((a, b) => {
         if (!withdrawalSortConfig) return 0;
         const { key, direction } = withdrawalSortConfig;
+
+        let aValue = a[key];
+        let bValue = b[key];
+
+        if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    const handleReturnSort = (key: string) => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (returnSortConfig && returnSortConfig.key === key && returnSortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setReturnSortConfig({ key, direction });
+    };
+
+    const handleReturnItemsSort = (key: string) => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (returnItemsSortConfig && returnItemsSortConfig.key === key && returnItemsSortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setReturnItemsSortConfig({ key, direction });
+    };
+
+    const filteredReturns = returnDetails.filter(r =>
+        r['Folio Devolucion']?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.Cliente?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.Concepto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.Empleado?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.Supervisor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.Clave?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const sortedReturns = [...filteredReturns].sort((a, b) => {
+        if (!returnSortConfig) return 0;
+        const { key, direction } = returnSortConfig;
+
+        let aValue = a[key];
+        let bValue = b[key];
+
+        if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    const sortedReturnItems = [...returnItems].sort((a, b) => {
+        if (!returnItemsSortConfig) return 0;
+        const { key, direction } = returnItemsSortConfig;
 
         let aValue = a[key];
         let bValue = b[key];
@@ -448,6 +538,41 @@ export default function DashboardPage() {
         XLSX.writeFile(workbook, `Retiros_${selectedStoreData?.Tienda}_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
+    const exportReturnsToExcel = () => {
+        if (sortedReturns.length === 0) return;
+
+        const excelData = sortedReturns.map(r => ({
+            'Folio': r['Folio Devolucion'],
+            'Fecha': new Date(r['Fecha Devolucion']).toLocaleString('es-MX'),
+            'Clave': r.Clave,
+            'Valor': r.Valor,
+            'Cliente': r.Cliente,
+            'Concepto': r.Concepto,
+            'Teléfono': r.Telefono,
+            'Empleado': r.Empleado,
+            'Supervisor': r.Supervisor
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(excelData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Devoluciones');
+
+        const wscols = [
+            { wch: 15 }, // Folio
+            { wch: 20 }, // Fecha
+            { wch: 10 }, // Clave
+            { wch: 12 }, // Valor
+            { wch: 25 }, // Cliente
+            { wch: 25 }, // Concepto
+            { wch: 15 }, // Teléfono
+            { wch: 20 }, // Empleado
+            { wch: 20 }, // Supervisor
+        ];
+        worksheet['!cols'] = wscols;
+
+        XLSX.writeFile(workbook, `Devoluciones_${selectedStoreData?.Tienda}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
     const handleExportPDF = () => {
         window.print();
     };
@@ -481,11 +606,22 @@ export default function DashboardPage() {
         return withdrawalSortConfig.direction === 'asc' ? <ChevronUp size={14} className="ml-1 text-[#4050B4]" /> : <ChevronDown size={14} className="ml-1 text-[#4050B4]" />;
     };
 
+    const RenderReturnSortIcon = (columnKey: string) => {
+        if (returnSortConfig?.key !== columnKey) return <div className="w-4" />;
+        return returnSortConfig.direction === 'asc' ? <ChevronUp size={14} className="ml-1 text-[#4050B4]" /> : <ChevronDown size={14} className="ml-1 text-[#4050B4]" />;
+    };
+
+    const RenderReturnItemsSortIcon = (columnKey: string) => {
+        if (returnItemsSortConfig?.key !== columnKey) return <div className="w-4" />;
+        return returnItemsSortConfig.direction === 'asc' ? <ChevronUp size={14} className="ml-1 text-indigo-600" /> : <ChevronDown size={14} className="ml-1 text-indigo-600" />;
+    };
+
     const metrics = data?.metrics || {
         ventas: { TotalVentas: 0, Operaciones: 0, TicketPromedio: 0 },
         aperturas: 0,
-        cancelaciones: { MontoCancelaciones: 0, CantidadCancelaciones: 0 },
-        retiros: 0
+        cancelaciones: { MontoCancelaciones: 0, CantidadCancelaciones: 0, PromedioCancelacion: 0 },
+        retiros: 0,
+        devoluciones: { MontoDevoluciones: 0, CantidadDevoluciones: 0 }
     };
 
     const chartData = data?.data?.[selectedMetric] || [];
@@ -496,6 +632,7 @@ export default function DashboardPage() {
             case 'aperturas': return { title: 'Aperturas por Sucursal', sub: 'Cantidad de aperturas por tienda', color: '#f59e0b' };
             case 'cancelaciones': return { title: 'Cancelaciones por Sucursal', sub: 'Monto de cancelaciones por tienda', color: '#e11d48' };
             case 'retiros': return { title: 'Retiros por Sucursal', sub: 'Monto de retiros por tienda', color: '#10b981' };
+            case 'devoluciones': return { title: 'Devoluciones por Sucursal', sub: 'Monto de devoluciones por tienda', color: '#6366F1' };
         }
     };
 
@@ -547,7 +684,10 @@ export default function DashboardPage() {
             {/* Header with Filters */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white py-2 px-4 rounded-none shadow-sm border border-slate-100">
                 <div>
-                    <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase">VISTA GENERAL DE VENTAS</h1>
+                    <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-2">
+                        <span>📈</span>
+                        DASHBOARD DE VENTAS
+                    </h1>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -587,7 +727,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Metrics Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                 {/* Ventas Card */}
                 <button
                     onClick={() => setSelectedMetric('ventas')}
@@ -691,6 +831,35 @@ export default function DashboardPage() {
                         </div>
                     </div>
                 </button>
+
+                {/* Devoluciones Card */}
+                <button
+                    onClick={() => setSelectedMetric('devoluciones')}
+                    className={cn(
+                        "bg-white p-4 rounded-none border shadow-sm hover:shadow-md transition-all relative overflow-hidden group text-left print-visible",
+                        selectedMetric === 'devoluciones' ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-slate-100"
+                    )}
+                >
+                    <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <RotateCcw size={80} className="text-indigo-500" />
+                    </div>
+                    <div className="flex flex-col h-full justify-between">
+                        <div>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Devoluciones</span>
+                            <h2 className="text-2xl font-black text-indigo-600 mb-2">{formatCurrency(metrics.devoluciones.MontoDevoluciones)}</h2>
+                        </div>
+                        <div className="flex flex-col gap-2 border-t border-slate-50 pt-4 mt-2">
+                            <div className="flex justify-between items-center text-xs font-bold">
+                                <span className="text-slate-500">Cantidad</span>
+                                <span className="text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded-none">{metrics.devoluciones.CantidadDevoluciones}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                                <span className="text-slate-500">Estado</span>
+                                <span className="text-emerald-600">Completas</span>
+                            </div>
+                        </div>
+                    </div>
+                </button>
             </div>
 
             {/* Bottom Section: Chart + Details */}
@@ -704,7 +873,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center gap-4">
                             {/* Sub-metric Selector */}
-                            {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones') && (
+                            {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones') && (
                                 <div className="flex items-center bg-slate-100 p-1 rounded-none">
                                     {selectedMetric === 'ventas' ? (
                                         <>
@@ -756,15 +925,17 @@ export default function DashboardPage() {
                                             >
                                                 Cant
                                             </button>
-                                            <button
-                                                onClick={() => setSubMetric('Promedio')}
-                                                className={cn(
-                                                    "px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all",
-                                                    subMetric === 'Promedio' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                                                )}
-                                            >
-                                                Avg
-                                            </button>
+                                            {selectedMetric === 'cancelaciones' && (
+                                                <button
+                                                    onClick={() => setSubMetric('Promedio')}
+                                                    className={cn(
+                                                        "px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all",
+                                                        subMetric === 'Promedio' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                                    )}
+                                                >
+                                                    Avg
+                                                </button>
+                                            )}
                                         </>
                                     )}
                                 </div>
@@ -901,7 +1072,8 @@ export default function DashboardPage() {
                         <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
                             Detalle {selectedMetric === 'ventas' ? 'Ventas' :
                                 selectedMetric === 'aperturas' ? 'Aperturas' :
-                                    selectedMetric === 'cancelaciones' ? 'Cancelaciones' : 'Retiros'}
+                                    selectedMetric === 'cancelaciones' ? 'Cancelaciones' :
+                                        selectedMetric === 'devoluciones' ? 'Devoluciones' : 'Retiros'}
                         </h3>
                         <p className="text-[13px] text-slate-500 font-medium">Desglose de rendimiento</p>
                     </div>
@@ -945,11 +1117,11 @@ export default function DashboardPage() {
                                             )}
                                         </div>
 
-                                        {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones') && (
+                                        {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones') && (
                                             <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/50">
                                                 <div className="flex flex-col">
                                                     <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
-                                                        {selectedMetric === 'ventas' ? 'Ventas' : 'Cancelaciones'}
+                                                        {selectedMetric === 'ventas' ? 'Ventas' : selectedMetric === 'cancelaciones' ? 'Cancelaciones' : 'Devoluciones'}
                                                     </span>
                                                     <span className="text-[11px] font-black text-slate-900">
                                                         {formatCurrency(item.Total)}
@@ -976,10 +1148,6 @@ export default function DashboardPage() {
                             })
                         )}
                     </div>
-
-                    <button className="mt-8 w-full py-4 bg-slate-900 text-white rounded-none font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-colors shadow-xl shadow-slate-900/20 active:scale-[0.98]">
-                        Descargar Reporte Completo
-                    </button>
                 </div>
             </div>
 
@@ -1789,6 +1957,300 @@ export default function DashboardPage() {
                 </div>
             )}
 
+            {/* Devoluciones Drill-down Modal */}
+            {isReturnModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className={cn(
+                        "bg-white shadow-2xl overflow-hidden flex flex-col transition-all duration-300 border border-slate-200",
+                        isMaximized ? "fixed inset-0 m-0" : "w-full max-w-6xl max-h-[90vh]"
+                    )}>
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between bg-white border-b border-slate-100 p-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-slate-50 rounded-none border border-slate-100">
+                                    <RotateCcw size={18} className="text-indigo-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-sm uppercase tracking-widest leading-none mb-1 text-slate-800">Detalle de Devoluciones</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData?.Tienda} • {fechaInicio} a {fechaFin}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="relative mr-4 hidden md:block">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                    <input
+                                        type="text"
+                                        placeholder="BUSCAR FOLIO, CLIENTE, SUPERVISOR..."
+                                        className="bg-slate-50 border border-slate-200 rounded-none pl-9 pr-4 py-1.5 text-[10px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-indigo-500/20 outline-none text-slate-700 w-64"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                </div>
+                                <button
+                                    onClick={exportReturnsToExcel}
+                                    disabled={sortedReturns.length === 0}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest border border-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
+                                >
+                                    <FileSpreadsheet size={14} />
+                                    <span>Exportar Excel</span>
+                                </button>
+                                <button
+                                    onClick={() => setIsMaximized(!isMaximized)}
+                                    className="p-2 hover:bg-slate-50 text-slate-500 transition-colors"
+                                    title={isMaximized ? "Restaurar" : "Maximizar"}
+                                >
+                                    {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                                </button>
+                                <button
+                                    onClick={() => { setIsReturnModalOpen(false); setIsMaximized(false); setSearchTerm(''); }}
+                                    className="p-2 hover:bg-rose-50 text-rose-500 transition-colors"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Search Bar for Mobile */}
+                        <div className="p-3 bg-slate-50 border-b border-slate-200 md:hidden">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                <input
+                                    type="text"
+                                    placeholder="BUSCAR DEVOLUCIÓN..."
+                                    className="w-full bg-white border border-slate-200 rounded-none pl-9 pr-4 py-2 text-[10px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="flex-1 overflow-auto bg-white p-0 relative">
+                            {loadingReturns ? (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="flex flex-col items-center gap-4">
+                                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Consultando devoluciones...</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="min-w-full inline-block align-middle">
+                                    <table className="min-w-full border-collapse">
+                                        <thead className="sticky top-0 z-10">
+                                            <tr className="bg-slate-50 border-b border-slate-200">
+                                                {['Folio', 'Fecha', 'Clave', 'Valor', 'Cliente', 'Concepto', 'Teléfono', 'Empleado', 'Supervisor'].map((header) => (
+                                                    <th
+                                                        key={header}
+                                                        onClick={() => handleReturnSort(header === 'Folio' ? 'Folio Devolucion' : header === 'Fecha' ? 'Fecha Devolucion' : header === 'Teléfono' ? 'Telefono' : header)}
+                                                        className="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors"
+                                                    >
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            {header}
+                                                            {RenderReturnSortIcon(header === 'Folio' ? 'Folio Devolucion' : header === 'Fecha' ? 'Fecha Devolucion' : header === 'Teléfono' ? 'Telefono' : header)}
+                                                        </div>
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {sortedReturns.length > 0 ? (
+                                                sortedReturns.map((item, idx) => (
+                                                    <tr
+                                                        key={idx}
+                                                        onClick={() => handleReturnRowClick(item)}
+                                                        className="hover:bg-indigo-50/30 transition-colors group/row text-center cursor-pointer"
+                                                    >
+                                                        <td className="px-4 py-3 whitespace-nowrap font-bold text-indigo-600">{item['Folio Devolucion']}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <div className="flex flex-col items-center">
+                                                                <span className="text-[11px] font-bold text-slate-700">{new Date(item['Fecha Devolucion']).toLocaleDateString('es-MX')}</span>
+                                                                <span className="text-[9px] font-medium text-slate-400">{new Date(item['Fecha Devolucion']).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-[11px] font-bold text-slate-600">{item.Clave}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <span className="text-[12px] font-black text-indigo-600">{formatCurrency(item.Valor)}</span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span className="text-[11px] font-bold text-slate-600 block max-w-[120px] truncate mx-auto" title={item.Cliente}>{item.Cliente}</span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span className="text-[11px] font-bold text-slate-500 block max-w-[120px] truncate mx-auto" title={item.Concepto}>{item.Concepto}</span>
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-[11px] font-medium text-slate-600">{item.Telefono}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-600">
+                                                                <User size={12} className="text-slate-400" />
+                                                                {item.Empleado}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <div className="flex items-center justify-center gap-1.5 text-[11px] font-black text-indigo-700 uppercase italic">
+                                                                {item.Supervisor}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan={9} className="px-4 py-12 text-center">
+                                                        <div className="flex flex-col items-center gap-3">
+                                                            <div className="p-4 bg-slate-50 rounded-none">
+                                                                <Search size={32} className="text-slate-200" />
+                                                            </div>
+                                                            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">No se encontraron devoluciones</p>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between">
+                            <div className="flex items-center gap-6">
+                                <div className="flex flex-col">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Devoluciones</span>
+                                    <span className="text-sm font-black text-slate-900">{filteredReturns.length}</span>
+                                </div>
+                                <div className="flex flex-col border-l border-slate-200 pl-6 text-right">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Monto Total Devoluciones</span>
+                                    <span className="text-sm font-black text-indigo-600">
+                                        {formatCurrency(filteredReturns.reduce((acc, r) => acc + r.Valor, 0))}
+                                    </span>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => { setIsReturnModalOpen(false); setIsMaximized(false); setSearchTerm(''); }}
+                                className="px-6 py-2 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20"
+                            >
+                                CERRAR
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Return Items Breakdown Modal */}
+            {isReturnItemsModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white shadow-2xl overflow-hidden flex flex-col w-full max-w-5xl max-h-[85vh] border border-slate-200">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between bg-white border-b border-slate-100 p-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-indigo-50 rounded-none border border-indigo-100">
+                                    <Package size={18} className="text-indigo-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-xs uppercase tracking-widest leading-none mb-1 text-slate-800">Partidas de Devolución</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Folio: {selectedReturn?.['Folio Devolucion']} • Cliente: {selectedReturn?.Cliente}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsReturnItemsModalOpen(false)}
+                                className="p-2 hover:bg-rose-50 text-rose-500 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="flex-1 overflow-auto p-0 relative">
+                            {loadingReturnItems ? (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="flex flex-col items-center gap-4">
+                                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Consultando partidas...</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="min-w-full inline-block align-middle">
+                                    <table className="min-w-full border-collapse">
+                                        <thead className="sticky top-0 z-10">
+                                            <tr className="bg-slate-50 border-b border-slate-200">
+                                                <th onClick={() => handleReturnItemsSort('FolioVenta')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center">Folio Venta {RenderReturnItemsSortIcon('FolioVenta')}</div>
+                                                </th>
+                                                <th onClick={() => handleReturnItemsSort('Fecha Venta')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center">Fecha Venta {RenderReturnItemsSortIcon('Fecha Venta')}</div>
+                                                </th>
+                                                <th onClick={() => handleReturnItemsSort('Codigo Barras')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center">Código {RenderReturnItemsSortIcon('Codigo Barras')}</div>
+                                                </th>
+                                                <th onClick={() => handleReturnItemsSort('Descripcion')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center">Descripción {RenderReturnItemsSortIcon('Descripcion')}</div>
+                                                </th>
+                                                <th onClick={() => handleReturnItemsSort('CantidadAnterior')} className="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center justify-center">Cant. Ant. {RenderReturnItemsSortIcon('CantidadAnterior')}</div>
+                                                </th>
+                                                <th onClick={() => handleReturnItemsSort('Dev')} className="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center justify-center">Cant. Dev. {RenderReturnItemsSortIcon('Dev')}</div>
+                                                </th>
+                                                <th onClick={() => handleReturnItemsSort('PrecioVenta')} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center justify-end">Precio {RenderReturnItemsSortIcon('PrecioVenta')}</div>
+                                                </th>
+                                                <th onClick={() => handleReturnItemsSort('Total')} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center justify-end">Total {RenderReturnItemsSortIcon('Total')}</div>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 text-[11px]">
+                                            {sortedReturnItems.map((item, idx) => (
+                                                <tr key={idx} className={`${item.Dev > 0 ? 'bg-amber-100/60 border-l-4 border-l-amber-500' : ''} hover:bg-slate-50 transition-colors`}>
+                                                    <td className="px-4 py-3 whitespace-nowrap font-bold text-slate-700">{item.FolioVenta}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-slate-600">{new Date(item['Fecha Venta']).toLocaleDateString('es-MX')}</span>
+                                                            <span className="text-[9px] text-slate-400">{new Date(item['Fecha Venta']).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-slate-600 font-medium">{item['Codigo Barras']}</td>
+                                                    <td className="px-4 py-3 font-bold text-slate-700">{item.Descripcion}</td>
+                                                    <td className="px-4 py-3 text-center font-bold text-slate-600">{item.CantidadAnterior}</td>
+                                                    <td className="px-4 py-3 text-center font-black text-indigo-600">{item.Dev}</td>
+                                                    <td className="px-4 py-3 text-right font-bold text-slate-600">{formatCurrency(item.PrecioVenta)}</td>
+                                                    <td className="px-4 py-3 text-right font-black text-indigo-700">{formatCurrency(item.Total)}</td>
+                                                </tr>
+                                            ))}
+                                            {sortedReturnItems.length === 0 && !loadingReturnItems && (
+                                                <tr>
+                                                    <td colSpan={8} className="px-4 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">No hay partidas para mostrar</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between">
+                            <div className="flex items-center gap-6">
+                                <div className="flex flex-col">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Partidas</span>
+                                    <span className="text-sm font-black text-slate-900">{sortedReturnItems.length}</span>
+                                </div>
+                                <div className="flex flex-col border-l border-slate-200 pl-6 text-right">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Devolución</span>
+                                    <span className="text-sm font-black text-indigo-600">
+                                        {formatCurrency(sortedReturnItems.reduce((acc, item) => acc + item.Total, 0))}
+                                    </span>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsReturnItemsModalOpen(false)}
+                                className="px-6 py-2 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20"
+                            >
+                                CERRAR
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Print Styles */}
             <style jsx global>{`
                 @media print {
@@ -1827,7 +2289,7 @@ export default function DashboardPage() {
                     /* Grid for metrics cards in print */
                     .grid {
                         display: grid !important;
-                        grid-template-cols: repeat(4, 1fr) !important;
+                        grid-template-cols: repeat(5, 1fr) !important;
                         gap: 10px !important;
                     }
 

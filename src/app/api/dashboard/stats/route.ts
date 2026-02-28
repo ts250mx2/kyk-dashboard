@@ -44,7 +44,14 @@ export async function GET(req: Request) {
             WHERE Fecha >= ${startStr} AND Fecha <= ${endStr}
         `;
 
-        // 5. Grouped Data for Chart/Details
+        const returnsSql = `
+            SELECT ISNULL(SUM(A.Cantidad*A.PrecioVenta), 0) AS MontoDevoluciones, COUNT(A.CodigoInterno) AS CantidadDevoluciones
+            FROM tblDetalleDevolucionesVenta A
+            INNER JOIN tblDevolucionesVenta B ON A.IdDevolucionVenta = B.IdDevolucionVenta AND A.IdTienda = B.IdTienda
+            WHERE A.Cantidad > 0 AND B.FechaDevolucionVenta >= ${startStr} AND B.FechaDevolucionVenta <= ${endStr}
+        `;
+
+        // 6. Grouped Data for Chart/Details
         const chartDataVentasSql = `
             SELECT a.IdTienda, Tienda, SUM(Total) as Total, COUNT(*) as Operaciones, SUM(Total)/COUNT(*) as TicketPromedio
             FROM tblVentas a
@@ -79,15 +86,28 @@ export async function GET(req: Request) {
             ORDER BY Total DESC
         `;
 
-        const [sales, openings, cancelaciones, withdrawals, chartVentas, chartAperturas, chartCancelaciones, chartRetiros] = await Promise.all([
+        const chartDataDevolucionesSql = `
+            SELECT B.IdTienda, T.Tienda, SUM(A.Cantidad*A.PrecioVenta) AS Total, COUNT(A.CodigoInterno) AS Cantidad, 
+            ISNULL(SUM(A.Cantidad*A.PrecioVenta)/NULLIF(COUNT(A.CodigoInterno), 0), 0) AS Promedio
+            FROM tblDetalleDevolucionesVenta A
+            INNER JOIN tblDevolucionesVenta B ON A.IdDevolucionVenta = B.IdDevolucionVenta AND A.IdTienda = B.IdTienda
+            INNER JOIN tblTiendas T ON B.IdTienda = T.IdTienda
+            WHERE A.Cantidad > 0 AND B.FechaDevolucionVenta >= ${startStr} AND B.FechaDevolucionVenta <= ${endStr}
+            GROUP BY B.IdTienda, T.Tienda
+            ORDER BY Total DESC
+        `;
+
+        const [sales, openings, cancelaciones, withdrawals, returns, chartVentas, chartAperturas, chartCancelaciones, chartRetiros, chartDevoluciones] = await Promise.all([
             query(salesSql),
             query(openingsSql),
             query(cancelacionesSql),
             query(withdrawalsSql),
+            query(returnsSql),
             query(chartDataVentasSql),
             query(chartDataAperturasSql),
             query(chartDataCancelacionesSql),
-            query(chartDataRetirosSql)
+            query(chartDataRetirosSql),
+            query(chartDataDevolucionesSql)
         ]);
 
         return NextResponse.json({
@@ -95,13 +115,15 @@ export async function GET(req: Request) {
                 ventas: sales[0] || { TotalVentas: 0, Operaciones: 0, TicketPromedio: 0 },
                 aperturas: openings[0]?.TotalAperturas || 0,
                 cancelaciones: cancelaciones[0] || { MontoCancelaciones: 0, CantidadCancelaciones: 0 },
-                retiros: withdrawals[0]?.MontoRetiros || 0
+                retiros: withdrawals[0]?.MontoRetiros || 0,
+                devoluciones: returns[0] || { MontoDevoluciones: 0, CantidadDevoluciones: 0 }
             },
             data: {
                 ventas: chartVentas,
                 aperturas: chartAperturas,
                 cancelaciones: chartCancelaciones,
-                retiros: chartRetiros
+                retiros: chartRetiros,
+                devoluciones: chartDevoluciones
             }
         });
 

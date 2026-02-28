@@ -116,7 +116,7 @@ export async function POST(req: Request) {
                 const metaCompletion = await openai.chat.completions.create({
                     model: 'gpt-4o-mini',
                     messages: [
-                        { role: 'system', content: 'Extract visualization type ("table", "bar", "line", "pie", "area"), 3 suggested_questions, and related_page (if sales, "/ventas") from this SQL query. Return the results in JSON format.' },
+                        { role: 'system', content: 'Extract visualization type ("table", "bar", "line", "pie", "area"), 3 suggested_questions (ALWAYS IN SPANISH), and related_page (if sales, "/ventas") from this SQL query. Return the results in JSON format.' },
                         { role: 'user', content: args.sql }
                     ],
                     response_format: { type: 'json_object' }

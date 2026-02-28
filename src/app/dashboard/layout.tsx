@@ -3,6 +3,7 @@
 import React, { useState } from "react"
 import { Sidebar } from "@/components/dashboard/Sidebar"
 import { Header } from "@/components/dashboard/Header"
+import { ChatAgent } from "@/components/chat-agent"
 import { cn } from "@/lib/utils"
 
 export default function DashboardLayout({
@@ -34,6 +35,9 @@ export default function DashboardLayout({
                     </div>
                 </main>
             </div>
+
+            {/* Floating AI Agent */}
+            <ChatAgent />
         </div>
     )
 }

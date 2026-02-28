@@ -25,43 +25,50 @@ export function ChatInput({ onSend, onClear, isLoading }: ChatInputProps) {
         <div className="flex gap-2 w-full max-w-3xl mx-auto px-4">
             <button
                 onClick={onClear}
-                className="p-3 rounded-full bg-card border border-border text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-all shadow-lg active:scale-90"
+                className="p-2 h-10 w-10 flex items-center justify-center rounded-full bg-card border border-border text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-all shadow-md active:scale-90 flex-shrink-0 self-end mb-1"
                 title="Limpiar pantalla"
                 type="button"
             >
-                <span className="text-xl">🗑️</span>
+                <span className="text-base">🗑️</span>
             </button>
-            <form onSubmit={handleSubmit} className="relative flex-1">
-                <div className="relative flex items-center">
-                    <input
-                        type="text"
+            <form onSubmit={handleSubmit} className="flex-1 flex gap-2 items-end">
+                <div className="relative flex-1">
+                    <textarea
+                        rows={1}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSubmit(e);
+                            }
+                        }}
                         placeholder="Hazme una pregunta..."
                         className={cn(
-                            "w-full px-6 py-4 text-lg bg-card border border-border rounded-full shadow-lg",
+                            "w-full px-4 py-3 text-sm bg-card border border-border rounded-2xl shadow-lg",
                             "focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent",
                             "placeholder:text-muted-foreground text-foreground transition-all duration-200",
+                            "resize-none min-h-[44px] max-h-[120px] overflow-y-auto",
                             isLoading && "opacity-50 cursor-not-allowed"
                         )}
                         disabled={isLoading}
                     />
-                    <button
-                        type="submit"
-                        disabled={!input.trim() || isLoading}
-                        className={cn(
-                            "absolute right-2 p-3 rounded-full bg-primary text-primary-foreground",
-                            "hover:opacity-90 transition-opacity duration-200 shadow-md",
-                            "disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-                        )}
-                    >
-                        {isLoading ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : (
-                            <span className="text-xl">🚀</span>
-                        )}
-                    </button>
                 </div>
+                <button
+                    type="submit"
+                    disabled={!input.trim() || isLoading}
+                    className={cn(
+                        "p-2 h-10 w-10 flex items-center justify-center rounded-full bg-primary text-primary-foreground mb-1",
+                        "hover:opacity-90 transition-opacity duration-200 shadow-md",
+                        "disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 flex-shrink-0"
+                    )}
+                >
+                    {isLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                        <span className="text-lg">🚀</span>
+                    )}
+                </button>
             </form>
         </div>
     );
