@@ -13,7 +13,7 @@ export async function GET(req: Request) {
         }
 
         const startStr = `'${fechaInicio}'`;
-        const endStr = `'${fechaFin}'`;
+        const endStr = `'${fechaFin} 23:59:59'`;
 
         const sql = `
             SELECT IdDevolucionVenta AS [Folio Devolucion], FechaDevolucionVenta AS [Fecha Devolucion], ClaveDevolucion AS Clave, Valor, Cliente, Concepto, DirTel AS Telefono, Empleado, Usuario AS Supervisor
