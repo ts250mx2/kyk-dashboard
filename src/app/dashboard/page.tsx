@@ -740,13 +740,6 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    <button
-                        onClick={fetchData}
-                        className="p-2.5 bg-slate-50 border border-slate-200 text-[#4050B4] hover:bg-slate-100 transition-colors rounded-none shadow-sm print:hidden group"
-                        title="Actualizar Datos"
-                    >
-                        <RotateCcw size={18} className={cn("group-hover:rotate-180 transition-transform duration-500", loading && "animate-spin")} />
-                    </button>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-none px-3 py-1.5 focus-within:ring-2 focus-within:ring-[#4050B4]/20 transition-all">
                         <Calendar size={16} className="text-[#4050B4]" />
                         <div className="flex flex-col">
@@ -759,6 +752,14 @@ export default function DashboardPage() {
                             />
                         </div>
                     </div>
+
+                    <button
+                        onClick={fetchData}
+                        className="p-2.5 bg-slate-50 border border-slate-200 text-[#4050B4] hover:bg-slate-100 transition-colors rounded-none shadow-sm print:hidden group"
+                        title="Actualizar Datos"
+                    >
+                        <RotateCcw size={18} className={cn("group-hover:rotate-180 transition-transform duration-500", loading && "animate-spin")} />
+                    </button>
                 </div>
             </div>
 
