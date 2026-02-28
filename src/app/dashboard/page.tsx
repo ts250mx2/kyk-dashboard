@@ -1199,10 +1199,10 @@ export default function DashboardPage() {
                     </div>
 
                     {!isDetailsMinimized && (
-                        <div className="flex-1 flex flex-row flex-wrap gap-4 pb-4 no-scrollbar justify-start animate-in fade-in slide-in-from-top-2 duration-300 overflow-y-auto">
+                        <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4 pb-4 no-scrollbar justify-start animate-in fade-in slide-in-from-top-2 duration-300 overflow-y-auto">
                             {loading ? (
                                 Array(5).fill(0).map((_, i) => (
-                                    <div key={i} className="h-24 min-w-[200px] flex-1 max-w-[400px] bg-slate-50 rounded-none animate-pulse" />
+                                    <div key={i} className="h-24 bg-slate-50 rounded-none animate-pulse" />
                                 ))
                             ) : (
                                 chartData.map((item: any, index: number) => {
@@ -1212,7 +1212,7 @@ export default function DashboardPage() {
                                             key={item.Tienda}
                                             onClick={() => handleStoreClick(item)}
                                             className={cn(
-                                                "flex flex-col p-3 bg-slate-50 rounded-none border border-slate-100 group transition-all outline-none w-full sm:min-w-[200px] flex-1 sm:max-w-[400px]",
+                                                "flex flex-col p-3 bg-slate-50 rounded-none border border-slate-100 group transition-all outline-none w-full",
                                                 (selectedMetric === 'ventas' || selectedMetric === 'aperturas') ? "cursor-pointer hover:bg-white hover:border-[#4050B4] hover:shadow-lg hover:shadow-[#4050B4]/10" : "hover:bg-white hover:border-slate-200 hover:shadow-lg hover:shadow-slate-200/20"
                                             )}
                                         >
