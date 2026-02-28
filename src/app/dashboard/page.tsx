@@ -1083,11 +1083,31 @@ export default function DashboardPage() {
                                                 dataKey="Tienda"
                                                 axisLine={false}
                                                 tickLine={false}
-                                                tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 700 }}
                                                 interval={0}
-                                                angle={-45}
-                                                textAnchor="end"
-                                                height={80}
+                                                height={100}
+                                                tick={(props: any) => {
+                                                    const { x, y, payload } = props;
+                                                    const item = chartData.find((d: any) => d.Tienda === payload.value);
+                                                    const total = item ? ((subMetric === 'Operaciones' || subMetric === 'Cantidad' || selectedMetric === 'aperturas')
+                                                        ? item[subMetric]
+                                                        : formatCurrency(item[subMetric])) : '';
+                                                    return (
+                                                        <g transform={`translate(${x},${y})`}>
+                                                            <text
+                                                                x={0}
+                                                                y={0}
+                                                                dy={10}
+                                                                textAnchor="end"
+                                                                fill="#94A3B8"
+                                                                transform="rotate(-45)"
+                                                                style={{ fontSize: '10px', fontWeight: 700 }}
+                                                            >
+                                                                <tspan x={0} dy="0">{payload.value}</tspan>
+                                                                <tspan x={0} dy="12" style={{ fontWeight: 900, fill: '#1e293b' }}>{total}</tspan>
+                                                            </text>
+                                                        </g>
+                                                    );
+                                                }}
                                             />
                                             <YAxis
                                                 axisLine={false}
@@ -1165,7 +1185,22 @@ export default function DashboardPage() {
                                                     return null;
                                                 }}
                                             />
-                                            <Legend verticalAlign="bottom" height={36} />
+                                            <Legend
+                                                verticalAlign="bottom"
+                                                height={50}
+                                                formatter={(value, entry: any) => {
+                                                    const item = entry.payload;
+                                                    const total = (subMetric === 'Operaciones' || subMetric === 'Cantidad' || selectedMetric === 'aperturas')
+                                                        ? item[subMetric]
+                                                        : formatCurrency(item[subMetric]);
+                                                    return (
+                                                        <span className="inline-flex flex-col items-start leading-tight translate-y-2">
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{value}</span>
+                                                            <span className="text-[11px] font-black text-slate-900">{total}</span>
+                                                        </span>
+                                                    );
+                                                }}
+                                            />
                                         </PieChart>
                                     )}
                                 </ResponsiveContainer>
