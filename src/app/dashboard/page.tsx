@@ -110,6 +110,19 @@ export default function DashboardPage() {
     };
 
     useEffect(() => {
+        const handleDateChange = (event: any) => {
+            const { startDate, endDate } = event.detail;
+            if (startDate && endDate) {
+                setFechaInicio(startDate);
+                setFechaFin(endDate);
+            }
+        };
+
+        window.addEventListener('dashboard-date-change', handleDateChange);
+        return () => window.removeEventListener('dashboard-date-change', handleDateChange);
+    }, []);
+
+    useEffect(() => {
         fetchData();
     }, [fechaInicio, fechaFin]);
 
@@ -681,6 +694,21 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-4 animate-in fade-in duration-500">
+            {/* Print-only Header */}
+            <div className="hidden print:flex items-center justify-between border-b-2 border-slate-900 pb-4 mb-6">
+                <div className="flex items-center gap-4">
+                    <img src="/kesito.svg" alt="KYK Logo" className="w-16 h-16" />
+                    <div>
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">KYK DASHBOARD</h1>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Reporte de Ventas y Métricas</p>
+                    </div>
+                </div>
+                <div className="text-right">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Fecha de Emisión</p>
+                    <p className="text-sm font-bold text-slate-800">{new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                </div>
+            </div>
+
             {/* Header with Filters */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white py-2 px-4 rounded-none shadow-sm border border-slate-100">
                 <div>

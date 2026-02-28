@@ -46,9 +46,13 @@ export async function POST(req: Request) {
 
         const formattedRules = (aiRulesResults as any[]).map(r => `- ${r.RuleId} ${r.Regla}`).join('\n');
 
+        const currentDateTime = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
         const systemPrompt = `
       Eres un Analista de Datos experto en SQL Server (T-SQL) y un Asistente de Compras.
       Tu objetivo es ayudar al usuario a obtener información de su base de datos local o precios de productos en otras tiendas (Shopping).
+      
+      FECHA Y HORA ACTUAL: ${currentDateTime}
+      (Usa esta fecha para entender referencias temporales como "hoy", "ayer", "este mes", "el mes pasado", etc.)
 
       REGLAS PARA LA BASE DE DATOS (query_database):
       ${schemaString}
@@ -116,8 +120,21 @@ export async function POST(req: Request) {
                 const metaCompletion = await openai.chat.completions.create({
                     model: 'gpt-4o-mini',
                     messages: [
-                        { role: 'system', content: 'Extract visualization type ("table", "bar", "line", "pie", "area"), 3 suggested_questions (ALWAYS IN SPANISH), and related_page (if sales, "/ventas") from this SQL query. Return the results in JSON format.' },
-                        { role: 'user', content: args.sql }
+                        {
+                            role: 'system',
+                            content: `
+                                Analiza la consulta SQL y el prompt original del usuario.
+                                Extrae:
+                                1. visualization: "table", "bar", "line", "pie", "area".
+                                2. suggested_questions: 5 preguntas relacionadas (SIEMPRE EN ESPAÑOL).
+                                3. related_page: (opcional, ej: "/dashboard").
+                                4. startDate: Si el usuario pide un rango (ej: ayer, este mes), ponlo en YYYY-MM-DD.
+                                5. endDate: Si el usuario pide un rango, ponlo en YYYY-MM-DD.
+                                
+                                IMPORTANTE: Usa la fecha actual (${currentDateTime}) como referencia.
+                                Retorna solo JSON.`
+                        },
+                        { role: 'user', content: `Prompt: ${prompt}\nSQL: ${args.sql}` }
                     ],
                     response_format: { type: 'json_object' }
                 });
@@ -129,7 +146,9 @@ export async function POST(req: Request) {
                     sql: args.sql,
                     visualization: meta.visualization || 'table',
                     suggested_questions: meta.suggested_questions || [],
-                    related_page: meta.related_page || null
+                    related_page: meta.related_page || null,
+                    startDate: meta.startDate || null,
+                    endDate: meta.endDate || null
                 };
             }
 

@@ -18,6 +18,8 @@ interface Message {
     related_page?: string;
     prompt?: string;
     timestamp?: number;
+    startDate?: string;
+    endDate?: string;
 }
 
 const PAGE_SUGGESTIONS: Record<string, string[]> = {
@@ -141,6 +143,12 @@ export function ChatAgent() {
             const data = await response.json();
 
             if (response.ok) {
+                if (data.startDate && data.endDate) {
+                    window.dispatchEvent(new CustomEvent('dashboard-date-change', {
+                        detail: { startDate: data.startDate, endDate: data.endDate }
+                    }));
+                }
+
                 setMessages((prev) => [...prev, {
                     role: 'assistant',
                     content: 'He procesado tu consulta. Aquí tienes los resultados.',
@@ -150,7 +158,9 @@ export function ChatAgent() {
                     suggested_questions: data.suggested_questions,
                     related_page: data.related_page,
                     prompt: prompt,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    startDate: data.startDate,
+                    endDate: data.endDate
                 }]);
             } else {
                 setMessages((prev) => [...prev, {
@@ -183,8 +193,8 @@ export function ChatAgent() {
                 <div className={cn(
                     "bg-background border border-border shadow-2xl rounded-3xl flex flex-col mb-4 overflow-hidden transition-all duration-300 ease-in-out",
                     isExpanded
-                        ? "fixed inset-4 md:inset-auto md:bottom-24 md:right-6 md:w-[800px] md:h-[80vh]"
-                        : "w-[380px] h-[500px]"
+                        ? "fixed inset-0 z-[10000] rounded-none md:rounded-3xl md:inset-4"
+                        : "w-[380px] md:w-[800px] h-[500px] md:h-[80vh]"
                 )}>
                     {/* Header */}
                     <div className="p-4 bg-primary text-primary-foreground flex items-center justify-between shadow-lg">
@@ -254,7 +264,7 @@ export function ChatAgent() {
                                             {msg.content}
                                         </p>
 
-                                        {msg.data && (
+                                        {msg.data && msg.data.length > 0 ? (
                                             <div className="mt-4 overflow-hidden rounded-none border border-border/50">
                                                 <div className="scale-90 origin-top-left overflow-auto" style={{ width: '111.11%' }}>
                                                     <ResultsDisplay
@@ -268,7 +278,17 @@ export function ChatAgent() {
                                                     />
                                                 </div>
                                             </div>
-                                        )}
+                                        ) : msg.data && msg.data.length === 0 ? (
+                                            <div className="mt-4 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-none animate-in fade-in slide-in-from-left-2 duration-300">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xl">🔍</span>
+                                                    <div>
+                                                        <p className="text-xs font-black text-amber-900 uppercase tracking-tight">Sin resultados</p>
+                                                        <p className="text-[11px] text-amber-700 font-medium">No se encontraron datos para esta consulta. Prueba con otras fechas o criterios.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : null}
 
                                         {msg.suggested_questions && msg.suggested_questions.length > 0 && (
                                             <div className="mt-4 pt-3 border-t border-border/40 flex flex-wrap gap-1">
