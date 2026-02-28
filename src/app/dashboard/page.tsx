@@ -26,6 +26,7 @@ import {
     RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { LoadingScreen } from '@/components/ui/loading-screen';
 import {
     BarChart,
     Bar,
@@ -1258,12 +1259,7 @@ export default function DashboardPage() {
                         {/* Modal Content */}
                         <div className="flex-1 overflow-auto bg-white p-0 relative">
                             {loadingDetails ? (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="flex flex-col items-center gap-4">
-                                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4050B4]"></div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargando tickets...</p>
-                                    </div>
-                                </div>
+                                <LoadingScreen message="Obteniendo tickets..." />
                             ) : (
                                 <div className="min-w-full inline-block align-middle">
                                     <table className="min-w-full border-collapse">
@@ -1399,12 +1395,7 @@ export default function DashboardPage() {
                         {/* Modal Content */}
                         <div className="flex-1 overflow-auto bg-white relative">
                             {loadingItems ? (
-                                <div className="absolute inset-0 flex items-center justify-center py-20">
-                                    <div className="flex flex-col items-center gap-4">
-                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4050B4]"></div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Obteniendo partidas...</p>
-                                    </div>
-                                </div>
+                                <LoadingScreen message="Cargando partidas del ticket..." />
                             ) : (
                                 <table className="min-w-full border-collapse">
                                     <thead className="sticky top-0 z-10">
@@ -1522,12 +1513,7 @@ export default function DashboardPage() {
                         {/* Modal Content */}
                         <div className="flex-1 overflow-auto bg-white p-0 relative">
                             {loadingOpenings ? (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="flex flex-col items-center gap-4">
-                                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4050B4]"></div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargando aperturas...</p>
-                                    </div>
-                                </div>
+                                <LoadingScreen message="Obteniendo aperturas..." />
                             ) : (
                                 <div className="min-w-full inline-block align-middle">
                                     <table className="min-w-full border-collapse">
@@ -1693,12 +1679,7 @@ export default function DashboardPage() {
                         {/* Modal Content */}
                         <div className="flex-1 overflow-auto bg-white p-0 relative">
                             {loadingCancellations ? (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="flex flex-col items-center gap-4">
-                                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-rose-500"></div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Consultando cancelaciones...</p>
-                                    </div>
-                                </div>
+                                <LoadingScreen message="Obteniendo cancelaciones..." />
                             ) : (
                                 <div className="min-w-full inline-block align-middle">
                                     <table className="min-w-full border-collapse">
@@ -1866,12 +1847,7 @@ export default function DashboardPage() {
                         {/* Modal Content */}
                         <div className="flex-1 overflow-auto bg-white p-0 relative">
                             {loadingWithdrawals ? (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="flex flex-col items-center gap-4">
-                                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-amber-500"></div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Consultando retiros...</p>
-                                    </div>
-                                </div>
+                                <LoadingScreen message="Obteniendo retiros..." />
                             ) : (
                                 <div className="min-w-full inline-block align-middle">
                                     <table className="min-w-full border-collapse text-[11px]">
@@ -2064,12 +2040,7 @@ export default function DashboardPage() {
                         {/* Modal Content */}
                         <div className="flex-1 overflow-auto bg-white p-0 relative">
                             {loadingReturns ? (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="flex flex-col items-center gap-4">
-                                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Consultando devoluciones...</p>
-                                    </div>
-                                </div>
+                                <LoadingScreen message="Obteniendo devoluciones..." />
                             ) : (
                                 <div className="min-w-full inline-block align-middle">
                                     <table className="min-w-full border-collapse">
@@ -2197,12 +2168,7 @@ export default function DashboardPage() {
                         {/* Modal Content */}
                         <div className="flex-1 overflow-auto p-0 relative">
                             {loadingReturnItems ? (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="flex flex-col items-center gap-4">
-                                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Consultando partidas...</p>
-                                    </div>
-                                </div>
+                                <LoadingScreen message="Consultando partidas de devolución..." />
                             ) : (
                                 <div className="min-w-full inline-block align-middle">
                                     <table className="min-w-full border-collapse">
