@@ -1056,7 +1056,13 @@ export default function DashboardPage() {
                                                 return null;
                                             }}
                                         />
-                                        <Bar dataKey={subMetric} radius={[0, 0, 0, 0]} barSize={40}>
+                                        <Bar
+                                            dataKey={subMetric}
+                                            radius={[0, 0, 0, 0]}
+                                            barSize={40}
+                                            onClick={(data) => handleStoreClick(data.payload)}
+                                            className="cursor-pointer shadow-lg outline-none"
+                                        >
                                             {chartData.map((entry: any, index: number) => (
                                                 <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} fillOpacity={0.9} />
                                             ))}
@@ -1074,6 +1080,8 @@ export default function DashboardPage() {
                                             dataKey={subMetric}
                                             nameKey="Tienda"
                                             stroke="none"
+                                            onClick={(data) => handleStoreClick(data.payload)}
+                                            className="cursor-pointer outline-none"
                                         >
                                             {chartData.map((entry: any, index: number) => (
                                                 <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} />
