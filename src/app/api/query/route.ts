@@ -58,6 +58,7 @@ export async function POST(req: Request) {
       ${schemaString}
       
       Reglas adicionales de SQL y Comportamiento (Dinámicas):
+        - Las columnas con espacios corporativos (ej. [Folio Venta]) DEBEN ir siempre entre corchetes [].
         ${formattedRules}
     `;
 
