@@ -15,6 +15,7 @@ export default function DashboardChatPage() {
         data?: Record<string, unknown>[];
         error?: string;
         suggested_questions?: string[];
+        options?: string;
         related_page?: string;
         prompt?: string;
     }
@@ -67,6 +68,7 @@ export default function DashboardChatPage() {
                     visualization: data.visualization,
                     data: data.data,
                     suggested_questions: data.suggested_questions,
+                    options: data.options,
                     related_page: data.related_page,
                     prompt: prompt
                 }]);
@@ -117,10 +119,11 @@ export default function DashboardChatPage() {
 
                         <div className="flex flex-col w-full gap-3 pt-4">
                             {[
-                                "📊 Analizar tasa de crecimiento mensual",
-                                "🛒 Top 10 productos más vendidos",
-                                "📜 Log de auditoría de seguridad hoy",
-                                "📈 Proyección de ingresos para el Q1"
+                                "📈 ¿Cuáles fueron las ventas totales de hoy?",
+                                "📊 Mostrar las 5 sucursales con más ventas este mes",
+                                "🛒 ¿Qué productos se vendieron más ayer?",
+                                "📜 Ver las aperturas de caja de hoy",
+                                "💰 ¿Cuál es el total de retiros de esta semana?"
                             ].map((q) => (
                                 <button
                                     key={q}
@@ -160,6 +163,20 @@ export default function DashboardChatPage() {
                                     <p className={cn("text-[14px] leading-relaxed font-medium", msg.role === 'user' ? '' : 'text-foreground/90')}>
                                         {msg.content}
                                     </p>
+
+                                    {msg.options && (
+                                        <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Haciendo Consulta:</p>
+                                            <div className="flex flex-col gap-1">
+                                                {msg.options.split('\n').map((opt, idx) => (
+                                                    <div key={idx} className="flex items-center gap-2">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-[#4050B4]" />
+                                                        <span className="text-[13px] font-bold text-slate-700">{opt}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {msg.data && (
                                         <div className="mt-6 overflow-hidden rounded-none border border-border/50 bg-muted/10">

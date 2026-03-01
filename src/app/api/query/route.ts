@@ -126,10 +126,11 @@ export async function POST(req: Request) {
                                 Analiza la consulta SQL y el prompt original del usuario.
                                 Extrae:
                                 1. visualization: "table", "bar", "line", "pie", "area".
-                                2. suggested_questions: 5 preguntas relacionadas (SIEMPRE EN ESPAÑOL).
+                                2. suggested_questions: EXACTAMENTE 3 preguntas relacionadas (SIEMPRE EN ESPAÑOL).
                                 3. related_page: (opcional, ej: "/dashboard").
-                                4. startDate: Si el usuario pide un rango (ej: ayer, este mes), ponlo en YYYY-MM-DD.
-                                5. endDate: Si el usuario pide un rango, ponlo en YYYY-MM-DD.
+                                4. isPeriodProvided: true si el usuario menciono un periodo (hoy, ayer, este mes, etc), false si no hay referencia temporal.
+                                5. startDate: Si el usuario pide un rango, ponlo en YYYY-MM-DD.
+                                6. endDate: Si el usuario pide un rango, ponlo en YYYY-MM-DD.
                                 
                                 IMPORTANTE: Usa la fecha actual (${currentDateTime}) como referencia.
                                 Retorna solo JSON.`
@@ -141,15 +142,28 @@ export async function POST(req: Request) {
 
                 const meta = JSON.parse(metaCompletion.choices[0].message.content || '{}');
 
-                finalResponse = {
-                    data: results,
-                    sql: args.sql,
-                    visualization: meta.visualization || 'table',
-                    suggested_questions: meta.suggested_questions || [],
-                    related_page: meta.related_page || null,
-                    startDate: meta.startDate || null,
-                    endDate: meta.endDate || null
-                };
+                if (meta.isPeriodProvided === false) {
+                    finalResponse = {
+                        data: [],
+                        message: "Para poder ayudarte mejor, ¿podrías indicarme el periodo de tiempo que te gustaría consultar? (ej. hoy, ayer, este mes, del 1 al 15 de marzo, etc.)",
+                        visualization: 'table',
+                        suggested_questions: [
+                            "Ventas de hoy",
+                            "Ventas de ayer",
+                            "Ventas de este mes"
+                        ]
+                    };
+                } else {
+                    finalResponse = {
+                        data: results,
+                        sql: args.sql,
+                        visualization: meta.visualization || 'table',
+                        suggested_questions: (meta.suggested_questions || []).slice(0, 3),
+                        related_page: meta.related_page || null,
+                        startDate: meta.startDate || null,
+                        endDate: meta.endDate || null
+                    };
+                }
             }
 
             if (toolCall.function.name === 'search_shopping_prices') {
@@ -169,11 +183,21 @@ export async function POST(req: Request) {
                 };
             }
         } else {
-            // Fallback for simple chats without tool calls
+            // Fallback for simple chats without tool calls or if AI doesn't understand
+            // If the message contains keywords like "ayuda", "opciones", "no entiendo", or if it's just a fallback
+            const keywordsResults = await query(`SELECT PalabraClave FROM tblPalabrasClave WHERE IdPalabraClave > 1`);
+            const keywords = (keywordsResults as any[]).map(r => r.PalabraClave).join('\n');
+
             finalResponse = {
                 data: [],
-                message: message.content,
-                visualization: 'table'
+                message: message.content || "No estoy seguro de cómo procesar esa solicitud. Aquí tienes algunas palabras clave que puedes usar para hacerme consultas:",
+                options: keywords,
+                visualization: 'table',
+                suggested_questions: [
+                    "¿Qué puedo preguntarte?",
+                    "Ver ejemplos de consultas",
+                    "Ayuda con el periodo"
+                ]
             };
         }
 
