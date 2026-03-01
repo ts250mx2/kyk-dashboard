@@ -61,6 +61,8 @@ export async function POST(req: Request) {
         - Las columnas con espacios corporativos (ej. [Folio Venta]) DEBEN ir siempre entre corchetes [].
         - La comparativa de fechas y periodos debe ser con el formato YYYY-MM-DD. Ejemplo: WHERE  CONVERT(date, FechaVenta ) >= '2026-02-22' AND CONVERT(date, FechaVenta) <= '2026-03-01'.
         - IMPORTANTE: El año 2026 NO es bisiesto. Febrero tiene 28 días. Si hoy es 01/03/2026, ayer fue 28/02/2026.
+        - Para consultas de datos, SIEMPRE devuelve el campo "visualization" como 'table' por defecto, pero asegúrate de que los datos sean compatibles con gráficas si el usuario lo solicita después.
+        - SIEMPRE devuelve exactamente 3 preguntas sugeridas en el campo "suggested_questions".
         ${formattedRules}
     `;
 

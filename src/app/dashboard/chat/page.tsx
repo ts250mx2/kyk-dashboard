@@ -18,6 +18,7 @@ export default function DashboardChatPage() {
         options?: string;
         related_page?: string;
         prompt?: string;
+        userSelectedViz?: 'table' | 'chart' | 'sql' | null;
     }
 
     const [messages, setMessages] = useState<Message[]>([]);
@@ -185,17 +186,52 @@ export default function DashboardChatPage() {
                                         </div>
                                     )}
 
-                                    {msg.data && (
-                                        <div className="mt-6 overflow-hidden rounded-none border border-border/50 bg-muted/10">
+                                    {msg.data && !msg.userSelectedViz && (
+                                        <div className="mt-4 flex flex-wrap gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                            <button
+                                                onClick={() => {
+                                                    setMessages(prev => prev.map((m, idx) =>
+                                                        idx === i ? { ...m, userSelectedViz: 'table' } : m
+                                                    ));
+                                                }}
+                                                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:border-[#4050B4] hover:text-[#4050B4] transition-all font-bold text-[12px] shadow-sm uppercase tracking-tight"
+                                            >
+                                                <span>📊</span> Ver como Tabla
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setMessages(prev => prev.map((m, idx) =>
+                                                        idx === i ? { ...m, userSelectedViz: 'chart' } : m
+                                                    ));
+                                                }}
+                                                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:border-[#4050B4] hover:text-[#4050B4] transition-all font-bold text-[12px] shadow-sm uppercase tracking-tight"
+                                            >
+                                                <span>📈</span> Ver como Gráfica
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {msg.data && msg.userSelectedViz && (
+                                        <div className="mt-6 overflow-hidden rounded-none border border-border/50 bg-muted/10 animate-in zoom-in-95 duration-300">
                                             <ResultsDisplay
                                                 data={msg.data}
                                                 sql={msg.sql || ''}
                                                 question={msg.prompt || ''}
-                                                visualization={(msg.visualization as 'table' | 'bar' | 'line' | 'pie' | 'area') || 'table'}
-                                                onVisualizationChange={(newViz: 'table' | 'bar' | 'line' | 'pie' | 'area') => {
+                                                visualization={msg.userSelectedViz === 'chart' ? (msg.visualization as any) || 'bar' : 'table'}
+                                                onVisualizationChange={(newViz) => {
                                                     setMessages(prev => prev.map((m, idx) => idx === i ? { ...m, visualization: newViz } : m));
                                                 }}
                                             />
+                                            <button
+                                                onClick={() => {
+                                                    setMessages(prev => prev.map((m, idx) =>
+                                                        idx === i ? { ...m, userSelectedViz: null } : m
+                                                    ));
+                                                }}
+                                                className="mt-2 text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest px-2"
+                                            >
+                                                ← Cambiar formato
+                                            </button>
                                         </div>
                                     )}
 
