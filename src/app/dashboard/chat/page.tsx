@@ -49,7 +49,7 @@ export default function DashboardChatPage() {
     }, [messages, isHistoryLoaded]);
 
     const handleSend = async (prompt: string) => {
-        setMessages((prev) => [...prev, { role: 'user', content: prompt }]);
+        setMessages((prev) => [...prev, { role: 'user' as const, content: prompt }].slice(-20));
         setLoading(true);
 
         try {
@@ -61,23 +61,30 @@ export default function DashboardChatPage() {
             const data = await response.json();
 
             if (response.ok) {
-                setMessages((prev) => [...prev, {
-                    role: 'assistant',
-                    content: 'Query processed successfully. Below are the analytical results.',
-                    sql: data.sql,
-                    visualization: data.visualization,
-                    data: data.data,
-                    suggested_questions: data.suggested_questions,
-                    options: data.options,
-                    related_page: data.related_page,
-                    prompt: prompt
-                }]);
+                setMessages((prev) => {
+                    const newMessages: Message[] = [...prev, {
+                        role: 'assistant' as const,
+                        content: 'Query processed successfully. Below are the analytical results.',
+                        sql: data.sql,
+                        visualization: data.visualization,
+                        data: data.data,
+                        suggested_questions: data.suggested_questions,
+                        options: data.options,
+                        related_page: data.related_page,
+                        prompt: prompt
+                    }];
+                    // Keep only the last 20 messages (10 Q&A pairs)
+                    return newMessages.slice(-20);
+                });
             } else {
-                setMessages((prev) => [...prev, {
-                    role: 'assistant',
-                    content: `System Error: ${data.error || 'Failed to process the request'}`,
-                    error: data.error
-                }]);
+                setMessages((prev) => {
+                    const newMessages: Message[] = [...prev, {
+                        role: 'assistant' as const,
+                        content: `System Error: ${data.error || 'Failed to process the request'}`,
+                        error: data.error
+                    }];
+                    return newMessages.slice(-20);
+                });
             }
         } catch (err) {
             setMessages((prev) => [...prev, {
