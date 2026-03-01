@@ -59,6 +59,8 @@ export async function POST(req: Request) {
       
       Reglas adicionales de SQL y Comportamiento (Dinámicas):
         - Las columnas con espacios corporativos (ej. [Folio Venta]) DEBEN ir siempre entre corchetes [].
+        - La comparativa de fechas y periodos debe ser con el formato YYYY-MM-DD. Ejemplo: WHERE  CONVERT(date, FechaVenta ) >= '2026-02-22' AND CONVERT(date, FechaVenta) <= '2026-03-01'.
+        - IMPORTANTE: El año 2026 NO es bisiesto. Febrero tiene 28 días. Si hoy es 01/03/2026, ayer fue 28/02/2026.
         ${formattedRules}
     `;
 
