@@ -11,9 +11,63 @@ const SECRET_KEY = new TextEncoder().encode(
     process.env.JWT_SECRET || 'your-secret-key-change-this-in-prod'
 );
 
+// Helper function to format currency
+function formatCurrency(value: number) {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(value);
+}
+
+// Helper function to extract grouping fields from rules
+function extractGroupingFields(rules: any[]): string[] {
+    const fields: string[] = [];
+    rules.forEach(r => {
+        if (r.Regla && r.Regla.toLowerCase().includes('campos para agrupar son')) {
+            const colonIndex = r.Regla.indexOf(':');
+            if (colonIndex !== -1) {
+                const content = r.Regla.substring(colonIndex + 1);
+                // Split by newline, comma, or "y"
+                const lines = content.split(/\n|,|y/).map((s: string) => s.trim()).filter(Boolean);
+                lines.forEach((line: string) => {
+                    // "Label (ActualField)" -> "Label"
+                    const clean = line.replace(/\s*\(.*\).*/, '').trim();
+                    if (clean) fields.push(clean);
+                });
+            }
+        }
+    });
+    return Array.from(new Set(fields)); // Unique fields
+}
+
+// Helper function to format simple results as text
+function formatResultsAsText(results: any[], prompt: string): string {
+    if (!results || results.length === 0) return '';
+    const keys = Object.keys(results[0]);
+
+    if (keys.length === 1) {
+        const val = results[0][keys[0]];
+        const formattedVal = typeof val === 'number' ? formatCurrency(val) : val;
+        return `El resultado para **${prompt}** es: **${formattedVal}**`;
+    }
+
+    if (keys.length === 2) {
+        let text = `He encontrado los siguientes resultados para **${prompt}**:\n\n`;
+        results.slice(0, 10).forEach(row => {
+            const val = row[keys[1]];
+            const formattedVal = typeof val === 'number' ? formatCurrency(val) : val;
+            text += `**${row[keys[0]]}**: ${formattedVal}\n`;
+        });
+        if (results.length > 10) text += `\n*(Mostrando los primeros 10 de ${results.length} resultados)*`;
+        return text;
+    }
+
+    return '';
+}
+
 export async function POST(req: Request) {
     let prompt = 'Unknown Prompt';
     let lastSql: string | null = null;
+    let matchedKeywords: string[] = [];
+    let aiRules: any[] = [];
+
     try {
         const body = await req.json();
         prompt = body.prompt;
@@ -29,55 +83,67 @@ export async function POST(req: Request) {
         const aiRulesResults = await query(`
             SELECT 
                 CONVERT(varchar(3),B.Consecutivo) + '.' + CONVERT(varchar(3),CASE WHEN A.Consecutivo IS NULL THEN 0 ELSE A.Consecutivo END) as RuleId, 
-                Regla 
+                Regla,
+                B.PalabraClave as MatchedWord
             FROM tblReglasPalabrasClave A 
             INNER JOIN tblPalabrasClave B ON A.IdPalabraClave = B.IdPalabraClave 
-            WHERE A.Status = 0 AND B.Status = 0 AND A.IdPalabraClave = 1 OR (
+            WHERE A.Status = 0 AND B.Status = 0 AND (B.Consecutivo = 1 OR (
                 EXISTS (
                     SELECT 1 
                     FROM STRING_SPLIT(B.PalabraClave, ',') 
-                    WHERE ? LIKE '%' + LTRIM(RTRIM(value)) + '%'
+                    WHERE @p0 LIKE '%' + LTRIM(RTRIM(value)) + '%'
                     AND LTRIM(RTRIM(value)) <> ''
                 )
-                AND A.IdPalabraClave > 1
-            )
+                AND B.Consecutivo > 1
+            ))
             ORDER BY B.Consecutivo, A.Consecutivo
         `, [prompt]);
 
-        const formattedRules = (aiRulesResults as any[]).map(r => `- ${r.RuleId} ${r.Regla}`).join('\n');
+        aiRules = aiRulesResults as any[];
+        matchedKeywords = Array.from(new Set(aiRules.filter(r => r.MatchedWord !== 'Reglas Generales').map(r => r.MatchedWord)));
+
+        const formattedRules = aiRules.map(r => `- ${r.RuleId} ${r.Regla}`).join('\n');
 
         const currentDateTime = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
         const systemPrompt = `
-      Eres un Analista de Datos experto en SQL Server (T-SQL) y un Asistente de Compras.
-      Tu objetivo es ayudar al usuario a obtener información de su base de datos local o precios de productos en otras tiendas (Shopping).
+      Eres un Analista de Datos Senior especializado en Business Intelligence y SQL Server.
+      Tu objetivo es transformar datos crudos en hallazgos estratégicos para el usuario.
       
       FECHA Y HORA ACTUAL: ${currentDateTime}
-      (Usa esta fecha para entender referencias temporales como "hoy", "ayer", "este mes", "el mes pasado", etc.)
-
-      REGLAS PARA LA BASE DE DATOS (query_database):
+      
+      CONTEXTO DE NEGOCIO:
       ${schemaString}
       
-      Reglas adicionales de SQL y Comportamiento (Dinámicas):
-        - Las columnas con espacios corporativos (ej. [Folio Venta]) DEBEN ir siempre entre corchetes [].
-        - La comparativa de fechas y periodos debe ser con el formato YYYY-MM-DD. Ejemplo: WHERE  CONVERT(date, FechaVenta ) >= '2026-02-22' AND CONVERT(date, FechaVenta) <= '2026-03-01'.
-        - IMPORTANTE: El año 2026 NO es bisiesto. Febrero tiene 28 días. Si hoy es 01/03/2026, ayer fue 28/02/2026.
-        - Para consultas de datos, SIEMPRE devuelve el campo "visualization" como 'table' por defecto, pero asegúrate de que los datos sean compatibles con gráficas si el usuario lo solicita después.
-        - SIEMPRE devuelve exactamente 3 preguntas sugeridas en el campo "suggested_questions".
-        ${formattedRules}
-    `;
+      REGLAS DINÁMICAS:
+      ${formattedRules}
 
-        console.log('System Prompt:', systemPrompt);
+      DIRECTIVAS ANALÍTICAS:
+      0. **POLÍTICA DE CERO EXPLICACIÓN**: ESTÁ TERMINANTEMENTE PROHIBIDO responder con texto antes o en lugar de una herramienta si hay intención de consulta. NO digas "Voy a preparar la consulta", "Permíteme buscar", ni nada similar. Si el usuario pide datos, tu PRIMERA Y ÚNICA acción debe ser invocar la herramienta adecuada.
+      1. **Validación de Periodo Dinámica**: 
+         - Si el usuario específica un periodo (ej: "hoy", "este mes"): Ejecuta \`query_database\` inmediatamente.
+         - Si NO especifica periodo pero habla de "tendencia", "historial" o "evolución": Asume POR DEFECTO el último mes (usando \`[Fecha Venta] >= DATEADD(month, -1, GETDATE())\`).
+         - Si NO especifica periodo y NO es tendencia: INVOCAR \`request_clarification\`.
+      2. **Autonomía**: Nunca preguntes "cómo quieres agrupar". Analiza la intención.
+      3. **Insights**: Explica *qué significan* los datos y SIEMPRE especifica el periodo y la sucursal (o "todas") en el análisis.
+      4. **Visualización**: Selecciona siempre la mejor herramienta (table, bar, line, pie, area). Recomendado: 'line' o 'area' para tendencias.
+      5. **T-SQL Preciso y Estricto**: Usa corchetes [Nombres con Espacios]. Tabla: "Ventas". Columnas Clave: "Depto", "Tienda", "Total", "Fecha Venta".
+      6. **Regla de Meses**: SIEMPRE que compares el mes actual usando \`MONTH(GETDATE())\`, debes hacerlo contra la columna \`IdMes\` (INT). NUNCA contra \`Mes\` (VARCHAR).
+ 
+      EJEMPLOS:
+      - "Ventas": SELECT Tienda, SUM(Total) as VentaNeta FROM Ventas WHERE IdMes = MONTH(GETDATE()) GROUP BY Tienda
+      - "Evolución": SELECT [Fecha Venta], SUM(Total) as Venta FROM Ventas WHERE [Fecha Venta] >= DATEADD(month, -1, GETDATE()) GROUP BY [Fecha Venta] ORDER BY [Fecha Venta]
+     `;
 
         const tools: any[] = [
             {
                 type: 'function',
                 function: {
                     name: 'query_database',
-                    description: 'Busca información en la base de datos local del inventario, ventas, compras y precios internos usando SQL.',
+                    description: 'Ejecuta análisis de datos en la base de datos local usando T-SQL.',
                     parameters: {
                         type: 'object',
                         properties: {
-                            sql: { type: 'string', description: 'La consulta SQL Server (T-SQL) a ejecutar.' }
+                            sql: { type: 'string', description: 'La consulta SQL Server.' }
                         },
                         required: ['sql']
                     }
@@ -86,14 +152,19 @@ export async function POST(req: Request) {
             {
                 type: 'function',
                 function: {
-                    name: 'search_shopping_prices',
-                    description: 'Busca precios de productos en páginas de shopping de internet (otras tiendas).',
+                    name: 'request_clarification',
+                    description: 'Pide al usuario que aclare el periodo de tiempo si no lo especificó.',
                     parameters: {
                         type: 'object',
                         properties: {
-                            product_name: { type: 'string', description: 'El nombre del producto a buscar.' }
+                            message: { type: 'string', description: 'Mensaje amable preguntando por el periodo (ej: "¿Para qué periodo de tiempo deseas el análisis?"). IMPORTANTE: NO incluyas ninguna opción o sugerencia dentro de este texto.' },
+                            suggested_questions: {
+                                type: 'array',
+                                items: { type: 'string' },
+                                description: '3 sugerencias con la pregunta original del usuario + el periodo de tiempo (ej: "[Pregunta original] de este mes"). El usuario hará clic en estos como botones. PROHIBIDO pedir todo el histórico.'
+                            }
                         },
-                        required: ['product_name']
+                        required: ['message', 'suggested_questions']
                     }
                 }
             }
@@ -107,6 +178,8 @@ export async function POST(req: Request) {
             ],
             tools,
             tool_choice: 'auto',
+            temperature: 0,
+            parallel_tool_calls: false
         });
 
         const message = completion.choices[0].message;
@@ -119,141 +192,113 @@ export async function POST(req: Request) {
 
             if (toolCall.function.name === 'query_database') {
                 lastSql = args.sql;
-                const results = await query(args.sql);
+                let results: any[];
+                try {
+                    results = await query(args.sql);
+                } catch (sqlError: any) {
+                    // Pillar 1: SQL Auto-Correction Logic
+                    console.log("SQL Error, attempting auto-correction...");
+                    const correctionCompletion = await openai.chat.completions.create({
+                        model: 'gpt-4o',
+                        messages: [
+                            { role: 'system', content: `Error SQL: ${sqlError.message}. Corrige el T-SQL.` },
+                            { role: 'user', content: args.sql }
+                        ]
+                    });
+                    const correctedSql = correctionCompletion.choices[0].message.content?.replace(/```sql|```/g, '').trim() || args.sql;
+                    lastSql = correctedSql;
+                    results = await query(correctedSql);
+                }
 
-                // Get metadata from a second AI call to keep the consistency with the previous structure
+                // ANALYTICAL METADATA & HUMAN ANALYSIS
                 const metaCompletion = await openai.chat.completions.create({
-                    model: 'gpt-4o-mini',
+                    model: 'gpt-4o',
                     messages: [
                         {
                             role: 'system',
                             content: `
-                                Analiza la consulta SQL y el prompt original del usuario.
-                                Extrae:
+                                Analiza los datos y genera una respuesta profesional y analítica.
+                                REGLA OBLIGATORIA: En tu 'analysis' debes especificar siempre el periodo analizado (ej. "este mes", "marzo 2026", "histórico", sin usar formato de fechas exactas) y la sucursal (o "todas las sucursales" si aplica).
+                                Retorna JSON:
                                 1. visualization: "table", "bar", "line", "pie", "area".
-                                2. suggested_questions: EXACTAMENTE 3 preguntas relacionadas (SIEMPRE EN ESPAÑOL).
-                                3. related_page: (opcional, ej: "/dashboard").
-                                4. isPeriodProvided: true si el usuario menciono un periodo (hoy, ayer, este mes, etc), false si no hay referencia temporal.
-                                5. startDate: Si el usuario pide un rango, ponlo en YYYY-MM-DD.
-                                6. endDate: Si el usuario pide un rango, ponlo en YYYY-MM-DD.
-                                
-                                IMPORTANTE: Usa la fecha actual (${currentDateTime}) como referencia.
-                                Retorna solo JSON.`
+                                2. analysis: Un párrafo humano (max 60 palabras) que explique los resultados, mencionando explícitamente el periodo y la sucursal.
+                                3. suggested_questions: 3 preguntas de seguimiento. REGLA: Si los datos actuales son un valor global único (sin agrupar, ej. total de ventas), devuelve sugerencias para agrupar ese número (ej. "Desglose por Tienda", "Desglose por Departamento", "Tendencia por Día"). Si los datos ya están agrupados, haz preguntas analíticas profundas.
+                                4. insight: Un hallazgo clave rápido (15 palabras).`
                         },
-                        { role: 'user', content: `Prompt: ${prompt}\nSQL: ${args.sql}` }
+                        { role: 'user', content: `Prompt: ${prompt}\nSQL: ${lastSql}\nResultados: ${JSON.stringify(results.slice(0, 5))}` }
                     ],
                     response_format: { type: 'json_object' }
                 });
 
                 const meta = JSON.parse(metaCompletion.choices[0].message.content || '{}');
 
-                if (meta.isPeriodProvided === false) {
-                    finalResponse = {
-                        data: [],
-                        message: "Para poder ayudarte mejor, ¿podrías indicarme el periodo de tiempo que te gustaría consultar? (ej. hoy, ayer, este mes, del 1 al 15 de marzo, etc.)",
-                        visualization: 'table',
-                        suggested_questions: [
-                            "Ventas de hoy",
-                            "Ventas de ayer",
-                            "Ventas de este mes"
-                        ]
-                    };
-                } else {
-                    finalResponse = {
-                        data: results,
-                        sql: args.sql,
-                        visualization: meta.visualization || 'table',
-                        suggested_questions: (meta.suggested_questions || []).slice(0, 3),
-                        related_page: meta.related_page || null,
-                        startDate: meta.startDate || null,
-                        endDate: meta.endDate || null
-                    };
-                }
+                finalResponse = {
+                    data: results,
+                    sql: lastSql,
+                    message: meta.analysis || "Aquí tienes el análisis solicitado.",
+                    insight: meta.insight,
+                    visualization: meta.visualization || 'table',
+                    suggested_questions: meta.suggested_questions || [],
+                };
             }
 
             if (toolCall.function.name === 'search_shopping_prices') {
                 lastSql = `SEARCH SHOPPING: ${args.product_name}`;
                 const results = await searchShoppingPrices(args.product_name);
-
                 finalResponse = {
                     data: results,
                     sql: `SEARCH SHOPPING: ${args.product_name}`,
                     visualization: 'table',
-                    suggested_questions: [
-                        `¿Cuál es el precio más bajo de ${args.product_name}?`,
-                        `Ver precios de ${args.product_name} en mi base de datos`,
-                        `Comparar ${args.product_name} con otras tiendas`
-                    ],
-                    related_page: null
+                    suggested_questions: [`¿Cuál es el precio más bajo de ${args.product_name}?`],
+                };
+            }
+
+            if (toolCall.function.name === 'request_clarification') {
+                finalResponse = {
+                    data: [],
+                    sql: null,
+                    message: args.message,
+                    visualization: 'table',
+                    suggested_questions: args.suggested_questions,
                 };
             }
         } else {
-            // Fallback for simple chats without tool calls or if AI doesn't understand
-            // If the message contains keywords like "ayuda", "opciones", "no entiendo", or if it's just a fallback
-            const keywordsResults = await query(`SELECT PalabraClave FROM tblPalabrasClave WHERE IdPalabraClave > 1`);
-            const keywords = (keywordsResults as any[]).map(r => r.PalabraClave).join('\n');
-
+            // Fallback for non-tool calls
             finalResponse = {
                 data: [],
-                message: message.content || "No estoy seguro de cómo procesar esa solicitud. Aquí tienes algunas palabras clave que puedes usar para hacerme consultas:",
-                options: keywords,
-                visualization: 'table',
-                suggested_questions: [
-                    "¿Qué puedo preguntarte?",
-                    "Ver ejemplos de consultas",
-                    "Ayuda con el periodo"
-                ]
+                message: message.content || "Entendido. ¿En qué más puedo apoyarte con el análisis de datos?",
+                suggested_questions: ["Ventas de hoy por tienda", "Top 5 productos del mes"]
             };
         }
 
-        // --- Log the completion (Success) ---
+        // --- Log (Success) ---
         try {
             const cookieStore = await cookies();
             const token = cookieStore.get('session');
             let userId = 'unknown';
-
             if (token) {
                 const { payload } = await jwtVerify(token.value, SECRET_KEY);
                 userId = (payload as any).id || 'unknown';
             }
-
-            const isQuestionEmpty = finalResponse.data && Array.isArray(finalResponse.data) && finalResponse.data.length === 0;
-
             await query(
-                'INSERT INTO tblLogPreguntas (Pregunta, Resultado, FechaPregunta, IdUsuario, Error, ConsultaSQL, MensajeError) VALUES (?, ?, GETDATE(), ?, ?, ?, ?)',
-                [prompt, JSON.stringify(finalResponse), userId, isQuestionEmpty ? 1 : 0, lastSql, null]
+                'INSERT INTO tblLogPreguntas (Pregunta, Resultado, FechaPregunta, IdUsuario, Error, ConsultaSQL) VALUES (?, ?, GETDATE(), ?, 0, ?)',
+                [prompt, JSON.stringify(finalResponse), userId, lastSql]
             );
-        } catch (logError) {
-            console.error('Error logging question:', logError);
-        }
+        } catch (logError) { }
 
         return NextResponse.json(finalResponse);
 
     } catch (error: any) {
         console.error('API Error:', error);
 
-        // --- Log the error (Failure) ---
-        try {
-            const cookieStore = await cookies();
-            const token = cookieStore.get('session');
-            let userId = 'unknown';
-
-            if (token) {
-                const { payload } = await jwtVerify(token.value, SECRET_KEY);
-                userId = (payload as any).id || 'unknown';
-            }
-
-            await query(
-                'INSERT INTO tblLogPreguntas (Pregunta, Resultado, FechaPregunta, IdUsuario, Error, ConsultaSQL, MensajeError) VALUES (?, ?, GETDATE(), ?, 1, ?, ?)',
-                [prompt, 'ERROR', userId, lastSql, error.message || 'Internal Server Error']
-            );
-        } catch (logError) {
-            console.error('Error logging failed question:', logError);
+        let errorMessage = 'Error al procesar la analizar la consulta detallada.';
+        if (error instanceof Error) {
+            errorMessage = error.message;
         }
 
-        return NextResponse.json(
-            { error: error.message || 'Internal Server Error' },
-            { status: 500 }
-        );
+        return NextResponse.json({
+            error: errorMessage,
+            sql: lastSql
+        }, { status: 500 });
     }
 }

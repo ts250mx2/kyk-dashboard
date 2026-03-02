@@ -4,7 +4,17 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatInput } from '@/components/chat-input';
 import { ResultsDisplay } from '@/components/results-display';
 import { cn } from '@/lib/utils';
-import { MessageSquare, X, Maximize2, Minimize2, ArrowRight } from 'lucide-react';
+import {
+    MessageSquare,
+    X,
+    Maximize2,
+    Minimize2,
+    ArrowRight,
+    Sparkles,
+    Search,
+    ArrowLeft,
+    Trash2
+} from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
 interface Message {
@@ -12,14 +22,11 @@ interface Message {
     content: string;
     sql?: string;
     visualization?: string;
-    data?: Record<string, unknown>[];
-    error?: string;
-    suggested_questions?: string[];
-    related_page?: string;
-    prompt?: string;
+    results?: Record<string, any>[];
+    insight?: string;
+    suggestedQuestions?: string[];
     timestamp?: number;
-    startDate?: string;
-    endDate?: string;
+    error?: string;
 }
 
 const PAGE_SUGGESTIONS: Record<string, string[]> = {
@@ -95,43 +102,32 @@ export function ChatAgent() {
     };
 
     useEffect(() => {
-        const pruneOldMessages = (savedMsgs: string) => {
-            try {
-                const parsed = JSON.parse(savedMsgs);
-                const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-                // Keep if recent OR if it has no timestamp (for legacy transition, though safer to purge if old)
-                return parsed.filter((msg: Message) => !msg.timestamp || msg.timestamp > oneDayAgo);
-            } catch (e) {
-                return [];
-            }
-        };
-
-        const savedMessages = localStorage.getItem('kyk_chat_history');
+        const savedMessages = localStorage.getItem('kyk_integrated_chat_history');
         if (savedMessages) {
-            const filtered = pruneOldMessages(savedMessages);
-            setMessages(filtered);
+            try {
+                const parsed = JSON.parse(savedMessages);
+                const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+                const filtered = parsed.filter((msg: Message) => !msg.timestamp || msg.timestamp > oneDayAgo);
+                setMessages(filtered);
+            } catch (e) {
+                setMessages([]);
+            }
         }
         setIsHistoryLoaded(true);
     }, []);
 
-    // Prune history when opening the agent
-    useEffect(() => {
-        if (isOpen) {
-            const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-            setMessages(prev => prev.filter(msg => !msg.timestamp || msg.timestamp > oneDayAgo));
-        }
-    }, [isOpen]);
-
     useEffect(() => {
         if (isHistoryLoaded) {
-            localStorage.setItem('kyk_chat_history', JSON.stringify(messages));
+            localStorage.setItem('kyk_integrated_chat_history', JSON.stringify(messages));
         }
         scrollToBottom();
     }, [messages, isHistoryLoaded]);
 
     const handleSend = async (prompt: string) => {
-        const currentTimestamp = Date.now();
-        setMessages((prev) => [...prev, { role: 'user', content: prompt, timestamp: currentTimestamp }]);
+        if (!prompt.trim()) return;
+
+        const userMsg: Message = { role: 'user', content: prompt, timestamp: Date.now() };
+        setMessages((prev) => [...prev, userMsg]);
         setLoading(true);
 
         try {
@@ -143,37 +139,33 @@ export function ChatAgent() {
             const data = await response.json();
 
             if (response.ok) {
-                if (data.startDate && data.endDate) {
-                    window.dispatchEvent(new CustomEvent('dashboard-date-change', {
-                        detail: { startDate: data.startDate, endDate: data.endDate }
-                    }));
-                }
-
-                setMessages((prev) => [...prev, {
+                const assistantMsg: Message = {
                     role: 'assistant',
-                    content: 'He procesado tu consulta. Aquí tienes los resultados.',
+                    content: data.message || 'He procesado tu consulta.',
                     sql: data.sql,
                     visualization: data.visualization,
-                    data: data.data,
-                    suggested_questions: data.suggested_questions,
-                    related_page: data.related_page,
-                    prompt: prompt,
+                    results: data.data,
+                    insight: data.insight,
+                    suggestedQuestions: data.suggested_questions,
                     timestamp: Date.now(),
-                    startDate: data.startDate,
-                    endDate: data.endDate
-                }]);
+                };
+                setMessages((prev) => [...prev, assistantMsg]);
             } else {
+                let errorContent = `Error: ${data.error || 'No se pudo procesar la solicitud'}`;
+                if (data.sql) {
+                    errorContent += `\n\nConsulta SQL fallida:\n${data.sql}`;
+                }
                 setMessages((prev) => [...prev, {
                     role: 'assistant',
-                    content: `Error: ${data.error || 'No se pudo procesar la solicitud'}`,
-                    error: data.error
+                    content: errorContent,
+                    timestamp: Date.now(),
                 }]);
             }
         } catch (err) {
             setMessages((prev) => [...prev, {
                 role: 'assistant',
                 content: `Error de conexión: ${(err as Error).message}`,
-                error: (err as Error).message
+                timestamp: Date.now(),
             }]);
         } finally {
             setLoading(false);
@@ -182,166 +174,189 @@ export function ChatAgent() {
 
     const handleClear = () => {
         setMessages([]);
-        localStorage.removeItem('kyk_chat_history');
+        localStorage.removeItem('kyk_integrated_chat_history');
         loadDefaultSuggestions();
     };
 
     return (
         <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end">
+            {/* Chat Trigger */}
+            {!isOpen && (
+                <button
+                    onClick={() => setIsOpen(true)}
+                    className="group relative flex items-center justify-center w-16 h-16 bg-white border border-slate-200 text-indigo-600 rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 animate-in zoom-in"
+                >
+                    <div className="absolute inset-0 bg-indigo-600 rounded-full animate-ping opacity-10 pointer-events-none" />
+                    <img src="/kesito.svg" alt="KYK" className="w-10 h-10 object-contain group-hover:rotate-12 transition-transform" />
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full" />
+                </button>
+            )}
+
             {/* Chat Window */}
             {isOpen && (
                 <div className={cn(
-                    "bg-background border border-border shadow-2xl rounded-3xl flex flex-col mb-4 overflow-hidden transition-all duration-300 ease-in-out",
+                    "bg-slate-50 border border-slate-200 shadow-2xl rounded-[32px] flex flex-col mb-4 overflow-hidden transition-all duration-300 ease-in-out",
                     isExpanded
-                        ? "fixed inset-0 z-[10000] rounded-none md:rounded-3xl md:inset-4"
-                        : "w-[380px] md:w-[800px] h-[500px] md:h-[80vh]"
+                        ? "fixed inset-0 z-[10000] rounded-none md:rounded-[40px] md:inset-6"
+                        : "w-[380px] md:w-[850px] h-[500px] md:h-[85vh]"
                 )}>
                     {/* Header */}
-                    <div className="p-4 bg-primary text-primary-foreground flex items-center justify-between shadow-lg">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-                                <img src="/kesito.svg" alt="KYK" className="w-5 h-5 object-contain" />
+                    <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-white border border-slate-100 rounded-2xl shadow-sm flex items-center justify-center overflow-hidden">
+                                <img src="/kesito.svg" alt="KYK" className="w-8 h-8 object-contain" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-sm uppercase tracking-wider leading-none">Asistente KYK</h3>
-                                <span className="text-[10px] opacity-70">En línea</span>
+                                <h3 className="font-black text-slate-900 tracking-tight leading-none uppercase text-xs">Analista Digital KYK</h3>
+                                <div className="flex items-center space-x-1.5 mt-1">
+                                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">En línea</span>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => setIsExpanded(!isExpanded)}
-                                className="p-2 hover:bg-white/10 rounded-full transition-colors hidden md:block"
-                            >
-                                {isExpanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                        <div className="flex items-center space-x-2">
+                            <button onClick={handleClear} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title="Limpiar chat">
+                                <Trash2 className="w-5 h-5" />
                             </button>
-                            <button
-                                onClick={() => setIsOpen(false)}
-                                className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                            >
-                                <X size={20} />
+                            <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400 hidden md:block">
+                                {isExpanded ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                            </button>
+                            <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400">
+                                <X className="w-6 h-6" />
                             </button>
                         </div>
                     </div>
 
                     {/* Messages Area */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
-                        {messages.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
-                                <img src="/kesito.svg" alt="Kesito" className="w-20 h-20 opacity-50 grayscale" />
+                    <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth scrollbar-hide" id="chat-messages">
+                        {messages.length === 0 && (
+                            <div className="flex flex-col items-center justify-center h-full text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                <div className="p-8 bg-white rounded-[40px] shadow-xl border border-slate-100">
+                                    <img src="/kesito.svg" alt="Kesito" className="w-16 h-16 object-contain animate-pulse" />
+                                </div>
                                 <div className="space-y-2">
-                                    <p className="text-sm font-bold text-muted-foreground uppercase">¡Hola! Soy tu asistente de IA.</p>
-                                    <p className="text-xs text-muted-foreground/60">¿En qué puedo ayudarte hoy?</p>
+                                    <h2 className="text-3xl font-black tracking-tight text-slate-900">¿Qué analizamos hoy?</h2>
+                                    <p className="text-slate-500 max-w-sm font-medium">Estoy listo para explorar tus datos de ventas, compras e inventario.</p>
                                 </div>
-
-                                {defaultSuggestions.length > 0 && (
-                                    <div className="w-full space-y-2 mt-4">
-                                        <p className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest text-center">Sugerencias para ti</p>
-                                        <div className="flex flex-col gap-2">
-                                            {defaultSuggestions.slice(0, 5).map((suggestion, idx) => (
-                                                <button
-                                                    key={idx}
-                                                    onClick={() => handleSend(suggestion)}
-                                                    className="w-full text-left px-4 py-2 bg-muted/50 border border-border hover:border-primary hover:text-primary transition-all text-xs rounded-xl shadow-sm flex items-center justify-between group"
-                                                >
-                                                    <span className="truncate">{suggestion}</span>
-                                                    <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-lg">
+                                    {defaultSuggestions.map((s, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => handleSend(s)}
+                                            className="p-5 text-left bg-white border border-slate-100 rounded-[24px] hover:border-indigo-500 hover:shadow-xl transition-all group animate-in fade-in zoom-in duration-300"
+                                            style={{ animationDelay: `${i * 100}ms` }}
+                                        >
+                                            <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest mb-1.5 opacity-60">Sugerencia</p>
+                                            <p className="text-sm font-bold text-slate-700 group-hover:text-indigo-700 leading-tight">{s}</p>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        ) : (
-                            messages.map((msg, i) => (
-                                <div key={i} className={cn('flex flex-col', msg.role === 'user' ? 'items-end' : 'items-start')}>
-                                    <div className={cn(
-                                        'max-w-[90%] rounded-2xl p-3 shadow-sm text-sm',
-                                        msg.role === 'user'
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'bg-muted border border-border'
-                                    )}>
-                                        <p className="leading-relaxed">
-                                            {msg.content}
-                                        </p>
-
-                                        {msg.data && msg.data.length > 0 ? (
-                                            <div className="mt-4 overflow-hidden rounded-none border border-border/50">
-                                                <div className="scale-90 origin-top-left overflow-auto" style={{ width: '111.11%' }}>
-                                                    <ResultsDisplay
-                                                        data={msg.data}
-                                                        sql={msg.sql || ''}
-                                                        question={msg.prompt || ''}
-                                                        visualization={(msg.visualization as 'table' | 'bar' | 'line' | 'pie' | 'area') || 'table'}
-                                                        onVisualizationChange={(newViz) => {
-                                                            setMessages(prev => prev.map((m, idx) => idx === i ? { ...m, visualization: newViz } : m));
-                                                        }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        ) : msg.data && msg.data.length === 0 ? (
-                                            <div className="mt-4 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-none animate-in fade-in slide-in-from-left-2 duration-300">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xl">🔍</span>
-                                                    <div>
-                                                        <p className="text-xs font-black text-amber-900 uppercase tracking-tight">Sin resultados</p>
-                                                        <p className="text-[11px] text-amber-700 font-medium">No se encontraron datos para esta consulta. Prueba con otras fechas o criterios.</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ) : null}
-
-                                        {msg.suggested_questions && msg.suggested_questions.length > 0 && (
-                                            <div className="mt-4 pt-3 border-t border-border/40 flex flex-wrap gap-1">
-                                                {msg.suggested_questions.map((question, idx) => (
-                                                    <button
-                                                        key={idx}
-                                                        onClick={() => handleSend(question)}
-                                                        className="px-3 py-1 bg-background border border-border rounded-full hover:border-primary hover:text-primary transition-all text-[10px] font-bold shadow-sm flex items-center gap-1"
-                                                    >
-                                                        {question}
-                                                        <ArrowRight size={10} className="opacity-40" />
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))
                         )}
+
+                        {messages.map((message, index) => (
+                            <div key={index} className={cn("flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500", message.role === 'user' ? "items-end" : "items-start")}>
+                                <div className={cn(
+                                    "max-w-[85%] rounded-[32px] overflow-hidden shadow-sm",
+                                    message.role === 'user'
+                                        ? "bg-slate-900 text-white rounded-tr-none px-6 py-4"
+                                        : "bg-white border border-slate-200 rounded-tl-none"
+                                )}>
+                                    {message.role === 'assistant' ? (
+                                        <div className="flex flex-col">
+                                            {/* Analyst Header */}
+                                            <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 flex items-center justify-between">
+                                                <div className="flex items-center space-x-2">
+                                                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" />
+                                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Reporte Analítico Senior</span>
+                                                </div>
+                                                <div className="flex space-x-1">
+                                                    <div className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
+                                                    <div className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
+                                                </div>
+                                            </div>
+
+                                            {/* Analysis Content */}
+                                            <div className="px-6 py-6 group">
+                                                <p className="text-[16px] leading-relaxed text-slate-700 font-medium italic mb-6 border-l-4 border-indigo-200 pl-6 bg-indigo-50/30 py-4 rounded-r-2xl whitespace-pre-wrap">
+                                                    {message.content}
+                                                </p>
+
+                                                {message.insight && (
+                                                    <div className="bg-indigo-600 text-white p-5 rounded-[24px] mb-8 shadow-lg shadow-indigo-100 flex items-start space-x-4 animate-in slide-in-from-left-4 duration-500">
+                                                        <div className="p-3 bg-white/20 rounded-2xl">
+                                                            <Search className="w-5 h-5" />
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Hallazgo Clave</span>
+                                                            <p className="text-[15px] font-bold leading-tight mt-1">{message.insight}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {message.results && message.results.length > 0 && !(message.results.length === 1 && Object.keys(message.results[0]).length === 1) && (
+                                                    <div className="mt-2 animate-in zoom-in-95 duration-700 delay-200">
+                                                        <ResultsDisplay
+                                                            data={message.results}
+                                                            sql={message.sql || ''}
+                                                            question={messages[index - 1]?.content || ''}
+                                                            visualization={message.visualization as any || 'table'}
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
+                                                    <div className="mt-10 pt-8 border-t border-slate-100 animate-in fade-in duration-700 delay-500">
+                                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 block mb-4">Análisis sugeridos</span>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {message.suggestedQuestions.map((q, i) => (
+                                                                <button
+                                                                    key={i}
+                                                                    onClick={() => handleSend(q)}
+                                                                    className="px-5 py-2.5 text-xs font-bold text-indigo-600 bg-white hover:bg-indigo-600 hover:text-white rounded-2xl transition-all border border-indigo-100 shadow-sm hover:shadow-md active:scale-95"
+                                                                >
+                                                                    {q}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-[16px] font-bold leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                                    )}
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400 mt-2 px-2 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {new Date(message.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            </div>
+                        ))}
+
                         {loading && (
-                            <div className="flex justify-start">
-                                <div className="bg-muted border border-border rounded-2xl p-3 flex items-center gap-3 shadow-sm">
-                                    <div className="w-5 h-5 animate-bounce">
-                                        <img src="/kesito.svg" alt="Loading" className="w-full h-full object-contain" />
+                            <div className="flex items-start space-x-3 animate-in fade-in duration-300">
+                                <div className="p-4 bg-white border border-slate-200 rounded-[24px] rounded-tl-none shadow-xl flex items-center space-x-4">
+                                    <div className="flex space-x-1">
+                                        <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                                        <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                                        <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" />
                                     </div>
-                                    <span className="text-[11px] font-bold text-muted-foreground uppercase animate-pulse">Analizando...</span>
+                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Analizando datos...</span>
                                 </div>
                             </div>
                         )}
                         <div ref={messagesEndRef} />
                     </div>
 
-                    {/* Bottom Area (Input) */}
-                    <div className="p-4 bg-muted/30 border-t border-border">
-                        <ChatInput onSend={handleSend} onClear={handleClear} isLoading={loading} />
+                    {/* Footer / Input Area */}
+                    <div className="p-6 bg-white border-t border-slate-100 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.05)]">
+                        <ChatInput
+                            onSend={handleSend}
+                            isLoading={loading}
+                        />
+                        <p className="text-[9px] text-center text-slate-400 mt-4 uppercase tracking-[0.3em] font-bold">Powered by Merkurio Engine Analytics</p>
                     </div>
                 </div>
-            )}
-
-            {/* Floating Trigger Button */}
-            {!isOpen && (
-                <button
-                    onClick={() => setIsOpen(true)}
-                    className="group relative flex items-center justify-center w-16 h-16 bg-primary text-primary-foreground rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] animate-in zoom-in"
-                >
-                    <div className="absolute inset-0 bg-primary rounded-full animate-ping opacity-20 pointer-events-none" />
-                    <img
-                        src="/kesito.svg"
-                        alt="Chat"
-                        className="w-10 h-10 object-contain group-hover:rotate-12 transition-transform duration-300"
-                    />
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 border-2 border-background rounded-full" />
-                </button>
             )}
         </div>
     );
