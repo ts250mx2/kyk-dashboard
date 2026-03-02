@@ -34,14 +34,14 @@ export async function GET(req: Request) {
         const cancelacionesSql = `
             SELECT SUM(Total) as MontoCancelaciones, COUNT(IdCancelacion) as CantidadCancelaciones, SUM(Total)/COUNT(IdCancelacion) as PromedioCancelacion
             FROM Cancelaciones 
-            WHERE FechaCancelacion >= ${startStr} AND FechaCancelacion <= ${endStr}
+            WHERE [Fecha Cancelacion] >= ${startStr} AND [Fecha Cancelacion] <= ${endStr}
         `;
 
         // 4. Retiros
         const withdrawalsSql = `
             SELECT ISNULL(SUM(Monto), 0) as MontoRetiros
             FROM Retiros
-            WHERE Fecha >= ${startStr} AND Fecha <= ${endStr}
+            WHERE [Fecha Retiro] >= ${startStr} AND [Fecha Retiro] <= ${endStr}
         `;
 
         const returnsSql = `
@@ -73,7 +73,7 @@ export async function GET(req: Request) {
         const chartDataCancelacionesSql = `
             SELECT IdTienda, Tienda, SUM(Total) as Total, COUNT(*) as Cantidad, SUM(Total)/COUNT(*) as Promedio
             FROM Cancelaciones
-            WHERE FechaCancelacion >= ${startStr} AND FechaCancelacion <= ${endStr}
+            WHERE [Fecha Cancelacion] >= ${startStr} AND [Fecha Cancelacion] <= ${endStr}
             GROUP BY IdTienda, Tienda
             ORDER BY Total DESC
         `;
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
         const chartDataRetirosSql = `
             SELECT IdTienda, Tienda, SUM(Monto) as Total
             FROM Retiros
-            WHERE Fecha >= ${startStr} AND Fecha <= ${endStr}
+            WHERE [Fecha Retiro] >= ${startStr} AND [Fecha Retiro] <= ${endStr}
             GROUP BY IdTienda, Tienda
             ORDER BY Total DESC
         `;

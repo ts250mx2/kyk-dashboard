@@ -76,7 +76,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
         }
 
-        const schemaPath = path.join(process.cwd(), 'database-schema.md');
+        const schemaPath = path.join(process.cwd(), 'database-schema-ia.md');
         const schemaString = fs.readFileSync(schemaPath, 'utf-8');
 
         // Fetch dynamic AI rules from the database
