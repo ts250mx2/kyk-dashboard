@@ -222,8 +222,7 @@ export async function POST(req: Request) {
                                 Retorna JSON:
                                 1. visualization: "table", "bar", "line", "pie", "area".
                                 2. analysis: Un párrafo humano (max 60 palabras) que explique los resultados, mencionando explícitamente el periodo y la sucursal.
-                                3. suggested_questions: 3 preguntas de seguimiento. REGLA: Si los datos actuales son un valor global único (sin agrupar, ej. total de ventas), devuelve sugerencias para agrupar ese número (ej. "Desglose por Tienda", "Desglose por Departamento", "Tendencia por Día"). Si los datos ya están agrupados, haz preguntas analíticas profundas.
-                                4. insight: Un hallazgo clave rápido (15 palabras).`
+                                3. suggested_questions: 3 preguntas de seguimiento COMPLETAS. REGLA: Si las sugerencias son para agrupar o cambiar el periodo, DEBEN HEREDAR la pregunta original (ej. si la pregunta fue "ventas hoy", la sugerencia debe ser "ventas hoy por Tienda", NUNCA solo "por Tienda"). Si los datos ya están agrupados, haz preguntas analíticas profundas e independientes.`
                         },
                         { role: 'user', content: `Prompt: ${prompt}\nSQL: ${lastSql}\nResultados: ${JSON.stringify(results.slice(0, 5))}` }
                     ],

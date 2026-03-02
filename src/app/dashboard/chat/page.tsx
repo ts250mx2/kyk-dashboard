@@ -54,7 +54,25 @@ export default function DashboardChatPage() {
     const handleSend = async (prompt: string) => {
         if (!prompt.trim()) return;
 
-        const userMsg: Message = { role: 'user', content: prompt, timestamp: Date.now() };
+        // Safety net: If prompt looks like a refinement (inheritance)
+        let finalPrompt = prompt;
+        const lowerPrompt = prompt.toLowerCase();
+        const isRefinement = lowerPrompt.startsWith('por ') ||
+            lowerPrompt.startsWith('de ') ||
+            lowerPrompt.startsWith('en ') ||
+            lowerPrompt.startsWith('este ') ||
+            lowerPrompt.startsWith('esta ');
+
+        if (isRefinement) {
+            const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+            if (lastUserMsg) {
+                // Remove question marks if present in original
+                const cleanLast = lastUserMsg.content.replace(/\?$/, '');
+                finalPrompt = `${cleanLast} ${prompt}`;
+            }
+        }
+
+        const userMsg: Message = { role: 'user', content: finalPrompt, timestamp: Date.now() };
         setMessages((prev) => [...prev, userMsg].slice(-20));
         setLoading(true);
 
@@ -62,7 +80,7 @@ export default function DashboardChatPage() {
             const response = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt }),
+                body: JSON.stringify({ prompt: finalPrompt }),
             });
             const data = await response.json();
 
