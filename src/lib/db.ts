@@ -1,7 +1,7 @@
 import sql from 'mssql';
 
 const user = process.env.SQL_SERVER_USER || 'sa';
-const password = process.env.SQL_SERVER_PASSWORD || 'Ve14$20rio';
+const password = (process.env.SQL_SERVER_PASSWORD || 'Ve14$20rio').replace(/\\(\$)/g, '$1');
 const database = process.env.SQL_SERVER_DATABASE || 'BDKYK';
 const server = process.env.SQL_SERVER_SERVER || '192.168.1.20';
 
