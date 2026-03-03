@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, AlertCircle, Clock, Store, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertCircle, Clock, Store, ChevronDown, ChevronUp, UserCheck, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [maximized, setMaximized] = useState<string | null>(null);
+    const [cancelRole, setCancelRole] = useState<'cajeros' | 'supervisores'>('cajeros');
     const [expanded, setExpanded] = useState<Record<string, boolean>>({
         cancel: false,
-        users: false,
         alza: false,
         baja: false
     });
@@ -42,7 +42,16 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
 
     if (!data) return null;
 
-    const renderTable = (title: string, icon: any, bgColor: string, borderColor: string, iconColor: string, items: any[], type: 'cancel' | 'alza' | 'baja' | 'users') => {
+    const renderTable = (
+        title: string,
+        icon: any,
+        bgColor: string,
+        borderColor: string,
+        iconColor: string,
+        items: any[],
+        type: 'cancel' | 'alza' | 'baja',
+        customHeader?: React.ReactNode
+    ) => {
         const isExpanded = expanded[type];
         const isMaximized = maximized === type;
         const displayItems = (isExpanded || isMaximized) ? items : items?.slice(0, 5);
@@ -56,9 +65,13 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
                 <div className={cn("p-4 border-b flex items-center justify-between", bgColor, borderColor)}>
                     <div className="flex items-center gap-2">
                         {icon}
-                        <h3 className="font-black text-slate-800 uppercase tracking-tight text-sm">{title}</h3>
+                        <div className="flex flex-col">
+                            <h3 className="font-black text-slate-800 uppercase tracking-tight text-sm leading-none">{title}</h3>
+                            {type === 'cancel' && <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase">Últimos 7 Días</span>}
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {customHeader}
                         <button
                             onClick={() => setMaximized(isMaximized ? null : type)}
                             type="button"
@@ -77,56 +90,54 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
                     <table className="w-full text-left text-xs border-collapse">
                         <thead className="bg-slate-50/80 backdrop-blur-sm text-slate-400 font-bold uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10">
                             <tr>
-                                <th className="px-4 py-3">{type === 'users' ? 'Colaborador' : 'Detalle'}</th>
-                                <th className="px-4 py-3 text-right">{type === 'cancel' || type === 'users' ? 'Cant.' : 'Tendencia'}</th>
-                                <th className="px-4 py-3 text-right">{type === 'users' ? '' : 'Monto'}</th>
+                                <th className="px-4 py-3">{type === 'cancel' ? (cancelRole === 'cajeros' ? 'Cajero' : 'Supervisor') : 'Detalle'}</th>
+                                <th className="px-4 py-3 text-right">Cant.</th>
+                                <th className="px-4 py-3 text-right">Total</th>
+                                {type === 'cancel' && <th className="px-4 py-3 text-right">Prom.</th>}
+                                {type !== 'cancel' && <th className="px-4 py-3 text-right">Trend</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 font-medium">
                             {displayItems?.map((item: any, i: number) => (
                                 <tr key={i} className="hover:bg-slate-50 transition-colors text-[11px]">
                                     <td className="px-4 py-3">
-                                        {type === 'cancel' ? (
-                                            <div className="flex flex-col">
-                                                <span className="text-slate-800">{item.Supervisor}</span>
-                                                <span className="text-slate-400 text-[9px] uppercase">{item.Cajero}</span>
-                                            </div>
-                                        ) : type === 'users' ? (
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-6 h-6 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-black text-[9px]">
-                                                    {item.Usuario?.charAt(0)}
-                                                </div>
-                                                <span className="text-slate-800 font-bold uppercase tracking-tighter truncate max-w-[150px]">{item.Usuario}</span>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col">
-                                                <div className="max-w-[150px] truncate text-slate-800 font-bold" title={item.Descripcion}>
-                                                    {item.Descripcion}
-                                                </div>
-                                                <span className="text-[9px] font-black text-[#4050B4] uppercase tracking-tighter">
-                                                    {item.Tienda}
-                                                </span>
-                                            </div>
-                                        )}
+                                        <div className="flex flex-col">
+                                            <span className="text-slate-800 font-bold uppercase truncate max-w-[120px]">
+                                                {type === 'cancel' ? (cancelRole === 'cajeros' ? item.Cajero : item.Supervisor) : item.Descripcion}
+                                            </span>
+                                            <span className="text-[9px] font-black text-[#4050B4] uppercase tracking-tighter">
+                                                {item.Tienda}
+                                            </span>
+                                        </div>
                                     </td>
                                     <td className="px-4 py-3 text-right">
-                                        {type === 'cancel' || type === 'users' ? (
-                                            <span className="text-rose-600 font-black">{item.Cantidad}</span>
-                                        ) : (
-                                            <div className="flex items-center justify-end gap-1">
-                                                {type === 'alza' ? <TrendingUp className="w-3 h-3 text-emerald-500" /> : <TrendingDown className="w-3 h-3 text-rose-500" />}
-                                                <span className="text-[10px] text-slate-400">${item.W4.toFixed(0)}→${item.W1.toFixed(0)}</span>
-                                            </div>
-                                        )}
+                                        <span className={cn("font-black", type === 'cancel' ? "text-rose-600" : "text-slate-600")}>
+                                            {type === 'cancel' ? item.Cantidad : item.W1.toFixed(0)}
+                                        </span>
                                     </td>
                                     <td className="px-4 py-3 text-right font-black text-slate-900">
-                                        {type === 'users' ? '' : `$${(type === 'cancel' ? item.MontoTotal : item.W1).toLocaleString(undefined, { minimumFractionDigits: 0 })}`}
+                                        ${(type === 'cancel' ? item.Total : item.W1).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                     </td>
+                                    {type === 'cancel' && (
+                                        <td className="px-4 py-3 text-right text-slate-500 font-bold">
+                                            ${item['Promedio Cancelacion'].toFixed(0)}
+                                        </td>
+                                    )}
+                                    {type !== 'cancel' && (
+                                        <td className="px-4 py-3 text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                                {type === 'alza' ? <TrendingUp className="w-3 h-3 text-emerald-500" /> : <TrendingDown className="w-3 h-3 text-rose-500" />}
+                                                <span className="text-[9px] text-slate-400">${item.W4.toFixed(0)}→${item.W1.toFixed(0)}</span>
+                                            </div>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                             {(!items || items.length === 0) && (
                                 <tr>
-                                    <td colSpan={3} className="px-4 py-8 text-center text-slate-400 italic">No se detectaron tendencias significativas</td>
+                                    <td colSpan={type === 'cancel' ? 4 : 4} className="px-4 py-8 text-center text-slate-400 italic font-medium">
+                                        No se detectaron tendencias significativas
+                                    </td>
                                 </tr>
                             )}
                         </tbody>
@@ -149,7 +160,7 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
         );
 
         return (
-            <div key={type}>
+            <div key={type} className="h-full">
                 {isMaximized && (
                     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[90] animate-in fade-in duration-300" onClick={() => setMaximized(null)} />
                 )}
@@ -165,24 +176,37 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 italic">Benchmark: Dinámico</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* 1. Cancellation Anomalies (Today) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* 1. Cancellation Audit (Role Toggle) */}
                 {renderTable(
-                    "Cancelaciones (Hoy)",
+                    "Auditoría de Cancelaciones",
                     <AlertCircle className="w-5 h-5 text-rose-600" />,
                     "bg-rose-50/50", "border-rose-100/50", "text-rose-600",
-                    data.cancelAnomalies, 'cancel'
+                    cancelRole === 'cajeros' ? data.cancelCajeros : data.cancelSupervisores,
+                    'cancel',
+                    <div className="flex p-0.5 bg-slate-100 rounded-lg mr-2 border border-slate-200 shadow-inner">
+                        <button
+                            onClick={() => setCancelRole('cajeros')}
+                            className={cn(
+                                "p-1 rounded-md transition-all text-[9px] font-black uppercase flex items-center gap-1 px-2",
+                                cancelRole === 'cajeros' ? "bg-white text-[#4050B4] shadow-sm ring-1 ring-slate-200" : "text-slate-400 hover:text-slate-600"
+                            )}
+                        >
+                            <UserCheck className="w-2.5 h-2.5" /> Cajeros
+                        </button>
+                        <button
+                            onClick={() => setCancelRole('supervisores')}
+                            className={cn(
+                                "p-1 rounded-md transition-all text-[9px] font-black uppercase flex items-center gap-1 px-2",
+                                cancelRole === 'supervisores' ? "bg-white text-[#4050B4] shadow-sm ring-1 ring-slate-200" : "text-slate-400 hover:text-slate-600"
+                            )}
+                        >
+                            <ShieldCheck className="w-2.5 h-2.5" /> Supervisores
+                        </button>
+                    </div>
                 )}
 
-                {/* 2. Top Users (Last 7 Days) */}
-                {renderTable(
-                    "Auditoría Usuarios (7D)",
-                    <div className="bg-rose-600 text-white text-[9px] px-1 rounded font-black">TOP</div>,
-                    "bg-rose-50/30", "border-rose-100/30", "text-rose-600",
-                    data.cancelUsers, 'users'
-                )}
-
-                {/* 3. Rising Stars */}
+                {/* 2. Rising Stars */}
                 {renderTable(
                     "Alzas Consecutivas",
                     <TrendingUp className="w-5 h-5 text-emerald-600" />,
@@ -190,7 +214,7 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
                     data.alzaProducts, 'alza'
                 )}
 
-                {/* 4. Falling Stars */}
+                {/* 3. Falling Stars */}
                 {renderTable(
                     "Decremento Continuo",
                     <TrendingDown className="w-5 h-5 text-rose-600" />,
@@ -201,7 +225,7 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
 
             {/* Peaks and Insights */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4">
-                <div className="bg-white border border-slate-100 p-4 flex items-center gap-4 rounded-2xl">
+                <div className="bg-white border border-slate-100 p-4 flex items-center gap-4 rounded-2xl shadow-sm">
                     <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100">
                         <Clock className="w-5 h-5" />
                     </div>

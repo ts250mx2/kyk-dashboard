@@ -41,20 +41,35 @@ export async function GET(req: Request) {
             SELECT * FROM WeeklySales ORDER BY WeeksAgo DESC
         `;
 
-        // B. Cancellation Anomalies (Supervisors & Cashiers Today) - ALWAYS GLOBAL
-        const cancelAnomaliesSql = `
-            SELECT TOP 50
-                Supervisor,
-                Cajero,
-                COUNT(*) as Cantidad,
-                SUM(Total) as MontoTotal
-            FROM Cancelaciones
-            WHERE CAST([Fecha Cancelacion] AS DATE) = CAST(GETDATE() AS DATE)
-            GROUP BY Supervisor, Cajero
-            ORDER BY MontoTotal DESC
+        // B. Detailed Cancellation Audit - Cajeros (Last 7 Days)
+        const cancelCajerosSql = `
+            SELECT Usuario AS Cajero, Tienda, COUNT(A.IdCancelacion) AS Cantidad, SUM(PrecioVenta*Cantidad) AS Total, SUM(PrecioVenta*Cantidad)/NULLIF(COUNT(A.IdCancelacion), 0) AS [Promedio Cancelacion]
+            FROM tblCancelaciones A
+            INNER JOIN tblDetalleCancelaciones B ON A.IdTienda = B.IdTienda AND A.IdComputadora = B.IdComputadora AND A.IdCancelacion = B.IdCancelacion
+            INNER JOIN tblAperturasCierres C ON A.IdTienda = C.IdTienda AND A.IdComputadora = C.IdComputadora AND A.IdApertura = C.IdApertura
+            INNER JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
+            INNER JOIN tblTiendas E ON A.IdTienda = E.IdTienda
+            WHERE FechaCancelacion >= DATEADD(day, -7, GETDATE())
+            ${tiendaFilterCancelaciones}
+            GROUP BY D.Usuario, E.Tienda
+            ORDER BY COUNT(A.IdCancelacion) DESC
         `;
 
-        // C. Hourly Patterns (Average over last 30 days)
+        // C. Detailed Cancellation Audit - Supervisores (Last 7 Days)
+        const cancelSupervisoresSql = `
+            SELECT Usuario AS Supervisor, Tienda, COUNT(A.IdCancelacion) AS Cantidad, SUM(PrecioVenta*Cantidad) AS Total, SUM(PrecioVenta*Cantidad)/NULLIF(COUNT(A.IdCancelacion), 0) AS [Promedio Cancelacion]
+            FROM tblCancelaciones A
+            INNER JOIN tblDetalleCancelaciones B ON A.IdTienda = B.IdTienda AND A.IdComputadora = B.IdComputadora AND A.IdCancelacion = B.IdCancelacion
+            INNER JOIN tblAperturasCierres C ON A.IdTienda = C.IdTienda AND A.IdComputadora = C.IdComputadora AND A.IdApertura = C.IdApertura
+            INNER JOIN tblUsuarios D ON A.IdSupervisor = D.IdUsuario
+            INNER JOIN tblTiendas E ON A.IdTienda = E.IdTienda
+            WHERE FechaCancelacion >= DATEADD(day, -7, GETDATE())
+            ${tiendaFilterCancelaciones}
+            GROUP BY D.Usuario, E.Tienda
+            ORDER BY COUNT(A.IdCancelacion) DESC
+        `;
+
+        // D. Hourly Patterns (Average over last 30 days)
         const hourlyPatternsSql = `
             SELECT 
                 DATEPART(hour, FechaVenta) as Hora,
@@ -66,7 +81,7 @@ export async function GET(req: Request) {
             ORDER BY Hora
         `;
 
-        // D. Consecutive Alza Products (Last 4 Weeks) - Store Specific
+        // E. Consecutive Alza Products (Last 4 Weeks) - Store Specific
         const alzaProductsSql = `
             SELECT TOP 50
                 t.Tienda,
@@ -90,7 +105,7 @@ export async function GET(req: Request) {
             ORDER BY W1 DESC
         `;
 
-        // E. Consecutive Baja Products (Last 4 Weeks) - Store Specific
+        // F. Consecutive Baja Products (Last 4 Weeks) - Store Specific
         const bajaProductsSql = `
             SELECT TOP 50
                 t.Tienda,
@@ -115,33 +130,22 @@ export async function GET(req: Request) {
             ORDER BY W1 ASC
         `;
 
-        // F. Top Users by Cancellation Count (Last 7 Days) - ALWAYS GLOBAL
-        const cancelUsersSql = `
-            SELECT TOP 50
-                Cajero as Usuario,
-                COUNT(*) as Cantidad
-            FROM Cancelaciones
-            WHERE [Fecha Cancelacion] >= DATEADD(day, -7, GETDATE())
-            GROUP BY Cajero
-            ORDER BY Cantidad DESC
-        `;
-
-        const [salesTrends, cancelAnomalies, hourlyPatterns, alzaProducts, bajaProducts, cancelUsers] = await Promise.all([
+        const [salesTrends, cancelCajeros, cancelSupervisores, hourlyPatterns, alzaProducts, bajaProducts] = await Promise.all([
             query(salesTrendsSql),
-            query(cancelAnomaliesSql),
+            query(cancelCajerosSql),
+            query(cancelSupervisoresSql),
             query(hourlyPatternsSql),
             query(alzaProductsSql),
-            query(bajaProductsSql),
-            query(cancelUsersSql)
+            query(bajaProductsSql)
         ]);
 
         const data = {
             salesTrends,
-            cancelAnomalies,
+            cancelCajeros,
+            cancelSupervisores,
             hourlyPatterns,
             alzaProducts,
             bajaProducts,
-            cancelUsers,
             generatedAt: new Date().toISOString()
         };
 
