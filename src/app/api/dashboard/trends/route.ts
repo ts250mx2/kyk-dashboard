@@ -115,12 +115,24 @@ export async function GET(req: Request) {
             ORDER BY W1 ASC
         `;
 
-        const [salesTrends, cancelAnomalies, hourlyPatterns, alzaProducts, bajaProducts] = await Promise.all([
+        // F. Top Users by Cancellation Count (Last 7 Days) - ALWAYS GLOBAL
+        const cancelUsersSql = `
+            SELECT TOP 50
+                Cajero as Usuario,
+                COUNT(*) as Cantidad
+            FROM Cancelaciones
+            WHERE [Fecha Cancelacion] >= DATEADD(day, -7, GETDATE())
+            GROUP BY Cajero
+            ORDER BY Cantidad DESC
+        `;
+
+        const [salesTrends, cancelAnomalies, hourlyPatterns, alzaProducts, bajaProducts, cancelUsers] = await Promise.all([
             query(salesTrendsSql),
             query(cancelAnomaliesSql),
             query(hourlyPatternsSql),
             query(alzaProductsSql),
-            query(bajaProductsSql)
+            query(bajaProductsSql),
+            query(cancelUsersSql)
         ]);
 
         const data = {
@@ -129,6 +141,7 @@ export async function GET(req: Request) {
             hourlyPatterns,
             alzaProducts,
             bajaProducts,
+            cancelUsers,
             generatedAt: new Date().toISOString()
         };
 
