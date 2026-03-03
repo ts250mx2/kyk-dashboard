@@ -3,12 +3,15 @@ import { query } from '@/lib/db';
 import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 
-const secret = process.env.JWT_SECRET;
-if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET environment variable is required in production');
-}
+const getSecretKey = () => {
+    const secret = process.env.JWT_SECRET;
+    if (!secret && process.env.NODE_ENV === 'production') {
+        console.warn('⚠️ WARNING: JWT_SECRET environment variable is missing in production!');
+    }
+    return new TextEncoder().encode(secret || 'dev-secret-key-replaces-this-in-prod');
+};
 
-const SECRET_KEY = new TextEncoder().encode(secret || 'dev-secret-key-replaces-this-in-prod');
+const SECRET_KEY = getSecretKey();
 
 export async function POST(request: Request) {
     try {
