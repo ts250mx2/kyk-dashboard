@@ -86,22 +86,22 @@ export async function GET(req: Request) {
             SELECT TOP 50
                 t.Tienda,
                 Descripcion,
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 4 THEN d.Total ELSE 0 END) as W4,
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 3 THEN d.Total ELSE 0 END) as W3,
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 2 THEN d.Total ELSE 0 END) as W2,
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 1 THEN d.Total ELSE 0 END) as W1
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 4 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W4,
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 3 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W3,
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 2 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W2,
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 1 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W1
             FROM tblDetalleVentas d
-            JOIN tblVentas v ON d.IdVenta = v.IdVenta AND d.IdTienda = v.IdTienda
+            JOIN tblVentas v ON d.IdVenta = v.IdVenta AND d.IdTienda = v.IdTienda AND d.IdComputadora = v.IdComputadora
             JOIN tblArticulos a ON d.CodigoInterno = a.CodigoInterno
             JOIN tblTiendas t ON v.IdTienda = t.IdTienda
             WHERE v.FechaVenta >= DATEADD(week, -4, GETDATE())
-            ${tiendaFilter}
+            ${idTienda ? `AND v.IdTienda = ${idTienda}` : ''}
             GROUP BY t.Tienda, Descripcion
             HAVING 
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 1 THEN d.Total ELSE 0 END) > 
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 2 THEN d.Total ELSE 0 END)
-                AND SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 2 THEN d.Total ELSE 0 END) > 
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 3 THEN d.Total ELSE 0 END)
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 1 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) > 
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 2 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END)
+                AND SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 2 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) > 
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 3 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END)
             ORDER BY W1 DESC
         `;
 
@@ -110,23 +110,23 @@ export async function GET(req: Request) {
             SELECT TOP 50
                 t.Tienda,
                 Descripcion,
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 4 THEN d.Total ELSE 0 END) as W4,
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 3 THEN d.Total ELSE 0 END) as W3,
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 2 THEN d.Total ELSE 0 END) as W2,
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 1 THEN d.Total ELSE 0 END) as W1
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 4 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W4,
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 3 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W3,
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 2 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W2,
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 1 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W1
             FROM tblDetalleVentas d
-            JOIN tblVentas v ON d.IdVenta = v.IdVenta AND d.IdTienda = v.IdTienda
+            JOIN tblVentas v ON d.IdVenta = v.IdVenta AND d.IdTienda = v.IdTienda AND d.IdComputadora = v.IdComputadora
             JOIN tblArticulos a ON d.CodigoInterno = a.CodigoInterno
             JOIN tblTiendas t ON v.IdTienda = t.IdTienda
             WHERE v.FechaVenta >= DATEADD(week, -4, GETDATE())
-            ${tiendaFilter}
+            ${idTienda ? `AND v.IdTienda = ${idTienda}` : ''}
             GROUP BY t.Tienda, Descripcion
             HAVING 
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 1 THEN d.Total ELSE 0 END) < 
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 2 THEN d.Total ELSE 0 END)
-                AND SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 2 THEN d.Total ELSE 0 END) < 
-                SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 3 THEN d.Total ELSE 0 END)
-                AND SUM(CASE WHEN DATEDIFF(week, FechaVenta, GETDATE()) = 1 THEN d.Total ELSE 0 END) > 0
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 1 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) < 
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 2 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END)
+                AND SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 2 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) < 
+                SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 3 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END)
+                AND SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 1 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) > 0
             ORDER BY W1 ASC
         `;
 
@@ -150,15 +150,22 @@ export async function GET(req: Request) {
         };
 
         // Cache the result
-        if (!fs.existsSync(path.join(process.cwd(), 'tmp'))) {
-            fs.mkdirSync(path.join(process.cwd(), 'tmp'), { recursive: true });
+        try {
+            if (!fs.existsSync(path.join(process.cwd(), 'tmp'))) {
+                fs.mkdirSync(path.join(process.cwd(), 'tmp'), { recursive: true });
+            }
+            fs.writeFileSync(CACHE_FILE, JSON.stringify({ date: today, idTienda, data }));
+        } catch (cacheError) {
+            // Non-blocking
         }
-        fs.writeFileSync(CACHE_FILE, JSON.stringify({ date: today, idTienda, data }));
 
         return NextResponse.json(data);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Trends API Error:', error);
-        return NextResponse.json({ error: 'Failed to fetch trends' }, { status: 500 });
+        return NextResponse.json({
+            error: 'Failed to fetch trends',
+            details: error.message
+        }, { status: 500 });
     }
 }

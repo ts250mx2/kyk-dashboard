@@ -120,7 +120,7 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
                                     </td>
                                     {type === 'cancel' && (
                                         <td className="px-4 py-3 text-right text-slate-500 font-bold">
-                                            ${item['Promedio Cancelacion'].toFixed(0)}
+                                            ${item['Promedio Cancelacion']?.toFixed(0) || '0'}
                                         </td>
                                     )}
                                     {type !== 'cancel' && (
