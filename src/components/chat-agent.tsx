@@ -101,6 +101,8 @@ export function ChatAgent() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+
     useEffect(() => {
         const savedMessages = localStorage.getItem('kyk_integrated_chat_history');
         if (savedMessages) {
@@ -113,6 +115,16 @@ export function ChatAgent() {
                 setMessages([]);
             }
         }
+
+        const savedPosition = localStorage.getItem('kyk_chat_agent_position');
+        if (savedPosition) {
+            try {
+                setPosition(JSON.parse(savedPosition));
+            } catch (e) {
+                setPosition({ x: 0, y: 0 });
+            }
+        }
+
         setIsHistoryLoaded(true);
     }, []);
 
@@ -126,7 +138,6 @@ export function ChatAgent() {
     const handleSend = async (prompt: string) => {
         if (!prompt.trim()) return;
 
-        // Safety net: If prompt looks like a refinement (inheritance)
         let finalPrompt = prompt;
         const lowerPrompt = prompt.toLowerCase();
         const isRefinement = lowerPrompt.startsWith('por ') ||
@@ -138,7 +149,6 @@ export function ChatAgent() {
         if (isRefinement) {
             const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
             if (lastUserMsg) {
-                // Remove question marks if present in original
                 const cleanLast = lastUserMsg.content.replace(/\?$/, '');
                 finalPrompt = `${cleanLast} ${prompt}`;
             }
@@ -197,7 +207,14 @@ export function ChatAgent() {
     };
 
     return (
-        <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end">
+        <div
+            className="fixed z-[9999] flex flex-col items-end"
+            style={{
+                bottom: `calc(1.5rem + ${-position.y}px)`,
+                right: `calc(1.5rem + ${-position.x}px)`,
+                touchAction: 'none'
+            }}
+        >
             {/* Chat Trigger */}
             {!isOpen && (
                 <button

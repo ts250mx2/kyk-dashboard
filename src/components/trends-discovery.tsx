@@ -1,24 +1,28 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, AlertCircle, Clock, Store, ChevronDown, ChevronUp, UserCheck, ShieldCheck } from 'lucide-react';
+import {
+    TrendingUp, TrendingDown, AlertCircle, Clock, Store, ChevronUp,
+    UserCheck, ShieldCheck, X, FileText, Download, Receipt,
+    FileSpreadsheet, Minimize2, Maximize2, User, Search
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { utils, writeFile } from 'xlsx';
+import { CancellationDetailModal } from './cancellation-detail-modal';
 
 export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [maximized, setMaximized] = useState<string | null>(null);
     const [cancelRole, setCancelRole] = useState<'cajeros' | 'supervisores'>('cajeros');
-    const [expanded, setExpanded] = useState<Record<string, boolean>>({
-        cancel: false,
-        alza: false,
-        baja: false
-    });
+
+    // Modal State
+    const [selectedAudit, setSelectedAudit] = useState<any>(null);
 
     useEffect(() => {
         async function fetchTrends() {
             try {
-                const res = await fetch(`/api/dashboard/trends${idTienda ? `?idTienda=${idTienda}` : ''}`);
+                const res = await fetch(`/api/dashboard/trends`);
                 const json = await res.json();
                 setData(json);
             } catch (e) {
@@ -30,9 +34,12 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
         fetchTrends();
     }, [idTienda]);
 
-    const toggleExpand = (key: string) => {
-        setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+    const getSevenDaysAgo = () => {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        return d.toISOString().split('T')[0];
     };
+    const getToday = () => new Date().toISOString().split('T')[0];
 
     if (loading) return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse mt-4">
@@ -52,10 +59,8 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
         type: 'cancel' | 'alza' | 'baja',
         customHeader?: React.ReactNode
     ) => {
-        const isExpanded = expanded[type];
         const isMaximized = maximized === type;
-        const displayItems = (isExpanded || isMaximized) ? items : items?.slice(0, 5);
-        const hasMore = items?.length > 5;
+        const displayItems = items || [];
 
         const tableContent = (
             <div className={cn(
@@ -86,7 +91,7 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
                         </button>
                     </div>
                 </div>
-                <div className={cn("flex-1 p-0 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent", isMaximized ? "max-h-full" : "max-h-[300px]")}>
+                <div className={cn("flex-1 p-0 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent", isMaximized ? "max-h-full" : "max-h-[350px] min-h-[300px]")}>
                     <table className="w-full text-left text-xs border-collapse">
                         <thead className="bg-slate-50/80 backdrop-blur-sm text-slate-400 font-bold uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10">
                             <tr>
@@ -98,41 +103,60 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 font-medium">
-                            {displayItems?.map((item: any, i: number) => (
-                                <tr key={i} className="hover:bg-slate-50 transition-colors text-[11px]">
-                                    <td className="px-4 py-3">
-                                        <div className="flex flex-col">
-                                            <span className="text-slate-800 font-bold uppercase truncate max-w-[120px]">
-                                                {type === 'cancel' ? (cancelRole === 'cajeros' ? item.Cajero : item.Supervisor) : item.Descripcion}
-                                            </span>
-                                            <span className="text-[9px] font-black text-[#4050B4] uppercase tracking-tighter">
-                                                {item.Tienda}
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-3 text-right">
-                                        <span className={cn("font-black", type === 'cancel' ? "text-rose-600" : "text-slate-600")}>
-                                            {type === 'cancel' ? item.Cantidad : item.W1.toFixed(0)}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-right font-black text-slate-900">
-                                        ${(type === 'cancel' ? item.Total : item.W1).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                    </td>
-                                    {type === 'cancel' && (
-                                        <td className="px-4 py-3 text-right text-slate-500 font-bold">
-                                            ${item['Promedio Cancelacion']?.toFixed(0) || '0'}
-                                        </td>
-                                    )}
-                                    {type !== 'cancel' && (
-                                        <td className="px-4 py-3 text-right">
-                                            <div className="flex items-center justify-end gap-1">
-                                                {type === 'alza' ? <TrendingUp className="w-3 h-3 text-emerald-500" /> : <TrendingDown className="w-3 h-3 text-rose-500" />}
-                                                <span className="text-[9px] text-slate-400">${item.W4.toFixed(0)}→${item.W1.toFixed(0)}</span>
+                            {displayItems?.map((item: any, i: number) => {
+                                const name = type === 'cancel' ? (cancelRole === 'cajeros' ? item.Cajero : item.Supervisor) : item.Descripcion;
+                                return (
+                                    <tr
+                                        key={i}
+                                        className={cn(
+                                            "hover:bg-slate-50 transition-colors text-[11px]",
+                                            type === 'cancel' && "cursor-pointer active:bg-slate-100"
+                                        )}
+                                        onClick={() => {
+                                            if (type === 'cancel') {
+                                                setSelectedAudit({
+                                                    IdUsuario: item.IdUsuario,
+                                                    IdTienda: item.IdTienda,
+                                                    name: name,
+                                                    tiendaName: item.Tienda
+                                                });
+                                            }
+                                        }}
+                                    >
+                                        <td className="px-4 py-3">
+                                            <div className="flex flex-col">
+                                                <span className="text-slate-800 font-bold uppercase truncate max-w-[120px]">
+                                                    {name}
+                                                </span>
+                                                <span className="text-[9px] font-black text-[#4050B4] uppercase tracking-tighter">
+                                                    {item.Tienda}
+                                                </span>
                                             </div>
                                         </td>
-                                    )}
-                                </tr>
-                            ))}
+                                        <td className="px-4 py-3 text-right">
+                                            <span className={cn("font-black", type === 'cancel' ? "text-rose-600" : "text-slate-600")}>
+                                                {type === 'cancel' ? item.Cantidad : item.W1.toFixed(0)}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-black text-slate-900">
+                                            ${(type === 'cancel' ? item.Total : item.W1).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                        </td>
+                                        {type === 'cancel' && (
+                                            <td className="px-4 py-3 text-right text-slate-500 font-bold">
+                                                ${item['Promedio Cancelacion']?.toFixed(0) || '0'}
+                                            </td>
+                                        )}
+                                        {type !== 'cancel' && (
+                                            <td className="px-4 py-3 text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {type === 'alza' ? <TrendingUp className="w-3 h-3 text-emerald-500" /> : <TrendingDown className="w-3 h-3 text-rose-500" />}
+                                                    <span className="text-[9px] text-slate-400">${item.W4.toFixed(0)}→${item.W1.toFixed(0)}</span>
+                                                </div>
+                                            </td>
+                                        )}
+                                    </tr>
+                                );
+                            })}
                             {(!items || items.length === 0) && (
                                 <tr>
                                     <td colSpan={type === 'cancel' ? 4 : 4} className="px-4 py-8 text-center text-slate-400 italic font-medium">
@@ -143,19 +167,6 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
                         </tbody>
                     </table>
                 </div>
-                {hasMore && !isMaximized && (
-                    <button
-                        onClick={() => toggleExpand(type)}
-                        type="button"
-                        className="w-full py-2 bg-slate-50 hover:bg-slate-100 transition-colors text-[10px] font-black uppercase tracking-widest text-[#4050B4] flex items-center justify-center gap-1 border-t border-slate-100"
-                    >
-                        {isExpanded ? (
-                            <><ChevronUp className="w-3 h-3" /> Ver menos</>
-                        ) : (
-                            <><ChevronDown className="w-3 h-3" /> Ver hasta 50 registros</>
-                        )}
-                    </button>
-                )}
             </div>
         );
 
@@ -247,6 +258,19 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
                     </div>
                 </div>
             </div>
+
+            {/* Cancellation Detail Modal */}
+            <CancellationDetailModal
+                isOpen={!!selectedAudit}
+                onClose={() => setSelectedAudit(null)}
+                idUsuario={selectedAudit?.IdUsuario}
+                idTienda={selectedAudit?.IdTienda}
+                role={cancelRole}
+                fechaInicio={getSevenDaysAgo()}
+                fechaFin={getToday()}
+                storeName={selectedAudit?.tiendaName}
+                userName={selectedAudit?.name}
+            />
         </div>
     );
 }

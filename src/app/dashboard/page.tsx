@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     TrendingUp,
     ShoppingCart,
@@ -46,6 +46,7 @@ import {
 import { cn } from '@/lib/utils';
 import { TrendsTicker } from '@/components/trends-ticker';
 import { TrendsDiscovery } from '@/components/trends-discovery';
+import { CancellationDetailModal } from '@/components/cancellation-detail-modal';
 
 export default function DashboardPage() {
     const getMonterreyDate = () => {
@@ -88,9 +89,6 @@ export default function DashboardPage() {
 
     // Cancellation Modal
     const [isCancellationModalOpen, setIsCancellationModalOpen] = useState(false);
-    const [cancellationDetails, setCancellationDetails] = useState<any[]>([]);
-    const [loadingCancellations, setLoadingCancellations] = useState(false);
-    const [cancellationSortConfig, setCancellationSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({ key: 'FechaCancelacion', direction: 'desc' });
 
     // Withdrawal Modal
     const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
@@ -100,6 +98,87 @@ export default function DashboardPage() {
 
     // Return Modal
     const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+
+    // Position Persistence states for all detail modals
+    const [salesModalPosition, setSalesModalPosition] = useState({ x: 0, y: 0 });
+    const [openingModalPosition, setOpeningModalPosition] = useState({ x: 0, y: 0 });
+    const [withdrawalModalPosition, setWithdrawalModalPosition] = useState({ x: 0, y: 0 });
+    const [returnModalPosition, setReturnModalPosition] = useState({ x: 0, y: 0 });
+    const [itemsModalPosition, setItemsModalPosition] = useState({ x: 0, y: 0 });
+
+    const [isSalesModalDragging, setIsSalesModalDragging] = useState(false);
+    const [isOpeningModalDragging, setIsOpeningModalDragging] = useState(false);
+    const [isWithdrawalModalDragging, setIsWithdrawalModalDragging] = useState(false);
+    const [isReturnModalDragging, setIsReturnModalDragging] = useState(false);
+    const [isItemsModalDragging, setIsItemsModalDragging] = useState(false);
+
+    const [isSalesPositionLoaded, setIsSalesPositionLoaded] = useState(false);
+    const [isOpeningPositionLoaded, setIsOpeningPositionLoaded] = useState(false);
+    const [isWithdrawalPositionLoaded, setIsWithdrawalPositionLoaded] = useState(false);
+    const [isReturnPositionLoaded, setIsReturnPositionLoaded] = useState(false);
+    const [isItemsPositionLoaded, setIsItemsPositionLoaded] = useState(false);
+
+    const salesModalDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
+    const openingModalDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
+    const withdrawalModalDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
+    const returnModalDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
+    const itemsModalDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
+
+    // Load saved positions
+    useEffect(() => {
+        const loadPosition = (key: string, setPos: Function, setLoaded: Function) => {
+            const saved = localStorage.getItem(key);
+            if (saved) {
+                try { setPos(JSON.parse(saved)); } catch (e) { console.error(`Error loading ${key}`, e); }
+            }
+            setLoaded(true);
+        };
+        loadPosition('kyk_sales_modal_position', setSalesModalPosition, setIsSalesPositionLoaded);
+        loadPosition('kyk_opening_modal_position', setOpeningModalPosition, setIsOpeningPositionLoaded);
+        loadPosition('kyk_withdrawal_modal_position', setWithdrawalModalPosition, setIsWithdrawalPositionLoaded);
+        loadPosition('kyk_return_modal_position', setReturnModalPosition, setIsReturnPositionLoaded);
+        loadPosition('kyk_items_modal_position', setItemsModalPosition, setIsItemsPositionLoaded);
+    }, []);
+
+    // Save positions
+    useEffect(() => { if (isSalesPositionLoaded) localStorage.setItem('kyk_sales_modal_position', JSON.stringify(salesModalPosition)); }, [salesModalPosition, isSalesPositionLoaded]);
+    useEffect(() => { if (isOpeningPositionLoaded) localStorage.setItem('kyk_opening_modal_position', JSON.stringify(openingModalPosition)); }, [openingModalPosition, isOpeningPositionLoaded]);
+    useEffect(() => { if (isWithdrawalPositionLoaded) localStorage.setItem('kyk_withdrawal_modal_position', JSON.stringify(withdrawalModalPosition)); }, [withdrawalModalPosition, isWithdrawalPositionLoaded]);
+    useEffect(() => { if (isReturnPositionLoaded) localStorage.setItem('kyk_return_modal_position', JSON.stringify(returnModalPosition)); }, [returnModalPosition, isReturnPositionLoaded]);
+    useEffect(() => { if (isItemsPositionLoaded) localStorage.setItem('kyk_items_modal_position', JSON.stringify(itemsModalPosition)); }, [itemsModalPosition, isItemsPositionLoaded]);
+
+    const handleModalDrag = (e: React.MouseEvent, pos: { x: number, y: number }, setPos: Function, dragRef: any, setDragging: Function) => {
+        if (isMaximized) return;
+        if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) return;
+
+        setDragging(true);
+        dragRef.current = {
+            startX: e.clientX,
+            startY: e.clientY,
+            initialX: pos.x,
+            initialY: pos.y
+        };
+
+        const onMouseMove = (moveEvent: MouseEvent) => {
+            if (!dragRef.current) return;
+            const deltaX = moveEvent.clientX - dragRef.current.startX;
+            const deltaY = moveEvent.clientY - dragRef.current.startY;
+            setPos({
+                x: dragRef.current.initialX + deltaX,
+                y: dragRef.current.initialY + deltaY
+            });
+        };
+
+        const onMouseUp = () => {
+            setDragging(false);
+            dragRef.current = null;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    };
     const [returnDetails, setReturnDetails] = useState<any[]>([]);
     const [loadingReturns, setLoadingReturns] = useState(false);
     const [returnSortConfig, setReturnSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({ key: 'Fecha', direction: 'desc' });
@@ -185,16 +264,6 @@ export default function DashboardPage() {
             }
         } else if (selectedMetric === 'cancelaciones') {
             setIsCancellationModalOpen(true);
-            setLoadingCancellations(true);
-            try {
-                const res = await fetch(`/api/dashboard/cancellation-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&idTienda=${store.IdTienda}`);
-                const json = await res.json();
-                setCancellationDetails(json);
-            } catch (error) {
-                console.error('Error fetching cancellation details:', error);
-            } finally {
-                setLoadingCancellations(false);
-            }
         } else if (selectedMetric === 'retiros') {
             setIsWithdrawalModalOpen(true);
             setLoadingWithdrawals(true);
@@ -279,34 +348,6 @@ export default function DashboardPage() {
     const sortedOpenings = [...filteredOpenings].sort((a, b) => {
         if (!openingSortConfig) return 0;
         const { key, direction } = openingSortConfig;
-
-        let aValue = a[key];
-        let bValue = b[key];
-
-        if (aValue < bValue) return direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return direction === 'asc' ? 1 : -1;
-        return 0;
-    });
-
-    const handleCancellationSort = (key: string) => {
-        let direction: 'asc' | 'desc' = 'asc';
-        if (cancellationSortConfig && cancellationSortConfig.key === key && cancellationSortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setCancellationSortConfig({ key, direction });
-    };
-
-    const filteredCancellations = cancellationDetails.filter(c =>
-        c['Folio Cancelacion'].toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.Cajero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.Supervisor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.Descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.Z.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const sortedCancellations = [...filteredCancellations].sort((a, b) => {
-        if (!cancellationSortConfig) return 0;
-        const { key, direction } = cancellationSortConfig;
 
         let aValue = a[key];
         let bValue = b[key];
@@ -489,43 +530,6 @@ export default function DashboardPage() {
         XLSX.writeFile(workbook, `Aperturas_${selectedStoreData?.Tienda}_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    const exportCancellationsToExcel = () => {
-        if (sortedCancellations.length === 0) return;
-
-        const excelData = sortedCancellations.map(c => ({
-            'Z': c.Z,
-            'Folio Cancelación': c['Folio Cancelacion'],
-            'Fecha': new Date(c.FechaCancelacion).toLocaleString('es-MX'),
-            'Cantidad': c.Cantidad,
-            'Código': c['Codigo Barras'],
-            'Descripción': c.Descripcion,
-            'P. Venta': c['Precio Venta'],
-            'Total': c.Total,
-            'Cajero': c.Cajero,
-            'Supervisor': c.Supervisor
-        }));
-
-        const worksheet = XLSX.utils.json_to_sheet(excelData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Cancelaciones');
-
-        const wscols = [
-            { wch: 15 }, // Z
-            { wch: 20 }, // Folio
-            { wch: 20 }, // Fecha
-            { wch: 10 }, // Cantidad
-            { wch: 15 }, // Código
-            { wch: 30 }, // Descripción
-            { wch: 12 }, // P. Venta
-            { wch: 12 }, // Total
-            { wch: 20 }, // Cajero
-            { wch: 20 }, // Supervisor
-        ];
-        worksheet['!cols'] = wscols;
-
-        XLSX.writeFile(workbook, `Cancelaciones_${selectedStoreData?.Tienda}_${new Date().toISOString().split('T')[0]}.xlsx`);
-    };
-
     const exportWithdrawalsToExcel = () => {
         if (sortedWithdrawals.length === 0) return;
 
@@ -627,11 +631,6 @@ export default function DashboardPage() {
     const RenderOpeningSortIcon = (columnKey: string) => {
         if (openingSortConfig?.key !== columnKey) return <div className="w-4" />;
         return openingSortConfig.direction === 'asc' ? <ChevronUp size={14} className="ml-1 text-[#4050B4]" /> : <ChevronDown size={14} className="ml-1 text-[#4050B4]" />;
-    };
-
-    const RenderCancellationSortIcon = (columnKey: string) => {
-        if (cancellationSortConfig?.key !== columnKey) return <div className="w-4" />;
-        return cancellationSortConfig.direction === 'asc' ? <ChevronUp size={14} className="ml-1 text-[#4050B4]" /> : <ChevronDown size={14} className="ml-1 text-[#4050B4]" />;
     };
 
     const RenderWithdrawalSortIcon = (columnKey: string) => {
@@ -1332,12 +1331,24 @@ export default function DashboardPage() {
             {/* Sales Drill-down Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className={cn(
-                        "bg-white shadow-2xl overflow-hidden flex flex-col transition-all duration-300 border border-slate-200",
-                        isMaximized ? "fixed inset-0 m-0" : "w-full max-w-6xl max-h-[90vh]"
-                    )}>
+                    <div
+                        className={cn(
+                            "bg-white shadow-2xl overflow-hidden flex flex-col transition-[width,height,transform] duration-300 border border-slate-200",
+                            isMaximized ? "fixed inset-0 m-0" : "w-full max-w-6xl max-h-[90vh]"
+                        )}
+                        style={!isMaximized ? {
+                            transform: `translate(${salesModalPosition.x}px, ${salesModalPosition.y}px)`,
+                        } : undefined}
+                    >
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between bg-white border-b border-slate-100 p-4">
+                        <div
+                            onMouseDown={(e) => handleModalDrag(e, salesModalPosition, setSalesModalPosition, salesModalDragRef, setIsSalesModalDragging)}
+                            onDoubleClick={() => setSalesModalPosition({ x: 0, y: 0 })}
+                            className={cn(
+                                "flex items-center justify-between bg-white border-b border-slate-100 p-4 shrink-0",
+                                !isMaximized && "cursor-grab active:cursor-grabbing select-none"
+                            )}
+                        >
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-slate-50 rounded-none border border-slate-100">
                                     <ShoppingCart size={18} className="text-[#4050B4]" />
@@ -1512,9 +1523,18 @@ export default function DashboardPage() {
             {/* Ticket Items Breakdown Modal (Secondary level) */}
             {isItemsModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-[2px] animate-in fade-in zoom-in duration-200">
-                    <div className="bg-white shadow-3xl w-full max-w-4xl max-h-[85vh] flex flex-col border border-slate-200">
+                    <div
+                        className="bg-white shadow-3xl w-full max-w-4xl max-h-[85vh] flex flex-col border border-slate-200"
+                        style={{
+                            transform: `translate(${itemsModalPosition.x}px, ${itemsModalPosition.y}px)`,
+                        }}
+                    >
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between bg-slate-50 border-b border-slate-200 p-4">
+                        <div
+                            onMouseDown={(e) => handleModalDrag(e, itemsModalPosition, setItemsModalPosition, itemsModalDragRef, setIsItemsModalDragging)}
+                            onDoubleClick={() => setItemsModalPosition({ x: 0, y: 0 })}
+                            className="flex items-center justify-between bg-slate-50 border-b border-slate-200 p-4 cursor-grab active:cursor-grabbing select-none"
+                        >
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-white rounded-none border border-slate-200 shadow-sm">
                                     <Package size={18} className="text-[#4050B4]" />
@@ -1600,12 +1620,24 @@ export default function DashboardPage() {
             {/* Openings Drill-down Modal */}
             {isOpeningModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className={cn(
-                        "bg-white shadow-2xl overflow-hidden flex flex-col transition-all duration-300 border border-slate-200",
-                        isMaximized ? "fixed inset-0 m-0" : "w-full max-w-6xl max-h-[90vh]"
-                    )}>
+                    <div
+                        className={cn(
+                            "bg-white shadow-2xl overflow-hidden flex flex-col transition-[width,height,transform] duration-300 border border-slate-200",
+                            isMaximized ? "fixed inset-0 m-0" : "w-full max-w-6xl max-h-[90vh]"
+                        )}
+                        style={!isMaximized ? {
+                            transform: `translate(${openingModalPosition.x}px, ${openingModalPosition.y}px)`,
+                        } : undefined}
+                    >
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between bg-white border-b border-slate-100 p-4">
+                        <div
+                            onMouseDown={(e) => handleModalDrag(e, openingModalPosition, setOpeningModalPosition, openingModalDragRef, setIsOpeningModalDragging)}
+                            onDoubleClick={() => setOpeningModalPosition({ x: 0, y: 0 })}
+                            className={cn(
+                                "flex items-center justify-between bg-white border-b border-slate-100 p-4 shrink-0",
+                                !isMaximized && "cursor-grab active:cursor-grabbing select-none"
+                            )}
+                        >
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-slate-50 rounded-none border border-slate-100">
                                     <Calendar size={18} className="text-[#4050B4]" />
@@ -1764,182 +1796,36 @@ export default function DashboardPage() {
             )}
 
             {/* Cancellation Drill-down Modal */}
-            {isCancellationModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className={cn(
-                        "bg-white shadow-2xl overflow-hidden flex flex-col transition-all duration-300 border border-slate-200",
-                        isMaximized ? "fixed inset-0 m-0" : "w-full max-w-6xl max-h-[90vh]"
-                    )}>
-                        {/* Modal Header */}
-                        <div className="flex items-center justify-between bg-white border-b border-slate-100 p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-slate-50 rounded-none border border-slate-100">
-                                    <AlertCircle size={18} className="text-rose-500" />
-                                </div>
-                                <div>
-                                    <h3 className="font-black text-sm uppercase tracking-widest leading-none mb-1 text-slate-800">Detalle de Cancelaciones</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData?.Tienda} • {fechaInicio} a {fechaFin}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="relative mr-4 hidden md:block">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                                    <input
-                                        type="text"
-                                        placeholder="BUSCAR FOLIO, ARTICULO, SUPERVISOR..."
-                                        className="bg-slate-50 border border-slate-200 rounded-none pl-9 pr-4 py-1.5 text-[10px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-[#4050B4]/20 outline-none text-slate-700 w-64"
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                    />
-                                </div>
-                                <button
-                                    onClick={exportCancellationsToExcel}
-                                    disabled={sortedCancellations.length === 0}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest border border-rose-100 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
-                                >
-                                    <FileSpreadsheet size={14} />
-                                    <span>Exportar Excel</span>
-                                </button>
-                                <button
-                                    onClick={() => setIsMaximized(!isMaximized)}
-                                    className="p-2 hover:bg-slate-50 text-slate-500 transition-colors"
-                                    title={isMaximized ? "Restaurar" : "Maximizar"}
-                                >
-                                    {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                                </button>
-                                <button
-                                    onClick={() => { setIsCancellationModalOpen(false); setIsMaximized(false); setSearchTerm(''); }}
-                                    className="p-2 hover:bg-rose-50 text-rose-500 transition-colors"
-                                >
-                                    <X size={20} />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Modal Content */}
-                        <div className="flex-1 overflow-auto bg-white p-0 relative">
-                            {loadingCancellations ? (
-                                <LoadingScreen message="Obteniendo cancelaciones..." />
-                            ) : (
-                                <div className="min-w-full inline-block align-middle">
-                                    <table className="min-w-full border-collapse">
-                                        <thead className="sticky top-0 z-10">
-                                            <tr className="bg-slate-50 border-b border-slate-200">
-                                                <th onClick={() => handleCancellationSort('Z')} className="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                                    <div className="flex items-center justify-center">Z {RenderCancellationSortIcon('Z')}</div>
-                                                </th>
-                                                <th onClick={() => handleCancellationSort('Folio Cancelacion')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                                    <div className="flex items-center">Folio {RenderCancellationSortIcon('Folio Cancelacion')}</div>
-                                                </th>
-                                                <th onClick={() => handleCancellationSort('FechaCancelacion')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                                    <div className="flex items-center">Fecha {RenderCancellationSortIcon('FechaCancelacion')}</div>
-                                                </th>
-                                                <th onClick={() => handleCancellationSort('Cantidad')} className="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                                    <div className="flex items-center justify-center">Cant {RenderCancellationSortIcon('Cantidad')}</div>
-                                                </th>
-                                                <th onClick={() => handleCancellationSort('Descripcion')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                                    <div className="flex items-center">Descripción {RenderCancellationSortIcon('Descripcion')}</div>
-                                                </th>
-                                                <th onClick={() => handleCancellationSort('Total')} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                                    <div className="flex items-center justify-end">Importe {RenderCancellationSortIcon('Total')}</div>
-                                                </th>
-                                                <th onClick={() => handleCancellationSort('Cajero')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                                    <div className="flex items-center">Cajero {RenderCancellationSortIcon('Cajero')}</div>
-                                                </th>
-                                                <th onClick={() => handleCancellationSort('Supervisor')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                                    <div className="flex items-center">Supervisor {RenderCancellationSortIcon('Supervisor')}</div>
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {sortedCancellations.length > 0 ? (
-                                                sortedCancellations.map((item, idx) => (
-                                                    <tr key={idx} className="hover:bg-rose-50/30 transition-colors group/row">
-                                                        <td className="px-4 py-3 whitespace-nowrap text-center text-[11px] font-black text-slate-900">{item.Z}</td>
-                                                        <td className="px-4 py-3 whitespace-nowrap text-[11px] font-bold text-rose-600">{item['Folio Cancelacion']}</td>
-                                                        <td className="px-4 py-3 whitespace-nowrap">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[11px] font-bold text-slate-700">{new Date(item.FechaCancelacion).toLocaleDateString('es-MX')}</span>
-                                                                <span className="text-[9px] font-medium text-slate-400">{new Date(item.FechaCancelacion).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-3 whitespace-nowrap text-center text-[11px] font-black text-slate-900">{item.Cantidad}</td>
-                                                        <td className="px-4 py-3">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[11px] font-black text-slate-800 leading-tight">{item.Descripcion}</span>
-                                                                <span className="text-[9px] font-bold text-slate-400 uppercase">{item['Codigo Barras']}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-3 whitespace-nowrap text-right">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[12px] font-black text-slate-900">{formatCurrency(item.Total)}</span>
-                                                                <span className="text-[9px] font-medium text-slate-400">@{formatCurrency(item['Precio Venta'])}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-3 whitespace-nowrap">
-                                                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600">
-                                                                <User size={12} className="text-slate-400" />
-                                                                {item.Cajero}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-3 whitespace-nowrap">
-                                                            <div className="flex items-center gap-1.5 text-[11px] font-black text-rose-700">
-                                                                <AlertCircle size={12} className="text-rose-300" />
-                                                                {item.Supervisor}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            ) : (
-                                                <tr>
-                                                    <td colSpan={8} className="px-4 py-12 text-center">
-                                                        <div className="flex flex-col items-center gap-3">
-                                                            <div className="p-4 bg-slate-50 rounded-none">
-                                                                <Search size={32} className="text-slate-200" />
-                                                            </div>
-                                                            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">No se encontraron cancelaciones</p>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between">
-                            <div className="flex items-center gap-6">
-                                <div className="flex flex-col">
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Registros</span>
-                                    <span className="text-sm font-black text-slate-900">{filteredCancellations.length}</span>
-                                </div>
-                                <div className="flex flex-col border-l border-slate-200 pl-6">
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Monto Cancelado</span>
-                                    <span className="text-sm font-black text-rose-600">{formatCurrency(filteredCancellations.reduce((acc, c) => acc + c.Total, 0))}</span>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => { setIsCancellationModalOpen(false); setIsMaximized(false); setSearchTerm(''); }}
-                                className="px-6 py-2 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20"
-                            >
-                                CERRAR
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <CancellationDetailModal
+                isOpen={isCancellationModalOpen}
+                onClose={() => setIsCancellationModalOpen(false)}
+                idTienda={selectedStoreData?.IdTienda}
+                fechaInicio={fechaInicio}
+                fechaFin={fechaFin}
+                storeName={selectedStoreData?.Tienda}
+            />
 
             {/* Withdrawal Drill-down Modal */}
             {isWithdrawalModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className={cn(
-                        "bg-white shadow-2xl overflow-hidden flex flex-col transition-all duration-300 border border-slate-200",
-                        isMaximized ? "fixed inset-0 m-0" : "w-full max-w-[95vw] lg:max-w-7xl max-h-[90vh]"
-                    )}>
+                    <div
+                        className={cn(
+                            "bg-white shadow-2xl overflow-hidden flex flex-col transition-[width,height,transform] duration-300 border border-slate-200",
+                            isMaximized ? "fixed inset-0 m-0" : "w-full max-w-[95vw] lg:max-w-7xl max-h-[90vh]"
+                        )}
+                        style={!isMaximized ? {
+                            transform: `translate(${withdrawalModalPosition.x}px, ${withdrawalModalPosition.y}px)`,
+                        } : undefined}
+                    >
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between bg-white border-b border-slate-100 p-4">
+                        <div
+                            onMouseDown={(e) => handleModalDrag(e, withdrawalModalPosition, setWithdrawalModalPosition, withdrawalModalDragRef, setIsWithdrawalModalDragging)}
+                            onDoubleClick={() => setWithdrawalModalPosition({ x: 0, y: 0 })}
+                            className={cn(
+                                "flex items-center justify-between bg-white border-b border-slate-100 p-4 shrink-0",
+                                !isMaximized && "cursor-grab active:cursor-grabbing select-none"
+                            )}
+                        >
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-slate-50 rounded-none border border-slate-100">
                                     <Wallet size={18} className="text-amber-500" />
@@ -2113,12 +1999,24 @@ export default function DashboardPage() {
             {/* Devoluciones Drill-down Modal */}
             {isReturnModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className={cn(
-                        "bg-white shadow-2xl overflow-hidden flex flex-col transition-all duration-300 border border-slate-200",
-                        isMaximized ? "fixed inset-0 m-0" : "w-full max-w-6xl max-h-[90vh]"
-                    )}>
+                    <div
+                        className={cn(
+                            "bg-white shadow-2xl overflow-hidden flex flex-col transition-[width,height,transform] duration-300 border border-slate-200",
+                            isMaximized ? "fixed inset-0 m-0" : "w-full max-w-6xl max-h-[90vh]"
+                        )}
+                        style={!isMaximized ? {
+                            transform: `translate(${returnModalPosition.x}px, ${returnModalPosition.y}px)`,
+                        } : undefined}
+                    >
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between bg-white border-b border-slate-100 p-4">
+                        <div
+                            onMouseDown={(e) => handleModalDrag(e, returnModalPosition, setReturnModalPosition, returnModalDragRef, setIsReturnModalDragging)}
+                            onDoubleClick={() => setReturnModalPosition({ x: 0, y: 0 })}
+                            className={cn(
+                                "flex items-center justify-between bg-white border-b border-slate-100 p-4 shrink-0",
+                                !isMaximized && "cursor-grab active:cursor-grabbing select-none"
+                            )}
+                        >
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-slate-50 rounded-none border border-slate-100">
                                     <RotateCcw size={18} className="text-indigo-600" />

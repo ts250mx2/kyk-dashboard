@@ -20,11 +20,6 @@ export async function GET(req: Request) {
             }
         }
 
-        const tiendaFilter = idTienda ? `AND v.IdTienda = ${idTienda}` : '';
-        const tiendaFilterCancelaciones = idTienda ? `AND IdTienda = ${idTienda}` : '';
-
-        // 2. Discoveries Logic
-
         // A. Sales Trends (Today vs Same Weekday last 4 weeks)
         const salesTrendsSql = `
             WITH WeeklySales AS (
@@ -35,7 +30,6 @@ export async function GET(req: Request) {
                 WHERE 
                     DATEPART(weekday, FechaVenta) = DATEPART(weekday, GETDATE())
                     AND FechaVenta >= DATEADD(week, -5, GETDATE())
-                    ${idTienda ? `AND IdTienda = ${idTienda}` : ''}
                 GROUP BY DATEDIFF(week, FechaVenta, GETDATE())
             )
             SELECT * FROM WeeklySales ORDER BY WeeksAgo DESC
@@ -43,28 +37,26 @@ export async function GET(req: Request) {
 
         // B. Detailed Cancellation Audit - Cajeros (Last 7 Days)
         const cancelCajerosSql = `
-            SELECT D.IdUsuario, E.IdTienda, D.Usuario AS Cajero, E.Tienda, COUNT(A.IdCancelacion) AS Cantidad, SUM(PrecioVenta*B.Cantidad) AS Total, SUM(PrecioVenta*B.Cantidad)/NULLIF(COUNT(A.IdCancelacion), 0) AS [Promedio Cancelacion]
+            SELECT TOP 100 D.IdUsuario, E.IdTienda, D.Usuario AS Cajero, E.Tienda, COUNT(A.IdCancelacion) AS Cantidad, SUM(PrecioVenta*B.Cantidad) AS Total, SUM(PrecioVenta*B.Cantidad)/NULLIF(COUNT(A.IdCancelacion), 0) AS [Promedio Cancelacion]
             FROM tblCancelaciones A
             INNER JOIN tblDetalleCancelaciones B ON A.IdTienda = B.IdTienda AND A.IdComputadora = B.IdComputadora AND A.IdCancelacion = B.IdCancelacion
             INNER JOIN tblAperturasCierres C ON A.IdTienda = C.IdTienda AND A.IdComputadora = C.IdComputadora AND A.IdApertura = C.IdApertura
             INNER JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
             INNER JOIN tblTiendas E ON A.IdTienda = E.IdTienda
             WHERE FechaCancelacion >= DATEADD(day, -7, GETDATE())
-            ${idTienda ? `AND A.IdTienda = ${idTienda}` : ''}
             GROUP BY D.Usuario, E.Tienda, D.IdUsuario, E.IdTienda
             ORDER BY COUNT(A.IdCancelacion) DESC
         `;
 
         // C. Detailed Cancellation Audit - Supervisores (Last 7 Days)
         const cancelSupervisoresSql = `
-            SELECT D.IdUsuario, E.IdTienda, D.Usuario AS Supervisor, E.Tienda, COUNT(A.IdCancelacion) AS Cantidad, SUM(PrecioVenta*B.Cantidad) AS Total, SUM(PrecioVenta*B.Cantidad)/NULLIF(COUNT(A.IdCancelacion), 0) AS [Promedio Cancelacion]
+            SELECT TOP 100 D.IdUsuario, E.IdTienda, D.Usuario AS Supervisor, E.Tienda, COUNT(A.IdCancelacion) AS Cantidad, SUM(PrecioVenta*B.Cantidad) AS Total, SUM(PrecioVenta*B.Cantidad)/NULLIF(COUNT(A.IdCancelacion), 0) AS [Promedio Cancelacion]
             FROM tblCancelaciones A
             INNER JOIN tblDetalleCancelaciones B ON A.IdTienda = B.IdTienda AND A.IdComputadora = B.IdComputadora AND A.IdCancelacion = B.IdCancelacion
             INNER JOIN tblAperturasCierres C ON A.IdTienda = C.IdTienda AND A.IdComputadora = C.IdComputadora AND A.IdApertura = C.IdApertura
             INNER JOIN tblUsuarios D ON A.IdSupervisor = D.IdUsuario
             INNER JOIN tblTiendas E ON A.IdTienda = E.IdTienda
             WHERE FechaCancelacion >= DATEADD(day, -7, GETDATE())
-            ${idTienda ? `AND A.IdTienda = ${idTienda}` : ''}
             GROUP BY D.Usuario, E.Tienda, D.IdUsuario, E.IdTienda
             ORDER BY COUNT(A.IdCancelacion) DESC
         `;
@@ -76,14 +68,13 @@ export async function GET(req: Request) {
                 AVG(Total) as PromedioVenta
             FROM tblVentas
             WHERE FechaVenta >= DATEADD(day, -30, GETDATE())
-            ${idTienda ? `AND IdTienda = ${idTienda}` : ''}
             GROUP BY DATEPART(hour, FechaVenta)
             ORDER BY Hora
         `;
 
-        // E. Consecutive Alza Products (Last 4 Weeks) - Store Specific
+        // E. Consecutive Alza Products (Last 4 Weeks)
         const alzaProductsSql = `
-            SELECT TOP 50
+            SELECT TOP 100
                 t.Tienda,
                 Descripcion,
                 SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 4 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W4,
@@ -95,7 +86,6 @@ export async function GET(req: Request) {
             JOIN tblArticulos a ON d.CodigoInterno = a.CodigoInterno
             JOIN tblTiendas t ON v.IdTienda = t.IdTienda
             WHERE v.FechaVenta >= DATEADD(week, -4, GETDATE())
-            ${idTienda ? `AND v.IdTienda = ${idTienda}` : ''}
             GROUP BY t.Tienda, Descripcion
             HAVING 
                 SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 1 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) > 
@@ -105,9 +95,9 @@ export async function GET(req: Request) {
             ORDER BY W1 DESC
         `;
 
-        // F. Consecutive Baja Products (Last 4 Weeks) - Store Specific
+        // F. Consecutive Baja Products (Last 4 Weeks)
         const bajaProductsSql = `
-            SELECT TOP 50
+            SELECT TOP 100
                 t.Tienda,
                 Descripcion,
                 SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 4 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) as W4,
@@ -119,7 +109,6 @@ export async function GET(req: Request) {
             JOIN tblArticulos a ON d.CodigoInterno = a.CodigoInterno
             JOIN tblTiendas t ON v.IdTienda = t.IdTienda
             WHERE v.FechaVenta >= DATEADD(week, -4, GETDATE())
-            ${idTienda ? `AND v.IdTienda = ${idTienda}` : ''}
             GROUP BY t.Tienda, Descripcion
             HAVING 
                 SUM(CASE WHEN DATEDIFF(week, v.FechaVenta, GETDATE()) = 1 THEN (d.Cantidad * d.PrecioVenta) ELSE 0 END) < 

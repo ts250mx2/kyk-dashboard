@@ -6,14 +6,33 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const fechaInicio = searchParams.get('fechaInicio');
         const fechaFin = searchParams.get('fechaFin');
+        const idUsuario = searchParams.get('idUsuario');
         const idTienda = searchParams.get('idTienda');
+        const role = searchParams.get('role');
 
-        if (!fechaInicio || !fechaFin || !idTienda) {
-            return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+        let dateFilter = '';
+        // If it's an audit/trends query (idUsuario + role present), use rolling 7 days
+        if (idUsuario && role) {
+            dateFilter = `CONVERT(DATE, FechaCancelacion) >= DATEADD(day, -7, GETDATE())`;
+        } else if (fechaInicio && fechaFin) {
+            // If specific dates are provided (Dashboard Store Detail case)
+            dateFilter = `CONVERT(DATE, FechaCancelacion) >= '${fechaInicio}' AND CONVERT(DATE, FechaCancelacion) <= '${fechaFin}'`;
+        } else {
+            // Default Fallback
+            dateFilter = `CONVERT(DATE, FechaCancelacion) >= DATEADD(day, -7, GETDATE())`;
         }
 
-        const startStr = `'${fechaInicio}'`;
-        const endStr = `'${fechaFin}'`;
+        let filters = [dateFilter];
+        if (idTienda) filters.push(`A.IdTienda = ${idTienda}`);
+
+        if (idUsuario) {
+            if (role === 'supervisores') {
+                filters.push(`A.IdSupervisor = ${idUsuario}`);
+            } else {
+                // Default to cajeros if role is 'cajeros' or not specified but idUsuario is present
+                filters.push(`C.IdCajero = ${idUsuario}`);
+            }
+        }
 
         const sql = `
             SELECT CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdApertura AS VARCHAR(6)) AS [Z],
@@ -26,7 +45,7 @@ export async function GET(req: Request) {
             INNER JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
             INNER JOIN tblUsuarios E ON A.IdSupervisor = E.IdUsuario
             INNER JOIN tblArticulos F ON B.CodigoInterno = F.CodigoInterno
-            WHERE CONVERT(DATE, FechaCancelacion) >= ${startStr} AND CONVERT(DATE, FechaCancelacion) <= ${endStr} AND A.IdTienda = ${idTienda}
+            WHERE ${filters.join(' AND ')}
             ORDER BY FechaCancelacion
         `;
 
