@@ -44,10 +44,21 @@ import {
     Legend
 } from 'recharts';
 import { cn } from '@/lib/utils';
+import { TrendsTicker } from '@/components/trends-ticker';
+import { TrendsDiscovery } from '@/components/trends-discovery';
 
 export default function DashboardPage() {
-    const [fechaInicio, setFechaInicio] = useState(new Date().toISOString().split('T')[0]);
-    const [fechaFin, setFechaFin] = useState(new Date().toISOString().split('T')[0]);
+    const getMonterreyDate = () => {
+        return new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Monterrey',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).format(new Date());
+    };
+
+    const [fechaInicio, setFechaInicio] = useState(getMonterreyDate());
+    const [fechaFin, setFechaFin] = useState(getMonterreyDate());
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
     const [selectedMetric, setSelectedMetric] = useState<'ventas' | 'aperturas' | 'cancelaciones' | 'retiros' | 'devoluciones'>('ventas');
@@ -703,6 +714,11 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-4 animate-in fade-in duration-500">
+            {/* Trends Ticker Marquee */}
+            <div className="print:hidden">
+                <TrendsTicker />
+            </div>
+
             {/* Print-only Header */}
             <div className="hidden print:flex items-center justify-between border-b-2 border-slate-900 pb-4 mb-6">
                 <div className="flex items-center gap-4">
@@ -1306,6 +1322,11 @@ export default function DashboardPage() {
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* Daily Trends Discoveries */}
+            <div className="px-4 pb-8">
+                <TrendsDiscovery idTienda={selectedStoreData?.IdTienda} />
             </div>
 
             {/* Sales Drill-down Modal */}

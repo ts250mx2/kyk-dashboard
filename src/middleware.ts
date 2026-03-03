@@ -2,9 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const SECRET_KEY = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'your-secret-key-change-this-in-prod'
-);
+const secret = process.env.JWT_SECRET;
+const SECRET_KEY = new TextEncoder().encode(secret || 'dev-secret-key-replaces-this-in-prod');
 
 export async function middleware(request: NextRequest) {
     const session = request.cookies.get('session');
@@ -27,6 +26,7 @@ export async function middleware(request: NextRequest) {
 
     // Protect the root route and any other routes not excluded above
     if (!session) {
+        console.log(`⚠️ Middleware: Redirigiendo a /login (Sesión no encontrada) para ${pathname}`);
         return NextResponse.redirect(new URL('/login', request.url));
     }
 
@@ -35,6 +35,7 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     } catch (error) {
         // Token invalid
+        console.log(`❌ Middleware: Redirigiendo a /login (Token inválido o expirado) para ${pathname}`);
         return NextResponse.redirect(new URL('/login', request.url));
     }
 }

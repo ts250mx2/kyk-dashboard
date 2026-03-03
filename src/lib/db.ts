@@ -1,9 +1,9 @@
 import sql from 'mssql';
 
-const user = 'sa';//process.env.SQL_SERVER_USER;
-const password = 'Ve14$20rio';//process.env.SQL_SERVER_PASSWORD;
-const database = 'BDKYK';//process.env.SQL_SERVER_DATABASE;
-const server = '192.168.1.20';// process.env.SQL_SERVER_SERVER || '192.168.1.20';
+const user = process.env.SQL_SERVER_USER || 'sa';
+const password = process.env.SQL_SERVER_PASSWORD || 'Ve14$20rio';
+const database = process.env.SQL_SERVER_DATABASE || 'BDKYK';
+const server = process.env.SQL_SERVER_SERVER || '192.168.1.20';
 
 if (!user || !password || !database) {
     throw new Error('Missing required database environment variables (SQL_SERVER_USER, SQL_SERVER_PASSWORD, SQL_SERVER_DATABASE)');

@@ -3,9 +3,12 @@ import { query } from '@/lib/db';
 import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 
-const SECRET_KEY = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'your-secret-key-change-this-in-prod'
-);
+const secret = process.env.JWT_SECRET;
+if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET environment variable is required in production');
+}
+
+const SECRET_KEY = new TextEncoder().encode(secret || 'dev-secret-key-replaces-this-in-prod');
 
 export async function POST(request: Request) {
     try {
@@ -54,6 +57,9 @@ export async function POST(request: Request) {
             maxAge: 60 * 60 * 24, // 24 hours
             path: '/',
         });
+
+        // Log successful access
+        console.log(`✅ Acceso correcto: Usuario "${user.Usuario}" (${user.CodigoBarras}) ha iniciado sesión.`);
 
         return NextResponse.json({
             success: true,
