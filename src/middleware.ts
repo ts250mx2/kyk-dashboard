@@ -9,6 +9,10 @@ export async function middleware(request: NextRequest) {
     const session = request.cookies.get('session');
     const { pathname } = request.nextUrl;
 
+    // Debug: Log all cookie names
+    const allCookies = request.cookies.getAll().map(c => c.name).join(', ');
+    console.log(`🔍 Middleware [${pathname}]: Session set: ${!!session}. All cookies: [${allCookies}]`);
+
     // Allow access to login page and API routes (except maybe protected ones, but for now open)
     // We specifically want to protect the root page '/'
     if (pathname === '/login' || pathname.startsWith('/api/auth')) {

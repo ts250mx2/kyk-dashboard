@@ -55,7 +55,7 @@ export async function POST(request: Request) {
         const cookieStore = await cookies();
         cookieStore.set('session', token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: false, // Set to false to support HTTP production environments (like nexusmty.ddns.net if not SSL)
             sameSite: 'lax',
             maxAge: 60 * 60 * 24, // 24 hours
             path: '/',

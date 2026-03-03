@@ -34,8 +34,7 @@ export default function LoginPage() {
             }
 
             // Redirect to dashboard page
-            router.push("/dashboard")
-            router.refresh() // Refresh to update middleware/server state
+            window.location.href = "/dashboard"
         } catch (err: unknown) {
             if (err instanceof Error) {
                 setError(err.message)
