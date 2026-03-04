@@ -26,7 +26,8 @@ import {
     RotateCcw,
     LayoutGrid,
     Rows,
-    Columns
+    Columns,
+    Percent
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { LoadingScreen } from '@/components/ui/loading-screen';
@@ -47,6 +48,8 @@ import { cn } from '@/lib/utils';
 import { TrendsTicker } from '@/components/trends-ticker';
 import { TrendsDiscovery } from '@/components/trends-discovery';
 import { CancellationDetailModal } from '@/components/cancellation-detail-modal';
+import { DeptoDetailModal } from '@/components/depto-detail-modal';
+import { ParetoAnalysisModal } from '@/components/pareto-analysis-modal';
 
 export default function DashboardPage() {
     const getMonterreyDate = () => {
@@ -65,6 +68,9 @@ export default function DashboardPage() {
     const [selectedMetric, setSelectedMetric] = useState<'ventas' | 'aperturas' | 'cancelaciones' | 'retiros' | 'devoluciones'>('ventas');
     const [chartType, setChartType] = useState<'bar' | 'pie'>('bar');
     const [subMetric, setSubMetric] = useState<string>('Total');
+    const [selectedVentasTab, setSelectedVentasTab] = useState<'sucursal' | 'departamento' | 'familia'>('sucursal');
+    const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
+    const [selectedStoreName, setSelectedStoreName] = useState<string | null>(null);
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -99,6 +105,14 @@ export default function DashboardPage() {
     // Return Modal
     const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
 
+    // Depto Detail Modal
+    const [isDeptoModalOpen, setIsDeptoModalOpen] = useState(false);
+    const [selectedDeptoId, setSelectedDeptoId] = useState<number | undefined>();
+    const [selectedDeptoName, setSelectedDeptoName] = useState<string | undefined>();
+    const [selectedFamilia, setSelectedFamilia] = useState<string | undefined>();
+    const [isParetoModalOpen, setIsParetoModalOpen] = useState(false);
+
+
     // Position Persistence states for all detail modals
     const [salesModalPosition, setSalesModalPosition] = useState({ x: 0, y: 0 });
     const [openingModalPosition, setOpeningModalPosition] = useState({ x: 0, y: 0 });
@@ -124,6 +138,14 @@ export default function DashboardPage() {
     const returnModalDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
     const itemsModalDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
 
+    // UI State for Minimize/Maximize and Positioning
+    const [isChartMinimized, setIsChartMinimized] = useState(false);
+    const [isDetailsMinimized, setIsDetailsMinimized] = useState(false);
+    const [layoutPosition, setLayoutPosition] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
+    const [isLayoutLoaded, setIsLayoutLoaded] = useState(false);
+    const [hasMounted, setHasMounted] = useState(false);
+    const [isDashboardMaximized, setIsDashboardMaximized] = useState(false);
+
     // Load saved positions
     useEffect(() => {
         const loadPosition = (key: string, setPos: Function, setLoaded: Function) => {
@@ -138,6 +160,19 @@ export default function DashboardPage() {
         loadPosition('kyk_withdrawal_modal_position', setWithdrawalModalPosition, setIsWithdrawalPositionLoaded);
         loadPosition('kyk_return_modal_position', setReturnModalPosition, setIsReturnPositionLoaded);
         loadPosition('kyk_items_modal_position', setItemsModalPosition, setIsItemsPositionLoaded);
+
+        // Load layout settings
+        const savedLayout = localStorage.getItem('kyk_dashboard_layout_position');
+        if (savedLayout) setLayoutPosition(savedLayout as any);
+
+        const savedChartMin = localStorage.getItem('kyk_dashboard_chart_minimized');
+        if (savedChartMin) setIsChartMinimized(savedChartMin === 'true');
+
+        const savedDetailsMin = localStorage.getItem('kyk_dashboard_details_minimized');
+        if (savedDetailsMin) setIsDetailsMinimized(savedDetailsMin === 'true');
+
+        setIsLayoutLoaded(true);
+        setHasMounted(true);
     }, []);
 
     // Save positions
@@ -146,6 +181,11 @@ export default function DashboardPage() {
     useEffect(() => { if (isWithdrawalPositionLoaded) localStorage.setItem('kyk_withdrawal_modal_position', JSON.stringify(withdrawalModalPosition)); }, [withdrawalModalPosition, isWithdrawalPositionLoaded]);
     useEffect(() => { if (isReturnPositionLoaded) localStorage.setItem('kyk_return_modal_position', JSON.stringify(returnModalPosition)); }, [returnModalPosition, isReturnPositionLoaded]);
     useEffect(() => { if (isItemsPositionLoaded) localStorage.setItem('kyk_items_modal_position', JSON.stringify(itemsModalPosition)); }, [itemsModalPosition, isItemsPositionLoaded]);
+
+    // Save layout settings
+    useEffect(() => { if (isLayoutLoaded) localStorage.setItem('kyk_dashboard_layout_position', layoutPosition); }, [layoutPosition, isLayoutLoaded]);
+    useEffect(() => { if (isLayoutLoaded) localStorage.setItem('kyk_dashboard_chart_minimized', String(isChartMinimized)); }, [isChartMinimized, isLayoutLoaded]);
+    useEffect(() => { if (isLayoutLoaded) localStorage.setItem('kyk_dashboard_details_minimized', String(isDetailsMinimized)); }, [isDetailsMinimized, isLayoutLoaded]);
 
     const handleModalDrag = (e: React.MouseEvent, pos: { x: number, y: number }, setPos: Function, dragRef: any, setDragging: Function) => {
         if (isMaximized) return;
@@ -190,15 +230,14 @@ export default function DashboardPage() {
     const [loadingReturnItems, setLoadingReturnItems] = useState(false);
     const [returnItemsSortConfig, setReturnItemsSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
 
-    // UI State for Minimize/Maximize and Positioning
-    const [isChartMinimized, setIsChartMinimized] = useState(false);
-    const [isDetailsMinimized, setIsDetailsMinimized] = useState(false);
-    const [layoutPosition, setLayoutPosition] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
-
     const fetchData = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/dashboard/stats?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`);
+            let url = `/api/dashboard/stats?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
+            if (selectedStoreId) {
+                url += `&storeId=${selectedStoreId}`;
+            }
+            const res = await fetch(url);
             const json = await res.json();
             setData(json);
         } catch (error) {
@@ -222,8 +261,18 @@ export default function DashboardPage() {
     }, []);
 
     useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isDashboardMaximized) {
+                setIsDashboardMaximized(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isDashboardMaximized]);
+
+    useEffect(() => {
         fetchData();
-    }, [fechaInicio, fechaFin]);
+    }, [fechaInicio, fechaFin, selectedStoreId]);
 
     useEffect(() => {
         // Reset submetric when changing main metric
@@ -239,10 +288,12 @@ export default function DashboardPage() {
         setSearchTerm('');
 
         if (selectedMetric === 'ventas') {
-            setIsModalOpen(true);
             setLoadingDetails(true);
+            setIsModalOpen(true);
             try {
-                const res = await fetch(`/api/dashboard/sales-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&idTienda=${store.IdTienda}`);
+                let url = `/api/dashboard/sales-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
+                if (store.IdTienda) url += `&idTienda=${store.IdTienda}`;
+                const res = await fetch(url);
                 const json = await res.json();
                 setTicketDetails(json);
             } catch (error) {
@@ -251,10 +302,12 @@ export default function DashboardPage() {
                 setLoadingDetails(false);
             }
         } else if (selectedMetric === 'aperturas') {
-            setIsOpeningModalOpen(true);
             setLoadingOpenings(true);
+            setIsOpeningModalOpen(true);
             try {
-                const res = await fetch(`/api/dashboard/opening-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&idTienda=${store.IdTienda}`);
+                let url = `/api/dashboard/opening-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
+                if (store.IdTienda) url += `&idTienda=${store.IdTienda}`;
+                const res = await fetch(url);
                 const json = await res.json();
                 setOpeningDetails(json);
             } catch (error) {
@@ -265,10 +318,12 @@ export default function DashboardPage() {
         } else if (selectedMetric === 'cancelaciones') {
             setIsCancellationModalOpen(true);
         } else if (selectedMetric === 'retiros') {
-            setIsWithdrawalModalOpen(true);
             setLoadingWithdrawals(true);
+            setIsWithdrawalModalOpen(true);
             try {
-                const res = await fetch(`/api/dashboard/withdrawal-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&idTienda=${store.IdTienda}`);
+                let url = `/api/dashboard/withdrawal-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
+                if (store.IdTienda) url += `&idTienda=${store.IdTienda}`;
+                const res = await fetch(url);
                 const json = await res.json();
                 setWithdrawalDetails(json);
             } catch (error) {
@@ -277,10 +332,12 @@ export default function DashboardPage() {
                 setLoadingWithdrawals(false);
             }
         } else if (selectedMetric === 'devoluciones') {
-            setIsReturnModalOpen(true);
             setLoadingReturns(true);
+            setIsReturnModalOpen(true);
             try {
-                const res = await fetch(`/api/dashboard/returns-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&idTienda=${store.IdTienda}`);
+                let url = `/api/dashboard/returns-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
+                if (store.IdTienda) url += `&idTienda=${store.IdTienda}`;
+                const res = await fetch(url);
                 const json = await res.json();
                 setReturnDetails(json);
             } catch (error) {
@@ -293,8 +350,8 @@ export default function DashboardPage() {
 
     const handleReturnRowClick = async (item: any) => {
         setSelectedReturn(item);
-        setIsReturnItemsModalOpen(true);
         setLoadingReturnItems(true);
+        setIsReturnItemsModalOpen(true);
         try {
             const res = await fetch(`/api/dashboard/return-items?idTienda=${selectedStoreData.IdTienda}&idDevolucionVenta=${item['Folio Devolucion']}`);
             const json = await res.json();
@@ -342,7 +399,8 @@ export default function DashboardPage() {
 
     const filteredOpenings = openingDetails.filter(o =>
         o.Cajero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        o.Z.toLowerCase().includes(searchTerm.toLowerCase())
+        o.Z.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (o.Tienda && o.Tienda.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     const sortedOpenings = [...filteredOpenings].sort((a, b) => {
@@ -370,7 +428,8 @@ export default function DashboardPage() {
         w.Cajero.toLowerCase().includes(searchTerm.toLowerCase()) ||
         w.Supervisor.toLowerCase().includes(searchTerm.toLowerCase()) ||
         w.Concepto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        w.Z.toLowerCase().includes(searchTerm.toLowerCase())
+        w.Z.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (w.Tienda && w.Tienda.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     const sortedWithdrawals = [...filteredWithdrawals].sort((a, b) => {
@@ -407,7 +466,8 @@ export default function DashboardPage() {
         r.Concepto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.Empleado?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.Supervisor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.Clave?.toLowerCase().includes(searchTerm.toLowerCase())
+        r.Clave?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.Tienda?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const sortedReturns = [...filteredReturns].sort((a, b) => {
@@ -436,8 +496,8 @@ export default function DashboardPage() {
 
     const handleTicketClick = async (ticket: any) => {
         setSelectedTicket(ticket);
-        setIsItemsModalOpen(true);
         setLoadingItems(true);
+        setIsItemsModalOpen(true);
         try {
             const res = await fetch(`/api/dashboard/ticket-items?idTienda=${ticket.IdTienda}&idCaja=${ticket.Caja}&idVenta=${ticket.IdVenta}`);
             const json = await res.json();
@@ -451,8 +511,8 @@ export default function DashboardPage() {
 
     const handleOpeningClick = async (opening: any) => {
         setIsOpeningModalOpen(false); // Close openings modal
-        setIsModalOpen(true);       // Open tickets modal
         setLoadingDetails(true);
+        setIsModalOpen(true);       // Open tickets modal
         setSearchTerm('');
         try {
             const res = await fetch(`/api/dashboard/sales-details?idTienda=${opening.IdTienda}&idApertura=${opening.IdApertura}`);
@@ -503,6 +563,7 @@ export default function DashboardPage() {
         if (sortedOpenings.length === 0) return;
 
         const excelData = sortedOpenings.map(o => ({
+            ...(!selectedStoreId ? { 'Tienda': o.Tienda } : {}),
             'Z': o.Z,
             'Caja': o.Caja,
             'Fecha Apertura': new Date(o['Fecha Apertura']).toLocaleString('es-MX'),
@@ -517,6 +578,7 @@ export default function DashboardPage() {
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Aperturas');
 
         const wscols = [
+            ...(!selectedStoreId ? [{ wch: 20 }] : []), // Tienda
             { wch: 15 }, // Z
             { wch: 8 },  // Caja
             { wch: 20 }, // Fecha Apertura
@@ -534,6 +596,7 @@ export default function DashboardPage() {
         if (sortedWithdrawals.length === 0) return;
 
         const excelData = sortedWithdrawals.map(w => ({
+            ...(!selectedStoreId ? { 'Tienda': w.Tienda } : {}),
             'Z': w.Z,
             'Folio Retiro': w['Folio Retiro'],
             'Fecha': new Date(w['Fecha Retiro']).toLocaleString('es-MX'),
@@ -555,6 +618,7 @@ export default function DashboardPage() {
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Retiros');
 
         const wscols = [
+            ...(!selectedStoreId ? [{ wch: 20 }] : []), // Tienda
             { wch: 15 }, // Z
             { wch: 20 }, // Folio
             { wch: 20 }, // Fecha
@@ -579,6 +643,7 @@ export default function DashboardPage() {
         if (sortedReturns.length === 0) return;
 
         const excelData = sortedReturns.map(r => ({
+            ...(!selectedStoreId ? { 'Tienda': r.Tienda } : {}),
             'Folio': r['Folio Devolucion'],
             'Fecha': new Date(r['Fecha Devolucion']).toLocaleString('es-MX'),
             'Clave': r.Clave,
@@ -595,6 +660,7 @@ export default function DashboardPage() {
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Devoluciones');
 
         const wscols = [
+            ...(!selectedStoreId ? [{ wch: 20 }] : []), // Tienda
             { wch: 15 }, // Folio
             { wch: 20 }, // Fecha
             { wch: 10 }, // Clave
@@ -608,6 +674,23 @@ export default function DashboardPage() {
         worksheet['!cols'] = wscols;
 
         XLSX.writeFile(workbook, `Devoluciones_${selectedStoreData?.Tienda}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+    const handleChartBarClick = (data: any) => {
+        if (selectedVentasTab === 'sucursal') {
+            handleStoreClick(data);
+        } else if (selectedVentasTab === 'departamento') {
+            setSelectedDeptoId(data.IdDepto);
+            setSelectedDeptoName(data.Departamento);
+            setIsDeptoModalOpen(true);
+        } else if (selectedVentasTab === 'familia') {
+            setSelectedDeptoId(undefined);
+            setSelectedDeptoName(undefined);
+            setSelectedFamilia(data.Familia);
+            setIsDeptoModalOpen(true);
+        } else {
+            handleStoreClick(data);
+        }
     };
 
     const handleExportPDF = () => {
@@ -652,15 +735,26 @@ export default function DashboardPage() {
         ventas: { TotalVentas: 0, Operaciones: 0, TicketPromedio: 0 },
         aperturas: 0,
         cancelaciones: { MontoCancelaciones: 0, CantidadCancelaciones: 0, PromedioCancelacion: 0 },
-        retiros: 0,
+        retiros: { MontoRetiros: 0, CantidadRetiros: 0, PromedioRetiro: 0 },
         devoluciones: { MontoDevoluciones: 0, CantidadDevoluciones: 0 }
     };
 
-    const chartData = data?.data?.[selectedMetric] || [];
+    const chartData = selectedMetric === 'ventas'
+        ? (selectedVentasTab === 'departamento' ? data?.data?.ventas_depto : (selectedVentasTab === 'familia' ? data?.data?.ventas_familia : data?.data?.ventas)) || []
+        : data?.data?.[selectedMetric] || [];
+
+    const listData = data?.data?.[selectedMetric] || [];
 
     const getMetricConfig = () => {
+        const storeTitle = selectedStoreName ? ` de ${selectedStoreName}` : (selectedVentasTab === 'sucursal' ? ' por Sucursal' : (selectedVentasTab === 'departamento' ? ' por Departamento' : ' por Familia'));
+        const mainTitle = selectedStoreName ? `Ventas${storeTitle}` : (selectedMetric === 'ventas' ? (selectedVentasTab === 'sucursal' ? 'Ventas por Sucursal' : (selectedVentasTab === 'departamento' ? 'Ventas por Departamento' : 'Ventas por Familia')) : '');
+
         switch (selectedMetric) {
-            case 'ventas': return { title: 'Ventas por Sucursal', sub: 'Distribución del ingreso por tienda', color: '#4050B4' };
+            case 'ventas': return {
+                title: mainTitle,
+                sub: selectedStoreName ? `Detalle de ${selectedStoreName}` : (selectedVentasTab === 'familia' ? 'Distribución del ingreso por familias de artículos' : 'Distribución del ingreso por tienda'),
+                color: '#4050B4'
+            };
             case 'aperturas': return { title: 'Aperturas por Sucursal', sub: 'Cantidad de aperturas por tienda', color: '#f59e0b' };
             case 'cancelaciones': return { title: 'Cancelaciones por Sucursal', sub: 'Monto de cancelaciones por tienda', color: '#e11d48' };
             case 'retiros': return { title: 'Retiros por Sucursal', sub: 'Monto de retiros por tienda', color: '#10b981' };
@@ -711,8 +805,13 @@ export default function DashboardPage() {
         return STORE_COLORS[index];
     };
 
+    if (!hasMounted) return <LoadingScreen message="Cargando panel..." />;
+
     return (
-        <div className="space-y-4 animate-in fade-in duration-500">
+        <div className={cn(
+            "space-y-4 animate-in fade-in duration-500",
+            isDashboardMaximized && "fixed inset-0 z-[100] bg-slate-50 overflow-y-auto p-4 sm:p-8 md:p-10"
+        )}>
             {/* Trends Ticker Marquee */}
             <div className="print:hidden">
                 <TrendsTicker />
@@ -783,6 +882,19 @@ export default function DashboardPage() {
                         title="Actualizar Datos"
                     >
                         <RotateCcw size={18} className={cn("group-hover:rotate-180 transition-transform duration-500", loading && "animate-spin")} />
+                    </button>
+
+                    <button
+                        onClick={() => setIsDashboardMaximized(!isDashboardMaximized)}
+                        className={cn(
+                            "p-2.5 border transition-all rounded-none shadow-sm print:hidden group",
+                            isDashboardMaximized
+                                ? "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100"
+                                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        )}
+                        title={isDashboardMaximized ? "Salir de Pantalla Completa" : "Pantalla Completa"}
+                    >
+                        {isDashboardMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                     </button>
                 </div>
             </div>
@@ -884,11 +996,17 @@ export default function DashboardPage() {
                     <div className="flex flex-col h-full justify-between">
                         <div>
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Retiros</span>
-                            <h2 className="text-2xl font-black text-emerald-600 mb-2">{formatCurrency(metrics.retiros)}</h2>
+                            <h2 className="text-2xl font-black text-emerald-600 mb-2">{formatCurrency(metrics.retiros.MontoRetiros)}</h2>
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-50 p-2 rounded-none mt-4">
-                            <ArrowDownRight size={14} className="text-emerald-500" />
-                            <span>Total de egresos de caja</span>
+                        <div className="flex flex-col gap-2 border-t border-slate-50 pt-4 mt-2">
+                            <div className="flex justify-between items-center text-xs font-bold">
+                                <span className="text-slate-500">Operaciones</span>
+                                <span className="text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded-none">{metrics.retiros.CantidadRetiros}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs font-bold">
+                                <span className="text-slate-500">Retiro Promedio</span>
+                                <span className="text-emerald-600">{formatCurrency(metrics.retiros.PromedioRetiro)}</span>
+                            </div>
                         </div>
                     </div>
                 </button>
@@ -978,12 +1096,49 @@ export default function DashboardPage() {
                 )}>
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">{config.title}</h3>
+                            <div className="flex items-center gap-4 mb-1">
+                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">{config.title}</h3>
+                                {selectedMetric === 'ventas' && (
+                                    <div className="flex bg-slate-100 p-0.5 rounded-none border border-slate-200">
+                                        <button
+                                            onClick={() => {
+                                                setSelectedVentasTab('sucursal');
+                                                setSelectedStoreId(null);
+                                                setSelectedStoreName(null);
+                                            }}
+                                            className={cn(
+                                                "px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-all",
+                                                selectedVentasTab === 'sucursal' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                            )}
+                                        >
+                                            Sucursales
+                                        </button>
+                                        <button
+                                            onClick={() => setSelectedVentasTab('departamento')}
+                                            className={cn(
+                                                "px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-all",
+                                                selectedVentasTab === 'departamento' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                            )}
+                                        >
+                                            Deptos
+                                        </button>
+                                        <button
+                                            onClick={() => setSelectedVentasTab('familia')}
+                                            className={cn(
+                                                "px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-all",
+                                                selectedVentasTab === 'familia' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                            )}
+                                        >
+                                            Familias
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                             <p className="text-[13px] text-slate-500 font-medium">{config.sub}</p>
                         </div>
                         <div className="flex items-center gap-4">
                             {/* Sub-metric Selector */}
-                            {!isChartMinimized && (selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones') && (
+                            {!isChartMinimized && (selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones' || selectedMetric === 'retiros') && (
                                 <div className="flex items-center bg-slate-100 p-1 rounded-none">
                                     {selectedMetric === 'ventas' ? (
                                         <>
@@ -1033,9 +1188,9 @@ export default function DashboardPage() {
                                                     subMetric === 'Cantidad' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
                                                 )}
                                             >
-                                                Cant
+                                                {selectedMetric === 'retiros' ? 'Ops' : 'Cant'}
                                             </button>
-                                            {selectedMetric === 'cancelaciones' && (
+                                            {(selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones' || selectedMetric === 'retiros') && (
                                                 <button
                                                     onClick={() => setSubMetric('Promedio')}
                                                     className={cn(
@@ -1095,14 +1250,15 @@ export default function DashboardPage() {
                                         <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                                             <XAxis
-                                                dataKey="Tienda"
+                                                dataKey={selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? "Departamento" : (selectedVentasTab === 'familia' ? "Familia" : "Tienda")) : "Tienda"}
                                                 axisLine={false}
                                                 tickLine={false}
                                                 interval={0}
                                                 height={100}
                                                 tick={(props: any) => {
                                                     const { x, y, payload } = props;
-                                                    const item = chartData.find((d: any) => d.Tienda === payload.value);
+                                                    const key = selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? 'Departamento' : (selectedVentasTab === 'familia' ? 'Familia' : 'Tienda')) : 'Tienda';
+                                                    const item = chartData.find((d: any) => d[key] === payload.value);
                                                     const total = item ? ((subMetric === 'Operaciones' || subMetric === 'Cantidad' || selectedMetric === 'aperturas')
                                                         ? item[subMetric]
                                                         : formatCurrency(item[subMetric])) : '';
@@ -1144,8 +1300,29 @@ export default function DashboardPage() {
                                                             : formatCurrency(value);
                                                         return (
                                                             <div className="bg-slate-900 text-white p-3 rounded-none shadow-2xl border border-white/10">
-                                                                <p className="text-[10px] font-bold text-white/50 uppercase mb-1">{payload[0].payload.Tienda}</p>
-                                                                <p className="text-sm font-black">{formatted}</p>
+                                                                <p className="text-[10px] font-bold text-white/50 uppercase mb-1">
+                                                                    {selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? payload[0].payload.Departamento : (selectedVentasTab === 'familia' ? payload[0].payload.Familia : payload[0].payload.Tienda)) : payload[0].payload.Tienda}
+                                                                </p>
+                                                                <div className="flex flex-col gap-1">
+                                                                    <div className="flex justify-between gap-4 items-baseline">
+                                                                        <span className="text-[10px] font-bold text-white/40 uppercase">Total</span>
+                                                                        <span className="text-sm font-black text-white">{formatted}</span>
+                                                                    </div>
+                                                                    {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones' || selectedMetric === 'retiros') && (
+                                                                        <>
+                                                                            <div className="flex justify-between gap-4 items-baseline">
+                                                                                <span className="text-[10px] font-bold text-white/40 uppercase">
+                                                                                    {selectedMetric === 'ventas' || selectedMetric === 'retiros' ? 'Operaciones' : 'Cantidad'}
+                                                                                </span>
+                                                                                <span className="text-[11px] font-bold text-white">{selectedMetric === 'ventas' ? payload[0].payload.Operaciones : payload[0].payload.Cantidad}</span>
+                                                                            </div>
+                                                                            <div className="flex justify-between gap-4 items-baseline">
+                                                                                <span className="text-[10px] font-bold text-white/40 uppercase">Promedio</span>
+                                                                                <span className="text-[11px] font-bold text-emerald-400">{formatCurrency(selectedMetric === 'ventas' ? payload[0].payload.TicketPromedio : payload[0].payload.Promedio)}</span>
+                                                                            </div>
+                                                                        </>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         );
                                                     }
@@ -1156,11 +1333,11 @@ export default function DashboardPage() {
                                                 dataKey={subMetric}
                                                 radius={[0, 0, 0, 0]}
                                                 barSize={40}
-                                                onClick={(data) => handleStoreClick(data.payload)}
+                                                onClick={(data) => handleChartBarClick(data.payload)}
                                                 className="cursor-pointer shadow-lg outline-none"
                                             >
                                                 {chartData.map((entry: any, index: number) => (
-                                                    <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} fillOpacity={0.9} />
+                                                    <Cell key={`cell-${index}`} fill={getStoreColor(selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? entry.Departamento : (selectedVentasTab === 'familia' ? entry.Familia : entry.Tienda)) : entry.Tienda)} fillOpacity={0.9} />
                                                 ))}
                                             </Bar>
                                         </BarChart>
@@ -1174,13 +1351,13 @@ export default function DashboardPage() {
                                                 outerRadius={140}
                                                 paddingAngle={2}
                                                 dataKey={subMetric}
-                                                nameKey="Tienda"
+                                                nameKey={selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? "Departamento" : (selectedVentasTab === 'familia' ? "Familia" : "Tienda")) : "Tienda"}
                                                 stroke="none"
-                                                onClick={(data) => handleStoreClick(data.payload)}
+                                                onClick={(data) => handleChartBarClick(data.payload)}
                                                 className="cursor-pointer outline-none"
                                             >
                                                 {chartData.map((entry: any, index: number) => (
-                                                    <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} />
+                                                    <Cell key={`cell-${index}`} fill={getStoreColor(selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? entry.Departamento : (selectedVentasTab === 'familia' ? entry.Familia : entry.Tienda)) : entry.Tienda)} />
                                                 ))}
                                             </Pie>
                                             <Tooltip
@@ -1193,7 +1370,26 @@ export default function DashboardPage() {
                                                         return (
                                                             <div className="bg-slate-900 text-white p-3 rounded-none shadow-2xl border border-white/10">
                                                                 <p className="text-[10px] font-bold text-white/50 uppercase mb-1">{payload[0].name}</p>
-                                                                <p className="text-sm font-black">{formatted}</p>
+                                                                <div className="flex flex-col gap-1">
+                                                                    <div className="flex justify-between gap-4 items-baseline">
+                                                                        <span className="text-[10px] font-bold text-white/40 uppercase">Total</span>
+                                                                        <span className="text-sm font-black text-white">{formatted}</span>
+                                                                    </div>
+                                                                    {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones' || selectedMetric === 'retiros') && (
+                                                                        <>
+                                                                            <div className="flex justify-between gap-4 items-baseline">
+                                                                                <span className="text-[10px] font-bold text-white/40 uppercase">
+                                                                                    {selectedMetric === 'ventas' || selectedMetric === 'retiros' ? 'Operaciones' : 'Cantidad'}
+                                                                                </span>
+                                                                                <span className="text-[11px] font-bold text-white">{selectedMetric === 'ventas' ? payload[0].payload.Operaciones : payload[0].payload.Cantidad}</span>
+                                                                            </div>
+                                                                            <div className="flex justify-between gap-4 items-baseline">
+                                                                                <span className="text-[10px] font-bold text-white/40 uppercase">Promedio</span>
+                                                                                <span className="text-[11px] font-bold text-emerald-400">{formatCurrency(selectedMetric === 'ventas' ? payload[0].payload.TicketPromedio : payload[0].payload.Promedio)}</span>
+                                                                            </div>
+                                                                        </>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         );
                                                     }
@@ -1250,20 +1446,138 @@ export default function DashboardPage() {
 
                     {!isDetailsMinimized && (
                         <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4 pb-4 no-scrollbar justify-start animate-in fade-in slide-in-from-top-2 duration-300 overflow-y-auto">
+                            {/* Global Summary Card - MOVED TO TOP */}
+                            {!loading && chartData.length > 0 && (
+                                <div
+                                    onClick={() => {
+                                        setSelectedStoreId(null);
+                                        setSelectedStoreName(null);
+                                        if (selectedMetric === 'ventas') {
+                                            setSelectedVentasTab('sucursal');
+                                        }
+                                    }}
+                                    className={cn(
+                                        "flex flex-col p-3 rounded-none border group transition-all outline-none w-full cursor-pointer shadow-lg",
+                                        !selectedStoreId
+                                            ? "bg-slate-800 border-indigo-500 ring-1 ring-indigo-500/50"
+                                            : "bg-slate-900 border-slate-800 hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/20"
+                                    )}
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-none flex items-center justify-center bg-white/10 border border-white/20 font-black text-[10px] text-white">
+                                                Σ
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[12px] font-black text-white leading-none">TODAS LAS TIENDAS</span>
+                                                <span className="text-[9px] font-bold text-slate-400 uppercase">Resumen Global</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            {(selectedMetric === 'aperturas' || selectedMetric === 'retiros') && (
+                                                <div className="text-right mr-2">
+                                                    <div className="text-sm font-black text-white">
+                                                        {selectedMetric === 'aperturas' ? metrics.aperturas : (
+                                                            <div className="flex flex-col items-end">
+                                                                <span>{formatCurrency(metrics.retiros.MontoRetiros)}</span>
+                                                                <span className="text-[9px] font-bold text-slate-400 uppercase leading-none">
+                                                                    {metrics.retiros.CantidadRetiros} Ops • {formatCurrency(metrics.retiros.PromedioRetiro)} Prom.
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {selectedMetric === 'ventas' && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setIsParetoModalOpen(true);
+                                                    }}
+                                                    className="group/pbtn text-[10px] font-black uppercase tracking-widest text-white bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 transition-all rounded-none border-b-2 border-emerald-800 hover:border-emerald-700 shadow-lg shadow-emerald-900/40 active:translate-y-0.5 active:border-b-0 flex items-center gap-1.5"
+                                                >
+                                                    <Percent size={12} className="group-hover/pbtn:scale-125 transition-transform" />
+                                                    80-20
+                                                </button>
+                                            )}
+                                            {selectedMetric && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleStoreClick({ Tienda: 'TODAS LAS TIENDAS' });
+                                                    }}
+                                                    className="text-[9px] font-black uppercase tracking-tighter text-indigo-400 hover:text-indigo-300 bg-white/10 hover:bg-white/20 px-2 py-1 transition-colors rounded-none border border-white/10"
+                                                >
+                                                    Ver Detalle
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones') && (
+                                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10">
+                                            <div className="flex flex-col">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
+                                                    {selectedMetric === 'ventas' ? 'Ventas' : selectedMetric === 'cancelaciones' ? 'Cancels' : 'Devols'}
+                                                </span>
+                                                <span className="text-[11px] font-black text-white">
+                                                    {formatCurrency(
+                                                        selectedMetric === 'ventas' ? metrics.ventas.TotalVentas :
+                                                            selectedMetric === 'cancelaciones' ? metrics.cancelaciones.MontoCancelaciones :
+                                                                metrics.devoluciones.MontoDevoluciones
+                                                    )}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col border-x border-white/10 px-2">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
+                                                    {selectedMetric === 'ventas' ? 'Ops' : 'Cant'}
+                                                </span>
+                                                <span className="text-[11px] font-black text-slate-300">
+                                                    {selectedMetric === 'ventas' ? metrics.ventas.Operaciones :
+                                                        selectedMetric === 'cancelaciones' ? metrics.cancelaciones.CantidadCancelaciones :
+                                                            metrics.devoluciones.CantidadDevoluciones}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col text-right">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Promedio</span>
+                                                <span className="text-[11px] font-black text-emerald-400">
+                                                    {formatCurrency(
+                                                        selectedMetric === 'ventas' ? metrics.ventas.TicketPromedio :
+                                                            selectedMetric === 'cancelaciones' ? metrics.cancelaciones.PromedioCancelacion :
+                                                                (metrics.devoluciones.CantidadDevoluciones > 0 ? metrics.devoluciones.MontoDevoluciones / metrics.devoluciones.CantidadDevoluciones : 0)
+                                                    )}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {loading ? (
                                 Array(5).fill(0).map((_, i) => (
                                     <div key={i} className="h-24 bg-slate-50 rounded-none animate-pulse" />
                                 ))
                             ) : (
-                                chartData.map((item: any, index: number) => {
-                                    const storeColor = getStoreColor(item.Tienda);
+                                listData.map((item: any, index: number) => {
+                                    const name = item.Tienda;
+                                    const storeColor = getStoreColor(name);
                                     return (
                                         <div
-                                            key={item.Tienda}
-                                            onClick={() => handleStoreClick(item)}
+                                            key={name}
+                                            onClick={() => {
+                                                if (selectedMetric === 'ventas') {
+                                                    setSelectedStoreId(item.IdTienda.toString());
+                                                    setSelectedStoreName(item.Tienda);
+                                                    if (selectedVentasTab === 'sucursal') {
+                                                        setSelectedVentasTab('departamento');
+                                                    }
+                                                }
+                                            }}
                                             className={cn(
-                                                "flex flex-col p-3 bg-slate-50 rounded-none border border-slate-100 group transition-all outline-none w-full",
-                                                (selectedMetric === 'ventas' || selectedMetric === 'aperturas') ? "cursor-pointer hover:bg-white hover:border-[#4050B4] hover:shadow-lg hover:shadow-[#4050B4]/10" : "hover:bg-white hover:border-slate-200 hover:shadow-lg hover:shadow-slate-200/20"
+                                                "flex flex-col p-3 bg-slate-50 rounded-none border group transition-all outline-none w-full cursor-pointer",
+                                                selectedStoreId === item.IdTienda.toString()
+                                                    ? "bg-white border-[#4050B4] shadow-lg ring-1 ring-[#4050B4]/20"
+                                                    : "border-slate-100 hover:bg-white hover:border-slate-200 hover:shadow-lg hover:shadow-slate-200/20"
                                             )}
                                         >
                                             <div className="flex items-center justify-between mb-2">
@@ -1272,27 +1586,56 @@ export default function DashboardPage() {
                                                         className="w-8 h-8 rounded-none flex items-center justify-center border shadow-sm font-black text-[10px]"
                                                         style={{ backgroundColor: `${storeColor}10`, borderColor: `${storeColor}20`, color: storeColor }}
                                                     >
-                                                        {item.Tienda.substring(0, 2).toUpperCase()}
+                                                        {name.substring(0, 2).toUpperCase()}
                                                     </div>
                                                     <div className="flex flex-col">
-                                                        <span className="text-[12px] font-black text-slate-700 leading-none">{item.Tienda}</span>
+                                                        <span className="text-[12px] font-black text-slate-700 leading-none">{name}</span>
                                                         <span className="text-[9px] font-bold text-slate-400 uppercase">Sucursal</span>
                                                     </div>
                                                 </div>
-                                                {(selectedMetric !== 'ventas' && selectedMetric !== 'cancelaciones') && (
-                                                    <div className="text-right">
-                                                        <div className="text-sm font-black text-slate-900">
-                                                            {selectedMetric === 'aperturas' ? item.Total : formatCurrency(item.Total)}
+                                                <div className="flex items-center gap-2">
+                                                    {(selectedMetric !== 'ventas' && selectedMetric !== 'cancelaciones') && (
+                                                        <div className="text-right">
+                                                            <div className="text-[11px] font-black text-slate-900">
+                                                                {selectedMetric === 'aperturas' ? item.Total : formatCurrency(item.Total)}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                )}
+                                                    )}
+                                                    {selectedMetric && (
+                                                        <div className="flex items-center gap-1">
+                                                            {selectedMetric === 'ventas' && (
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setSelectedStoreId(item.IdTienda.toString());
+                                                                        setSelectedStoreName(item.Tienda);
+                                                                        setIsParetoModalOpen(true);
+                                                                    }}
+                                                                    className="group/pbtn text-[9px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 transition-all rounded-none border border-emerald-200 shadow-sm flex items-center gap-1 active:scale-95"
+                                                                >
+                                                                    <Percent size={10} className="group-hover/pbtn:scale-110 transition-transform" />
+                                                                    80-20
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleStoreClick(item);
+                                                                }}
+                                                                className="text-[9px] font-black uppercase tracking-tighter text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 transition-colors rounded-none border border-indigo-100/50"
+                                                            >
+                                                                Ver Detalle
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
 
-                                            {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones') && (
+                                            {(selectedMetric === 'ventas' || selectedMetric === 'cancelaciones' || selectedMetric === 'devoluciones' || selectedMetric === 'retiros') && (
                                                 <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/50">
                                                     <div className="flex flex-col">
                                                         <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
-                                                            {selectedMetric === 'ventas' ? 'Ventas' : selectedMetric === 'cancelaciones' ? 'Cancelaciones' : 'Devoluciones'}
+                                                            {selectedMetric === 'ventas' ? 'Ventas' : selectedMetric === 'cancelaciones' ? 'Cancelaciones' : selectedMetric === 'retiros' ? 'Retiros' : 'Devoluciones'}
                                                         </span>
                                                         <span className="text-[11px] font-black text-slate-900">
                                                             {formatCurrency(item.Total)}
@@ -1300,7 +1643,7 @@ export default function DashboardPage() {
                                                     </div>
                                                     <div className="flex flex-col border-x border-slate-200/50 px-2">
                                                         <span className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
-                                                            {selectedMetric === 'ventas' ? 'Ops' : 'Cant'}
+                                                            {selectedMetric === 'ventas' || selectedMetric === 'retiros' ? 'Ops' : 'Cant'}
                                                         </span>
                                                         <span className="text-[11px] font-black text-slate-600">
                                                             {selectedMetric === 'ventas' ? item.Operaciones : item.Cantidad}
@@ -1318,6 +1661,7 @@ export default function DashboardPage() {
                                     );
                                 })
                             )}
+
                         </div>
                     )}
                 </div>
@@ -1355,7 +1699,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-black text-sm uppercase tracking-widest leading-none mb-1 text-slate-800">Detalle de Tickets</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData?.Tienda} • {fechaInicio} a {fechaFin}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData ? selectedStoreData.Tienda : 'TODAS LAS TIENDAS'} • {fechaInicio} a {fechaFin}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1479,7 +1823,7 @@ export default function DashboardPage() {
                                                         </td>
                                                     </tr>
                                                 ))
-                                            ) : (
+                                            ) : !loadingDetails ? (
                                                 <tr>
                                                     <td colSpan={8} className="px-4 py-12 text-center">
                                                         <div className="flex flex-col items-center gap-3">
@@ -1490,7 +1834,7 @@ export default function DashboardPage() {
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            )}
+                                            ) : null}
                                         </tbody>
                                     </table>
                                 </div>
@@ -1644,7 +1988,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-black text-sm uppercase tracking-widest leading-none mb-1 text-slate-800">Detalle de Aperturas</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData?.Tienda} • {fechaInicio} a {fechaFin}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData ? selectedStoreData.Tienda : 'TODAS LAS TIENDAS'} • {fechaInicio} a {fechaFin}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1691,6 +2035,11 @@ export default function DashboardPage() {
                                     <table className="min-w-full border-collapse">
                                         <thead className="sticky top-0 z-10">
                                             <tr className="bg-slate-50 border-b border-slate-200">
+                                                {!selectedStoreId && (
+                                                    <th onClick={() => handleOpeningSort('Tienda')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                        <div className="flex items-center">Tienda {RenderOpeningSortIcon('Tienda')}</div>
+                                                    </th>
+                                                )}
                                                 <th onClick={() => handleOpeningSort('Z')} className="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
                                                     <div className="flex items-center justify-center">Z {RenderOpeningSortIcon('Z')}</div>
                                                 </th>
@@ -1722,6 +2071,11 @@ export default function DashboardPage() {
                                                         onClick={() => handleOpeningClick(opening)}
                                                         className="hover:bg-indigo-50/50 transition-colors group/row cursor-pointer"
                                                     >
+                                                        {!selectedStoreId && (
+                                                            <td className="px-4 py-3 whitespace-nowrap text-[10px] font-black text-slate-900 uppercase">
+                                                                {opening.Tienda}
+                                                            </td>
+                                                        )}
                                                         <td className="px-4 py-3 whitespace-nowrap text-center text-[11px] font-black text-slate-900">{opening.Z}</td>
                                                         <td className="px-4 py-3 whitespace-nowrap text-center">
                                                             <span className="bg-slate-100 text-slate-600 px-2 py-0.5 text-[10px] font-black">{opening.Caja}</span>
@@ -1754,9 +2108,9 @@ export default function DashboardPage() {
                                                         </td>
                                                     </tr>
                                                 ))
-                                            ) : (
+                                            ) : !loadingOpenings ? (
                                                 <tr>
-                                                    <td colSpan={7} className="px-4 py-12 text-center">
+                                                    <td colSpan={!selectedStoreId ? 8 : 7} className="px-4 py-12 text-center">
                                                         <div className="flex flex-col items-center gap-3">
                                                             <div className="p-4 bg-slate-50 rounded-none">
                                                                 <Search size={32} className="text-slate-200" />
@@ -1765,7 +2119,7 @@ export default function DashboardPage() {
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            )}
+                                            ) : null}
                                         </tbody>
                                     </table>
                                 </div>
@@ -1805,6 +2159,35 @@ export default function DashboardPage() {
                 storeName={selectedStoreData?.Tienda}
             />
 
+            {/* Depto Detail Modal */}
+            <DeptoDetailModal
+                isOpen={isDeptoModalOpen}
+                onClose={() => {
+                    setIsDeptoModalOpen(false);
+                    setSelectedDeptoId(undefined);
+                    setSelectedDeptoName(undefined);
+                    setSelectedFamilia(undefined);
+                }}
+                idDepto={selectedDeptoId}
+                deptoName={selectedDeptoName}
+                familia={selectedFamilia}
+                fechaInicio={fechaInicio}
+                fechaFin={fechaFin}
+                idTienda={selectedStoreId || undefined}
+                storeName={selectedStoreName || undefined}
+            />
+
+            {/* Global Pareto Analysis Modal */}
+            <ParetoAnalysisModal
+                isOpen={isParetoModalOpen}
+                onClose={() => setIsParetoModalOpen(false)}
+                fechaInicio={fechaInicio}
+                fechaFin={fechaFin}
+                idTienda={selectedStoreId || undefined}
+                storeName={selectedStoreName || undefined}
+            />
+
+
             {/* Withdrawal Drill-down Modal */}
             {isWithdrawalModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -1832,7 +2215,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-black text-sm uppercase tracking-widest leading-none mb-1 text-slate-800">Detalle de Retiros</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData?.Tienda} • {fechaInicio} a {fechaFin}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData ? selectedStoreData.Tienda : 'TODAS LAS TIENDAS'} • {fechaInicio} a {fechaFin}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1879,6 +2262,11 @@ export default function DashboardPage() {
                                     <table className="min-w-full border-collapse text-[11px]">
                                         <thead className="sticky top-0 z-10">
                                             <tr className="bg-slate-50 border-b border-slate-200">
+                                                {!selectedStoreId && (
+                                                    <th onClick={() => handleWithdrawalSort('Tienda')} className="px-3 py-3 text-left font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                        <div className="flex items-center">Tienda {RenderWithdrawalSortIcon('Tienda')}</div>
+                                                    </th>
+                                                )}
                                                 <th onClick={() => handleWithdrawalSort('Z')} className="px-3 py-3 text-center font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
                                                     <div className="flex items-center justify-center">Z {RenderWithdrawalSortIcon('Z')}</div>
                                                 </th>
@@ -1920,6 +2308,11 @@ export default function DashboardPage() {
                                                     const totalRetiro = item.Efectivo + item.Tarjeta + item.Debito + item.Transferencia + item.Vales + item.Dolares + item.Cheques - item.Devoluciones;
                                                     return (
                                                         <tr key={idx} className="hover:bg-amber-50/30 transition-colors group/row">
+                                                            {!selectedStoreId && (
+                                                                <td className="px-3 py-3 whitespace-nowrap font-black text-slate-900 uppercase">
+                                                                    {item.Tienda}
+                                                                </td>
+                                                            )}
                                                             <td className="px-3 py-3 whitespace-nowrap text-center font-black text-slate-900">{item.Z}</td>
                                                             <td className="px-3 py-3 whitespace-nowrap font-bold text-amber-600">{item['Folio Retiro']}</td>
                                                             <td className="px-3 py-3 whitespace-nowrap">
@@ -1951,9 +2344,9 @@ export default function DashboardPage() {
                                                         </tr>
                                                     );
                                                 })
-                                            ) : (
+                                            ) : !loadingWithdrawals ? (
                                                 <tr>
-                                                    <td colSpan={11} className="px-4 py-12 text-center">
+                                                    <td colSpan={!selectedStoreId ? 12 : 11} className="px-4 py-12 text-center">
                                                         <div className="flex flex-col items-center gap-3">
                                                             <div className="p-4 bg-slate-50 rounded-none">
                                                                 <Search size={32} className="text-slate-200" />
@@ -1962,7 +2355,7 @@ export default function DashboardPage() {
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            )}
+                                            ) : null}
                                         </tbody>
                                     </table>
                                 </div>
@@ -1972,18 +2365,27 @@ export default function DashboardPage() {
                         {/* Modal Footer */}
                         <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between">
                             <div className="flex items-center gap-6">
-                                <div className="flex flex-col">
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Retiros</span>
-                                    <span className="text-sm font-black text-slate-900">{filteredWithdrawals.length}</span>
-                                </div>
-                                <div className="flex flex-col border-l border-slate-200 pl-6 text-right">
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Gran Total Retirado</span>
-                                    <span className="text-sm font-black text-amber-600">
-                                        {formatCurrency(filteredWithdrawals.reduce((acc, w) => {
-                                            return acc + w.Efectivo + w.Tarjeta + w.Debito + w.Transferencia + w.Vales + w.Dolares + w.Cheques - w.Devoluciones;
-                                        }, 0))}
-                                    </span>
-                                </div>
+                                {(() => {
+                                    const totalRetirado = filteredWithdrawals.reduce((acc, w) => acc + w.Efectivo + w.Tarjeta + w.Debito + w.Transferencia + w.Vales + w.Dolares + w.Cheques - w.Devoluciones, 0);
+                                    const ops = filteredWithdrawals.length;
+                                    const promedio = ops > 0 ? totalRetirado / ops : 0;
+                                    return (
+                                        <>
+                                            <div className="flex flex-col">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Retiros</span>
+                                                <span className="text-sm font-black text-slate-900">{ops}</span>
+                                            </div>
+                                            <div className="flex flex-col border-l border-slate-200 pl-6">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Retiro Promedio</span>
+                                                <span className="text-sm font-black text-emerald-600">{formatCurrency(promedio)}</span>
+                                            </div>
+                                            <div className="flex flex-col border-l border-slate-200 pl-6 text-right">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Gran Total Retirado</span>
+                                                <span className="text-sm font-black text-amber-600">{formatCurrency(totalRetirado)}</span>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                             <button
                                 onClick={() => { setIsWithdrawalModalOpen(false); setIsMaximized(false); setSearchTerm(''); }}
@@ -2023,7 +2425,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-black text-sm uppercase tracking-widest leading-none mb-1 text-slate-800">Detalle de Devoluciones</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData?.Tienda} • {fechaInicio} a {fechaFin}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{selectedStoreData ? selectedStoreData.Tienda : 'TODAS LAS TIENDAS'} • {fechaInicio} a {fechaFin}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -2084,6 +2486,17 @@ export default function DashboardPage() {
                                     <table className="min-w-full border-collapse">
                                         <thead className="sticky top-0 z-10">
                                             <tr className="bg-slate-50 border-b border-slate-200">
+                                                {!selectedStoreId && (
+                                                    <th
+                                                        onClick={() => handleReturnSort('Tienda')}
+                                                        className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors"
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            Tienda
+                                                            {RenderReturnSortIcon('Tienda')}
+                                                        </div>
+                                                    </th>
+                                                )}
                                                 {['Folio', 'Fecha', 'Clave', 'Valor', 'Cliente', 'Concepto', 'Teléfono', 'Empleado', 'Supervisor'].map((header) => (
                                                     <th
                                                         key={header}
@@ -2106,16 +2519,21 @@ export default function DashboardPage() {
                                                         onClick={() => handleReturnRowClick(item)}
                                                         className="hover:bg-indigo-50/30 transition-colors group/row text-center cursor-pointer"
                                                     >
-                                                        <td className="px-4 py-3 whitespace-nowrap font-bold text-indigo-600">{item['Folio Devolucion']}</td>
+                                                        {!selectedStoreId && (
+                                                            <td className="px-4 py-3 whitespace-nowrap text-left font-black text-slate-900 uppercase text-[11px]">
+                                                                {item.Tienda}
+                                                            </td>
+                                                        )}
+                                                        <td className="px-4 py-3 whitespace-nowrap font-bold text-indigo-600 text-[11px]">{item['Folio Devolucion']}</td>
                                                         <td className="px-4 py-3 whitespace-nowrap">
                                                             <div className="flex flex-col items-center">
                                                                 <span className="text-[11px] font-bold text-slate-700">{new Date(item['Fecha Devolucion']).toLocaleDateString('es-MX')}</span>
-                                                                <span className="text-[9px] font-medium text-slate-400">{new Date(item['Fecha Devolucion']).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                                <span className="text-[11px] font-medium text-slate-400">{new Date(item['Fecha Devolucion']).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3 whitespace-nowrap text-[11px] font-bold text-slate-600">{item.Clave}</td>
                                                         <td className="px-4 py-3 whitespace-nowrap">
-                                                            <span className="text-[12px] font-black text-indigo-600">{formatCurrency(item.Valor)}</span>
+                                                            <span className="text-[11px] font-black text-indigo-600">{formatCurrency(item.Valor)}</span>
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <span className="text-[11px] font-bold text-slate-600 block max-w-[120px] truncate mx-auto" title={item.Cliente}>{item.Cliente}</span>
@@ -2137,9 +2555,9 @@ export default function DashboardPage() {
                                                         </td>
                                                     </tr>
                                                 ))
-                                            ) : (
+                                            ) : !loadingReturns ? (
                                                 <tr>
-                                                    <td colSpan={9} className="px-4 py-12 text-center">
+                                                    <td colSpan={!selectedStoreId ? 10 : 9} className="px-4 py-12 text-center">
                                                         <div className="flex flex-col items-center gap-3">
                                                             <div className="p-4 bg-slate-50 rounded-none">
                                                                 <Search size={32} className="text-slate-200" />
@@ -2148,7 +2566,7 @@ export default function DashboardPage() {
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            )}
+                                            ) : null}
                                         </tbody>
                                     </table>
                                 </div>

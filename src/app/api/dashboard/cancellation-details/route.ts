@@ -35,7 +35,7 @@ export async function GET(req: Request) {
         }
 
         const sql = `
-            SELECT CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdApertura AS VARCHAR(6)) AS [Z],
+            SELECT T.Tienda, CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdApertura AS VARCHAR(6)) AS [Z],
             CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdCancelacion AS VARCHAR(6)) AS [Folio Cancelacion], 
             A.FechaCancelacion, B.Cantidad, F.CodigoBarras AS [Codigo Barras], F.Descripcion, B.PrecioVenta AS [Precio Venta], B.Cantidad*B.PrecioVenta AS Total,
             D.Usuario AS Cajero, E.Usuario AS Supervisor
@@ -45,6 +45,7 @@ export async function GET(req: Request) {
             INNER JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
             INNER JOIN tblUsuarios E ON A.IdSupervisor = E.IdUsuario
             INNER JOIN tblArticulos F ON B.CodigoInterno = F.CodigoInterno
+            INNER JOIN tblTiendas T ON A.IdTienda = T.IdTienda
             WHERE ${filters.join(' AND ')}
             ORDER BY FechaCancelacion
         `;

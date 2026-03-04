@@ -8,7 +8,7 @@ export async function GET(req: Request) {
         const fechaFin = searchParams.get('fechaFin');
         const idTienda = searchParams.get('idTienda');
 
-        if (!fechaInicio || !fechaFin || !idTienda) {
+        if (!fechaInicio || !fechaFin) {
             return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
         }
 
@@ -16,10 +16,11 @@ export async function GET(req: Request) {
         const endStr = `'${fechaFin} 23:59:59'`;
 
         const sql = `
-            SELECT IdDevolucionVenta AS [Folio Devolucion], FechaDevolucionVenta AS [Fecha Devolucion], ClaveDevolucion AS Clave, Valor, Cliente, Concepto, DirTel AS Telefono, Empleado, Usuario AS Supervisor
+            SELECT T.Tienda, IdDevolucionVenta AS [Folio Devolucion], FechaDevolucionVenta AS [Fecha Devolucion], ClaveDevolucion AS Clave, Valor, Cliente, Concepto, DirTel AS Telefono, Empleado, Usuario AS Supervisor
             FROM tblDevolucionesVenta A
             INNER JOIN tblUsuarios B ON A.IdUsuario = B.IdUsuario
-            WHERE FechaDevolucionVenta >= ${startStr} AND FechaDevolucionVenta <= ${endStr} AND A.IdTienda = ${idTienda}
+            LEFT JOIN tblTiendas T ON A.IdTienda = T.IdTienda
+            WHERE FechaDevolucionVenta >= ${startStr} AND FechaDevolucionVenta <= ${endStr} ${idTienda ? `AND A.IdTienda = ${idTienda}` : ''}
             ORDER BY FechaDevolucionVenta
         `;
 

@@ -9,9 +9,6 @@ export async function GET(req: Request) {
         const idTienda = searchParams.get('idTienda');
         const idApertura = searchParams.get('idApertura');
 
-        if (!idTienda) {
-            return NextResponse.json({ error: 'Missing idTienda' }, { status: 400 });
-        }
 
         let sql = '';
         if (idApertura) {
@@ -23,7 +20,7 @@ export async function GET(req: Request) {
                 INNER JOIN tblDetalleVentas B ON A.IdTienda = B.IdTienda AND A.IdComputadora = B.IdComputadora AND A.IdVenta = B.IdVenta
                 INNER JOIN tblAperturasCierres C ON A.IdTienda = C.IdTienda AND A.IdComputadora = C.IdComputadora AND A.IdApertura = C.IdApertura
                 INNER JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
-                WHERE A.IdApertura = ${idApertura} AND A.IdTienda = ${idTienda}
+                WHERE A.IdApertura = ${idApertura} ${idTienda ? `AND A.IdTienda = ${idTienda}` : ''}
                 GROUP BY A.IdTienda, A.IdVenta, A.IdComputadora, A.IdApertura, A.FechaVenta, D.Usuario, A.Total, A.Pago
                 ORDER BY A.FechaVenta 
             `;
@@ -38,7 +35,7 @@ export async function GET(req: Request) {
                 INNER JOIN tblDetalleVentas B ON A.IdTienda = B.IdTienda AND A.IdComputadora = B.IdComputadora AND A.IdVenta = B.IdVenta
                 INNER JOIN tblAperturasCierres C ON A.IdTienda = C.IdTienda AND A.IdComputadora = C.IdComputadora AND A.IdApertura = C.IdApertura
                 INNER JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
-                WHERE CONVERT(DATE, FechaVenta) >= ${startStr} AND CONVERT(DATE, FechaVenta) <= ${endStr} AND A.IdTienda = ${idTienda}
+                WHERE CONVERT(DATE, FechaVenta) >= ${startStr} AND CONVERT(DATE, FechaVenta) <= ${endStr} ${idTienda ? `AND A.IdTienda = ${idTienda}` : ''}
                 GROUP BY A.IdTienda, A.IdVenta, A.IdComputadora, A.IdApertura, A.FechaVenta, D.Usuario, A.Total, A.Pago
                 ORDER BY A.FechaVenta 
             `;

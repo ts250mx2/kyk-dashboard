@@ -8,7 +8,7 @@ export async function GET(req: Request) {
         const fechaFin = searchParams.get('fechaFin');
         const idTienda = searchParams.get('idTienda');
 
-        if (!fechaInicio || !fechaFin || !idTienda) {
+        if (!fechaInicio || !fechaFin) {
             return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
         }
 
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
         const endStr = `'${fechaFin}'`;
 
         const sql = `
-            SELECT CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdApertura AS VARCHAR(6)) AS [Z],
+            SELECT T.Tienda, CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdApertura AS VARCHAR(6)) AS [Z],
             CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdRetiro AS VARCHAR(6)) AS [Folio Retiro],
             A.Fecha AS [Fecha Retiro], A.Concepto,
             A.Tarjeta, A.Efectivo, A.Devoluciones, A.Dolares, A.Cheques, A.Transferencia, A.TarjetaDebito AS [Debito], ISNULL(SUM(B.Importe), 0) AS Vales,
@@ -26,8 +26,9 @@ export async function GET(req: Request) {
             INNER JOIN tblAperturasCierres C ON A.IdTienda = C.IdTienda AND A.IdComputadora = C.IdComputadora AND A.IdApertura = C.IdApertura
             INNER JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
             INNER JOIN tblUsuarios E ON A.IdSupervisor = E.IdUsuario
-            WHERE CONVERT(DATE, A.Fecha) >= ${startStr} AND CONVERT(DATE, A.Fecha) <= ${endStr} AND A.IdTienda = ${idTienda}
-            GROUP BY A.IdComputadora, A.IdApertura, A.IdRetiro, A.Fecha, A.Concepto, A.Tarjeta, A.Efectivo, A.Devoluciones, A.Dolares, A.Cheques, A.Transferencia, A.TarjetaDebito, D.Usuario, E.Usuario
+            INNER JOIN tblTiendas T ON A.IdTienda = T.IdTienda
+            WHERE CONVERT(DATE, A.Fecha) >= ${startStr} AND CONVERT(DATE, A.Fecha) <= ${endStr} ${idTienda ? `AND A.IdTienda = ${idTienda}` : ''}
+            GROUP BY T.Tienda, A.IdComputadora, A.IdApertura, A.IdRetiro, A.Fecha, A.Concepto, A.Tarjeta, A.Efectivo, A.Devoluciones, A.Dolares, A.Cheques, A.Transferencia, A.TarjetaDebito, D.Usuario, E.Usuario
             ORDER BY A.Fecha
         `;
 

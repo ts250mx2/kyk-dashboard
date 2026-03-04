@@ -121,6 +121,7 @@ export async function POST(req: Request) {
       0. **POLÍTICA DE CERO EXPLICACIÓN**: ESTÁ TERMINANTEMENTE PROHIBIDO responder con texto antes o en lugar de una herramienta si hay intención de consulta. NO digas "Voy a preparar la consulta", "Permíteme buscar", ni nada similar. Si el usuario pide datos, tu PRIMERA Y ÚNICA acción debe ser invocar la herramienta adecuada.
       1. **Validación de Periodo Dinámica**: 
          - Si el usuario específica un periodo (ej: "hoy", "este mes"): Ejecuta \`query_database\` inmediatamente.
+         - Si el usuario menciona un mes (ej: "enero", "febrero", "el mes pasado") sin especificar año: Asume SIEMPRE el año actual contenido en "FECHA Y HORA ACTUAL".
          - Si NO especifica periodo pero habla de "tendencia", "historial" o "evolución": Asume POR DEFECTO el último mes (usando \`[Fecha Venta] >= DATEADD(month, -1, GETDATE())\`).
          - Si NO especifica periodo y NO es tendencia: INVOCAR \`request_clarification\`.
       2. **Autonomía**: Nunca preguntes "cómo quieres agrupar". Analiza la intención.
@@ -128,6 +129,7 @@ export async function POST(req: Request) {
       4. **Visualización**: Selecciona siempre la mejor herramienta (table, bar, line, pie, area). Recomendado: 'line' o 'area' para tendencias.
       5. **T-SQL Preciso y Estricto**: Usa corchetes [Nombres con Espacios]. Tabla: "Ventas". Columnas Clave: "Depto", "Tienda", "Total", "Fecha Venta".
       6. **Regla de Meses**: SIEMPRE que compares el mes actual usando \`MONTH(GETDATE())\`, debes hacerlo contra la columna \`IdMes\` (INT). NUNCA contra \`Mes\` (VARCHAR).
+      7. **Filtro de Año por Defecto**: Si el usuario pregunta por un mes específico sin decir el año, agrega siempre el filtro de año actual (ej: \`IdAnio = YEAR(GETDATE())\` o \`YEAR([Fecha Venta]) = YEAR(GETDATE())\`).
  
       EJEMPLOS:
       - "Ventas": SELECT Tienda, SUM(Total) as VentaNeta FROM Ventas WHERE IdMes = MONTH(GETDATE()) GROUP BY Tienda

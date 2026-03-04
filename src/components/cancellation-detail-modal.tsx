@@ -95,11 +95,13 @@ export function CancellationDetailModal({
 
     useEffect(() => {
         if (isOpen) {
+            setLoading(true);
             fetchDetails();
         } else {
             setDetails([]);
             setSearchTerm('');
             setIsMaximized(false);
+            setLoading(false);
         }
     }, [isOpen, idTienda, idUsuario, role, fechaInicio, fechaFin]);
 
@@ -138,7 +140,8 @@ export function CancellationDetailModal({
         c.Cajero?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.Supervisor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.Descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.Z?.toString().toLowerCase().includes(searchTerm.toLowerCase())
+        c.Z?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.Tienda?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const sortedDetails = [...filteredDetails].sort((a, b) => {
@@ -154,6 +157,7 @@ export function CancellationDetailModal({
     const exportToExcel = () => {
         if (sortedDetails.length === 0) return;
         const excelData = sortedDetails.map(c => ({
+            ...(!idTienda ? { 'Tienda': c.Tienda } : {}),
             'Z': c.Z,
             'Folio Cancelación': c['Folio Cancelacion'],
             'Fecha': new Date(c.FechaCancelacion).toLocaleString('es-MX'),
@@ -169,6 +173,7 @@ export function CancellationDetailModal({
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Cancelaciones');
         const wscols = [
+            ...(!idTienda ? [{ wch: 20 }] : []),
             { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 15 },
             { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 20 },
         ];
@@ -258,6 +263,11 @@ export function CancellationDetailModal({
                             <table className="min-w-full border-collapse">
                                 <thead className="sticky top-0 z-10">
                                     <tr className="bg-slate-50 border-b border-slate-200">
+                                        {!idTienda && (
+                                            <th onClick={() => handleSort('Tienda')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                <div className="flex items-center">Tienda {renderSortIcon('Tienda')}</div>
+                                            </th>
+                                        )}
                                         <th onClick={() => handleSort('Z')} className="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
                                             <div className="flex items-center justify-center">Z {renderSortIcon('Z')}</div>
                                         </th>
@@ -282,6 +292,11 @@ export function CancellationDetailModal({
                                     {sortedDetails.length > 0 ? (
                                         sortedDetails.map((item, idx) => (
                                             <tr key={idx} className="hover:bg-rose-50/30 transition-colors group/row">
+                                                {!idTienda && (
+                                                    <td className="px-4 py-3 whitespace-nowrap text-[10px] font-black text-slate-900 uppercase">
+                                                        {item.Tienda}
+                                                    </td>
+                                                )}
                                                 <td className="px-4 py-3 whitespace-nowrap text-center text-[11px] font-black text-slate-900">{item.Z}</td>
                                                 <td className="px-4 py-3 whitespace-nowrap text-[11px] font-bold text-rose-600">{item['Folio Cancelacion']}</td>
                                                 <td className="px-4 py-3 whitespace-nowrap text-[11px] font-bold text-slate-700">
@@ -311,13 +326,13 @@ export function CancellationDetailModal({
                                                 </td>
                                             </tr>
                                         ))
-                                    ) : (
+                                    ) : !loading ? (
                                         <tr>
-                                            <td colSpan={8} className="px-4 py-12 text-center bg-white">
+                                            <td colSpan={!idTienda ? 9 : 8} className="px-4 py-12 text-center bg-white">
                                                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">No se encontraron cancelaciones</p>
                                             </td>
                                         </tr>
-                                    )}
+                                    ) : null}
                                 </tbody>
                             </table>
                         </div>

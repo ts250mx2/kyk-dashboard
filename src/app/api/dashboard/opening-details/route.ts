@@ -8,7 +8,7 @@ export async function GET(req: Request) {
         const fechaFin = searchParams.get('fechaFin');
         const idTienda = searchParams.get('idTienda');
 
-        if (!fechaInicio || !fechaFin || !idTienda) {
+        if (!fechaInicio || !fechaFin) {
             return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
         }
 
@@ -16,13 +16,14 @@ export async function GET(req: Request) {
         const endStr = `'${fechaFin}'`;
 
         const sql = `
-            SELECT C.IdTienda, C.IdApertura, C.IdComputadora, CAST(C.IdComputadora AS VARCHAR(2)) + '-' + CAST(C.IdApertura AS VARCHAR(6)) AS [Z], C.IdComputadora AS Caja, C.FechaApertura AS [Fecha Apertura], D.Usuario AS Cajero,
+            SELECT C.IdTienda, T.Tienda, C.IdApertura, C.IdComputadora, CAST(C.IdComputadora AS VARCHAR(2)) + '-' + CAST(C.IdApertura AS VARCHAR(6)) AS [Z], C.IdComputadora AS Caja, C.FechaApertura AS [Fecha Apertura], D.Usuario AS Cajero,
             COUNT(A.IdVenta) AS Tickets, SUM(A.Total) AS [Total Venta], C.FechaCierre
             FROM tblVentas A
             INNER JOIN tblAperturasCierres C ON A.IdTienda = C.IdTienda AND A.IdComputadora = C.IdComputadora AND A.IdApertura = C.IdApertura
             INNER JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
-            WHERE CONVERT(DATE, FechaVenta) >= ${startStr} AND CONVERT(DATE, FechaVenta) <= ${endStr} AND C.IdTienda = ${idTienda}
-            GROUP BY C.IdTienda, C.IdComputadora, C.IdApertura, C.FechaApertura, D.Usuario, C.FechaCierre
+            INNER JOIN tblTiendas T ON C.IdTienda = T.IdTienda
+            WHERE CONVERT(DATE, FechaVenta) >= ${startStr} AND CONVERT(DATE, FechaVenta) <= ${endStr} ${idTienda ? `AND C.IdTienda = ${idTienda}` : ''}
+            GROUP BY C.IdTienda, T.Tienda, C.IdComputadora, C.IdApertura, C.FechaApertura, D.Usuario, C.FechaCierre
             ORDER BY C.FechaApertura 
         `;
 

@@ -39,7 +39,10 @@ export async function GET(req: Request) {
 
         // 4. Retiros
         const withdrawalsSql = `
-            SELECT ISNULL(SUM(Monto), 0) as MontoRetiros
+            SELECT 
+                ISNULL(SUM(Monto), 0) as MontoRetiros,
+                COUNT(*) as CantidadRetiros,
+                ISNULL(SUM(Monto)/NULLIF(COUNT(*), 0), 0) as PromedioRetiro
             FROM Retiros
             WHERE [Fecha Retiro] >= ${startStr} AND [Fecha Retiro] <= ${endStr}
         `;
@@ -79,7 +82,7 @@ export async function GET(req: Request) {
         `;
 
         const chartDataRetirosSql = `
-            SELECT IdTienda, Tienda, SUM(Monto) as Total
+            SELECT IdTienda, Tienda, SUM(Monto) as Total, COUNT(*) as Cantidad, ISNULL(SUM(Monto)/NULLIF(COUNT(*), 0), 0) as Promedio
             FROM Retiros
             WHERE [Fecha Retiro] >= ${startStr} AND [Fecha Retiro] <= ${endStr}
             GROUP BY IdTienda, Tienda
@@ -97,13 +100,42 @@ export async function GET(req: Request) {
             ORDER BY Total DESC
         `;
 
-        const [sales, openings, cancelaciones, withdrawals, returns, chartVentas, chartAperturas, chartCancelaciones, chartRetiros, chartDevoluciones] = await Promise.all([
+        const storeId = searchParams.get('storeId');
+        let storeFilter = '';
+        if (storeId && storeId !== 'undefined' && storeId !== 'null') {
+            storeFilter = `AND v.IdTienda = ${storeId}`;
+        }
+
+        const chartDataVentasDeptoSql = `
+            SELECT a.IdDepto, d.Depto AS Departamento, SUM(dv.PrecioVenta*dv.Cantidad) as Total, COUNT(*) as Operaciones, SUM(dv.PrecioVenta*dv.Cantidad)/COUNT(*) as TicketPromedio
+            FROM tblVentas v
+            JOIN tblDetalleVentas dv ON v.IdVenta = dv.IdVenta AND v.IdTienda = dv.IdTienda AND v.IdComputadora = dv.IdComputadora 
+            JOIN tblArticulos a ON dv.CodigoInterno = a.CodigoInterno
+            JOIN tblDeptos d ON a.IdDepto = d.IdDepto
+            WHERE v.FechaVenta >= ${startStr} AND v.FechaVenta <= ${endStr} ${storeFilter}
+            GROUP BY a.IdDepto, d.Depto
+            ORDER BY Total DESC
+        `;
+
+        const chartDataVentasFamiliaSql = `
+            SELECT TOP 20 CASE WHEN a.Familia = '' THEN 'Sin Familia' ELSE a.Familia END AS Familia, SUM(dv.PrecioVenta*dv.Cantidad) as Total, COUNT(*) as Operaciones, SUM(dv.PrecioVenta*dv.Cantidad)/COUNT(*) as TicketPromedio
+            FROM tblVentas v
+            JOIN tblDetalleVentas dv ON v.IdVenta = dv.IdVenta AND v.IdTienda = dv.IdTienda
+            JOIN tblArticulos a ON dv.CodigoInterno = a.CodigoInterno
+            WHERE v.FechaVenta >= ${startStr} AND v.FechaVenta <= ${endStr} ${storeFilter}
+            GROUP BY a.Familia
+            ORDER BY Total DESC
+        `;
+
+        const [sales, openings, cancelaciones, withdrawals, returns, chartVentas, chartVentasDepto, chartVentasFamilia, chartAperturas, chartCancelaciones, chartRetiros, chartDevoluciones] = await Promise.all([
             query(salesSql),
             query(openingsSql),
             query(cancelacionesSql),
             query(withdrawalsSql),
             query(returnsSql),
             query(chartDataVentasSql),
+            query(chartDataVentasDeptoSql),
+            query(chartDataVentasFamiliaSql),
             query(chartDataAperturasSql),
             query(chartDataCancelacionesSql),
             query(chartDataRetirosSql),
@@ -115,11 +147,13 @@ export async function GET(req: Request) {
                 ventas: sales[0] || { TotalVentas: 0, Operaciones: 0, TicketPromedio: 0 },
                 aperturas: openings[0]?.TotalAperturas || 0,
                 cancelaciones: cancelaciones[0] || { MontoCancelaciones: 0, CantidadCancelaciones: 0 },
-                retiros: withdrawals[0]?.MontoRetiros || 0,
+                retiros: withdrawals[0] || { MontoRetiros: 0, CantidadRetiros: 0, PromedioRetiro: 0 },
                 devoluciones: returns[0] || { MontoDevoluciones: 0, CantidadDevoluciones: 0 }
             },
             data: {
                 ventas: chartVentas,
+                ventas_depto: chartVentasDepto,
+                ventas_familia: chartVentasFamilia,
                 aperturas: chartAperturas,
                 cancelaciones: chartCancelaciones,
                 retiros: chartRetiros,
