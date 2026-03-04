@@ -17,6 +17,15 @@ export const metadata: Metadata = {
   description: "Kesos iA",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#ffffff",
+};
+
 import { ThemeProvider } from "@/components/theme-provider"
 
 export default function RootLayout({

@@ -215,7 +215,21 @@
   --ring: 4 86% 52%;
 }
 
+html {
+  overscroll-behavior: none;
+  /* Prevent iOS Safari elastic scroll triggering navigation/refresh */
+  -webkit-overflow-scrolling: auto;
+}
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
+  /* Prevent Chrome Android pull-to-refresh and iOS bounce reload */
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+}
+
+/* Prevent accidental double-tap zoom on interactive elements */
+button, a, input, select, textarea {
+  touch-action: manipulation;
 }
