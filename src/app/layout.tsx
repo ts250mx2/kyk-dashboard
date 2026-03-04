@@ -31,8 +31,7 @@ export default function RootLayout({
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="light"
           disableTransitionOnChange
           themes={['light', 'dark', 'system', 'midnight', 'forest', 'latte', 'kesos-y-kosas']}
         >

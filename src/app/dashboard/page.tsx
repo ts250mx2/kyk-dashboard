@@ -117,6 +117,25 @@ export default function DashboardPage() {
     const [selectedFamilia, setSelectedFamilia] = useState<string | undefined>();
     const [isParetoModalOpen, setIsParetoModalOpen] = useState(false);
 
+    // Lock body scroll when any modal is open to prevent background flash/repaint on scroll
+    const anyModalOpen = isModalOpen || isItemsModalOpen || isOpeningModalOpen || isCancellationModalOpen ||
+        isWithdrawalModalOpen || isReturnModalOpen || isDeptoModalOpen || isParetoModalOpen;
+
+    useEffect(() => {
+        if (anyModalOpen) {
+            const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+            document.body.style.overflow = 'hidden';
+            document.body.style.paddingRight = `${scrollbarWidth}px`;
+        } else {
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        };
+    }, [anyModalOpen]);
+
 
     // Position Persistence states for all detail modals
     const [salesModalPosition, setSalesModalPosition] = useState({ x: 0, y: 0 });
@@ -144,14 +163,22 @@ export default function DashboardPage() {
     const itemsModalDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
 
     // UI State for Minimize/Maximize and Positioning
-    const [isChartMinimized, setIsChartMinimized] = useState(false);
-    const [isDetailsMinimized, setIsDetailsMinimized] = useState(false);
-    const [layoutPosition, setLayoutPosition] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
-    const [isLayoutLoaded, setIsLayoutLoaded] = useState(false);
-    const [hasMounted, setHasMounted] = useState(false);
+    const [isChartMinimized, setIsChartMinimized] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return localStorage.getItem('kyk_dashboard_chart_minimized') === 'true';
+    });
+    const [isDetailsMinimized, setIsDetailsMinimized] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return localStorage.getItem('kyk_dashboard_details_minimized') === 'true';
+    });
+    const [layoutPosition, setLayoutPosition] = useState<'top' | 'bottom' | 'left' | 'right'>(() => {
+        if (typeof window === 'undefined') return 'bottom';
+        return (localStorage.getItem('kyk_dashboard_layout_position') as any) || 'bottom';
+    });
+    const [isLayoutLoaded, setIsLayoutLoaded] = useState(true);
     const [isDashboardMaximized, setIsDashboardMaximized] = useState(false);
 
-    // Load saved positions
+    // Load saved modal positions (not safe for lazy init due to SSR)
     useEffect(() => {
         const loadPosition = (key: string, setPos: Function, setLoaded: Function) => {
             const saved = localStorage.getItem(key);
@@ -165,19 +192,6 @@ export default function DashboardPage() {
         loadPosition('kyk_withdrawal_modal_position', setWithdrawalModalPosition, setIsWithdrawalPositionLoaded);
         loadPosition('kyk_return_modal_position', setReturnModalPosition, setIsReturnPositionLoaded);
         loadPosition('kyk_items_modal_position', setItemsModalPosition, setIsItemsPositionLoaded);
-
-        // Load layout settings
-        const savedLayout = localStorage.getItem('kyk_dashboard_layout_position');
-        if (savedLayout) setLayoutPosition(savedLayout as any);
-
-        const savedChartMin = localStorage.getItem('kyk_dashboard_chart_minimized');
-        if (savedChartMin) setIsChartMinimized(savedChartMin === 'true');
-
-        const savedDetailsMin = localStorage.getItem('kyk_dashboard_details_minimized');
-        if (savedDetailsMin) setIsDetailsMinimized(savedDetailsMin === 'true');
-
-        setIsLayoutLoaded(true);
-        setHasMounted(true);
     }, []);
 
     // Save positions
@@ -705,6 +719,11 @@ export default function DashboardPage() {
     };
 
     const handleChartBarClick = (data: any) => {
+        // Block detail if too many operations (would be too slow to load)
+        const ops = data?.Operaciones ?? data?.Cantidad ?? data?.Total ?? 0;
+        if (selectedMetric === 'ventas' && ops > 2000) return;
+        if (selectedMetric !== 'ventas' && (data?.Cantidad ?? 0) > 2000) return;
+
         if (selectedVentasTab === 'sucursal') {
             handleStoreClick(data);
         } else if (selectedVentasTab === 'departamento') {
@@ -833,7 +852,6 @@ export default function DashboardPage() {
         return STORE_COLORS[index];
     };
 
-    if (!hasMounted) return <LoadingScreen message="Cargando panel..." />;
 
     return (
         <div className={cn(
@@ -1588,15 +1606,21 @@ export default function DashboardPage() {
                                                 </button>
                                             )}
                                             {selectedMetric && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleStoreClick({ Tienda: 'TODAS LAS TIENDAS' });
-                                                    }}
-                                                    className="text-[9px] font-black uppercase tracking-tighter text-indigo-400 hover:text-indigo-300 bg-white/10 hover:bg-white/20 px-2 py-1 transition-colors rounded-none border border-white/10"
-                                                >
-                                                    Ver Detalle
-                                                </button>
+                                                metrics.ventas.Operaciones <= 2000 ? (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleStoreClick({ Tienda: 'TODAS LAS TIENDAS' });
+                                                        }}
+                                                        className="text-[9px] font-black uppercase tracking-tighter text-indigo-400 hover:text-indigo-300 bg-white/10 hover:bg-white/20 px-2 py-1 transition-colors rounded-none border border-white/10"
+                                                    >
+                                                        Ver Detalle
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter" title="Más de 2000 operaciones">
+                                                        +2000 ops
+                                                    </span>
+                                                )
                                             )}
                                         </div>
                                     </div>
@@ -1704,15 +1728,24 @@ export default function DashboardPage() {
                                                                     80-20
                                                                 </button>
                                                             )}
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleStoreClick(item);
-                                                                }}
-                                                                className="text-[9px] font-black uppercase tracking-tighter text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 transition-colors rounded-none border border-indigo-100/50"
-                                                            >
-                                                                Ver Detalle
-                                                            </button>
+                                                            {(() => {
+                                                                const ops = selectedMetric === 'ventas' ? item.Operaciones : item.Cantidad;
+                                                                return ops > 2000 ? (
+                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter" title="Demasiados registros para mostrar el detalle">
+                                                                        +2000 ops
+                                                                    </span>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleStoreClick(item);
+                                                                        }}
+                                                                        className="text-[9px] font-black uppercase tracking-tighter text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 transition-colors rounded-none border border-indigo-100/50"
+                                                                    >
+                                                                        Ver Detalle
+                                                                    </button>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     )}
                                                 </div>

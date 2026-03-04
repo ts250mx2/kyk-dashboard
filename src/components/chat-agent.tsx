@@ -230,10 +230,10 @@ export function ChatAgent() {
             {/* Chat Window */}
             {isOpen && (
                 <div className={cn(
-                    "bg-slate-50 border border-slate-200 shadow-2xl rounded-[32px] flex flex-col mb-4 overflow-hidden transition-all duration-300 ease-in-out",
+                    "bg-slate-50 border border-slate-200 shadow-2xl flex flex-col mb-4 overflow-hidden transition-all duration-300 ease-in-out",
                     isExpanded
-                        ? "fixed inset-0 z-[10000] rounded-none md:rounded-[40px] md:inset-6"
-                        : "w-[380px] md:w-[850px] h-[500px] md:h-[85vh]"
+                        ? "fixed inset-0 z-[10000] rounded-none mb-0"
+                        : "w-[380px] md:w-[850px] h-[500px] md:h-[85vh] rounded-[32px]"
                 )}>
                     {/* Header */}
                     <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between">
@@ -253,7 +253,7 @@ export function ChatAgent() {
                             <button onClick={handleClear} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title="Limpiar chat">
                                 <Trash2 className="w-5 h-5" />
                             </button>
-                            <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400 hidden md:block">
+                            <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title={isExpanded ? 'Minimizar' : 'Maximizar'}>
                                 {isExpanded ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                             </button>
                             <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400">
