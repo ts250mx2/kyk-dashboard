@@ -8,14 +8,13 @@ import {
     MessageSquare,
     X,
     Maximize2,
-    Minimize2,
     ArrowRight,
     Sparkles,
     Search,
     ArrowLeft,
     Trash2
 } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -63,8 +62,8 @@ const DEFAULT_FALLBACK = [
 
 export function ChatAgent() {
     const pathname = usePathname();
+    const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [defaultSuggestions, setDefaultSuggestions] = useState<string[]>([]);
     const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
@@ -229,12 +228,7 @@ export function ChatAgent() {
 
             {/* Chat Window */}
             {isOpen && (
-                <div className={cn(
-                    "bg-slate-50 border border-slate-200 shadow-2xl flex flex-col mb-4 overflow-hidden transition-all duration-300 ease-in-out",
-                    isExpanded
-                        ? "fixed inset-0 z-[10000] rounded-none mb-0"
-                        : "w-[380px] md:w-[850px] h-[500px] md:h-[85vh] rounded-[32px]"
-                )}>
+                <div className="bg-slate-50 border border-slate-200 shadow-2xl flex flex-col mb-4 overflow-hidden transition-all duration-300 ease-in-out w-[380px] md:w-[850px] h-[500px] md:h-[85vh] rounded-[32px]">
                     {/* Header */}
                     <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between">
                         <div className="flex items-center space-x-4">
@@ -253,8 +247,12 @@ export function ChatAgent() {
                             <button onClick={handleClear} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title="Limpiar chat">
                                 <Trash2 className="w-5 h-5" />
                             </button>
-                            <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title={isExpanded ? 'Minimizar' : 'Maximizar'}>
-                                {isExpanded ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                            <button
+                                onClick={() => router.push('/chat')}
+                                className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400"
+                                title="Abrir en página completa"
+                            >
+                                <Maximize2 className="w-5 h-5" />
                             </button>
                             <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400">
                                 <X className="w-6 h-6" />
