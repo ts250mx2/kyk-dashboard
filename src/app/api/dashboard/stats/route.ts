@@ -14,49 +14,9 @@ export async function GET(req: Request) {
         const startStr = `'${fechaInicio} 00:00:00'`;
         const endStr = `'${fechaFin} 23:59:59'`;
 
-        // 1. Ventas, Operaciones, Ticket Promedio
-        const salesSql = `
-            SELECT 
-                ISNULL(SUM(Total), 0) as TotalVentas, 
-                COUNT(IdVenta) AS Operaciones, SUM(Total)/COUNT(IdVenta) AS TicketPromedio
-            FROM tblVentas
-            WHERE FechaVenta >= ${startStr} AND FechaVenta <= ${endStr}
-        `;
-
-        // 2. Aperturas (Openings started in range)
-        const openingsSql = `
-            SELECT COUNT(*) as TotalAperturas
-            FROM tblAperturasCierres
-            WHERE FechaApertura >= ${startStr} AND FechaApertura <= ${endStr}
-        `;
-
-        // 3. Cancelaciones
-        const cancelacionesSql = `
-            SELECT SUM(Total) as MontoCancelaciones, COUNT(IdCancelacion) as CantidadCancelaciones, SUM(Total)/COUNT(IdCancelacion) as PromedioCancelacion
-            FROM Cancelaciones 
-            WHERE [Fecha Cancelacion] >= ${startStr} AND [Fecha Cancelacion] <= ${endStr}
-        `;
-
-        // 4. Retiros
-        const withdrawalsSql = `
-            SELECT 
-                ISNULL(SUM(Monto), 0) as MontoRetiros,
-                COUNT(*) as CantidadRetiros,
-                ISNULL(SUM(Monto)/NULLIF(COUNT(*), 0), 0) as PromedioRetiro
-            FROM Retiros
-            WHERE [Fecha Retiro] >= ${startStr} AND [Fecha Retiro] <= ${endStr}
-        `;
-
-        const returnsSql = `
-            SELECT ISNULL(SUM(A.Cantidad*A.PrecioVenta), 0) AS MontoDevoluciones, COUNT(A.CodigoInterno) AS CantidadDevoluciones
-            FROM tblDetalleDevolucionesVenta A
-            INNER JOIN tblDevolucionesVenta B ON A.IdDevolucionVenta = B.IdDevolucionVenta AND A.IdTienda = B.IdTienda
-            WHERE A.Cantidad > 0 AND B.FechaDevolucionVenta >= ${startStr} AND B.FechaDevolucionVenta <= ${endStr}
-        `;
-
-        // 6. Grouped Data for Chart/Details
+        // 1. Grouped Data for Chart/Details (We'll use these to calculate totals too)
         const chartDataVentasSql = `
-            SELECT a.IdTienda, Tienda, SUM(Total) as Total, COUNT(*) as Operaciones, SUM(Total)/COUNT(*) as TicketPromedio
+            SELECT a.IdTienda, Tienda, SUM(Total) as Total, COUNT(*) as Operaciones, SUM(Total)/NULLIF(COUNT(*), 0) as TicketPromedio
             FROM tblVentas a
             JOIN tblTiendas t ON a.IdTienda = t.IdTienda
             WHERE FechaVenta >= ${startStr} AND FechaVenta <= ${endStr}
@@ -64,6 +24,7 @@ export async function GET(req: Request) {
             ORDER BY Total DESC
         `;
 
+        // 2. Aperturas (Openings started in range)
         const chartDataAperturasSql = `
             SELECT a.IdTienda, t.Tienda, COUNT(a.IdApertura) as Total
             FROM tblAperturasCierres a
@@ -74,7 +35,7 @@ export async function GET(req: Request) {
         `;
 
         const chartDataCancelacionesSql = `
-            SELECT IdTienda, Tienda, SUM(Total) as Total, COUNT(*) as Cantidad, SUM(Total)/COUNT(*) as Promedio
+            SELECT IdTienda, Tienda, SUM(Total) as Total, COUNT(*) as Cantidad, SUM(Total)/NULLIF(COUNT(*), 0) as Promedio
             FROM Cancelaciones
             WHERE [Fecha Cancelacion] >= ${startStr} AND [Fecha Cancelacion] <= ${endStr}
             GROUP BY IdTienda, Tienda
@@ -100,60 +61,56 @@ export async function GET(req: Request) {
             ORDER BY Total DESC
         `;
 
-        const storeId = searchParams.get('storeId');
-        let storeFilter = '';
-        if (storeId && storeId !== 'undefined' && storeId !== 'null') {
-            storeFilter = `AND v.IdTienda = ${storeId}`;
-        }
-
-        const chartDataVentasDeptoSql = `
-            SELECT a.IdDepto, d.Depto AS Departamento, SUM(dv.PrecioVenta*dv.Cantidad) as Total, COUNT(*) as Operaciones, SUM(dv.PrecioVenta*dv.Cantidad)/COUNT(*) as TicketPromedio
-            FROM tblVentas v
-            JOIN tblDetalleVentas dv ON v.IdVenta = dv.IdVenta AND v.IdTienda = dv.IdTienda AND v.IdComputadora = dv.IdComputadora 
-            JOIN tblArticulos a ON dv.CodigoInterno = a.CodigoInterno
-            JOIN tblDeptos d ON a.IdDepto = d.IdDepto
-            WHERE v.FechaVenta >= ${startStr} AND v.FechaVenta <= ${endStr} ${storeFilter}
-            GROUP BY a.IdDepto, d.Depto
-            ORDER BY Total DESC
-        `;
-
-        const chartDataVentasFamiliaSql = `
-            SELECT TOP 20 CASE WHEN a.Familia = '' THEN 'Sin Familia' ELSE a.Familia END AS Familia, SUM(dv.PrecioVenta*dv.Cantidad) as Total, COUNT(*) as Operaciones, SUM(dv.PrecioVenta*dv.Cantidad)/COUNT(*) as TicketPromedio
-            FROM tblVentas v
-            JOIN tblDetalleVentas dv ON v.IdVenta = dv.IdVenta AND v.IdTienda = dv.IdTienda
-            JOIN tblArticulos a ON dv.CodigoInterno = a.CodigoInterno
-            WHERE v.FechaVenta >= ${startStr} AND v.FechaVenta <= ${endStr} ${storeFilter}
-            GROUP BY a.Familia
-            ORDER BY Total DESC
-        `;
-
-        const [sales, openings, cancelaciones, withdrawals, returns, chartVentas, chartVentasDepto, chartVentasFamilia, chartAperturas, chartCancelaciones, chartRetiros, chartDevoluciones] = await Promise.all([
-            query(salesSql),
-            query(openingsSql),
-            query(cancelacionesSql),
-            query(withdrawalsSql),
-            query(returnsSql),
+        // Execute core queries (5 queries - dept/family loaded on-demand)
+        const [chartVentas, chartAperturas, chartCancelaciones, chartRetiros, chartDevoluciones] = await Promise.all([
             query(chartDataVentasSql),
-            query(chartDataVentasDeptoSql),
-            query(chartDataVentasFamiliaSql),
             query(chartDataAperturasSql),
             query(chartDataCancelacionesSql),
             query(chartDataRetirosSql),
             query(chartDataDevolucionesSql)
         ]);
 
+        // Calculate aggregate metrics from grouped data
+        const totalVentas = (chartVentas as any[]).reduce((acc, curr) => acc + curr.Total, 0);
+        const totalOps = (chartVentas as any[]).reduce((acc, curr) => acc + curr.Operaciones, 0);
+
+        const totalAperturas = (chartAperturas as any[]).reduce((acc, curr) => acc + curr.Total, 0);
+
+        const totalMontoCancel = (chartCancelaciones as any[]).reduce((acc, curr) => acc + (curr.Total || 0), 0);
+        const totalCantCancel = (chartCancelaciones as any[]).reduce((acc, curr) => acc + (curr.Cantidad || 0), 0);
+
+        const totalMontoRetiros = (chartRetiros as any[]).reduce((acc, curr) => acc + (curr.Total || 0), 0);
+        const totalCantRetiros = (chartRetiros as any[]).reduce((acc, curr) => acc + (curr.Cantidad || 0), 0);
+
+        const totalMontoDevols = (chartDevoluciones as any[]).reduce((acc, curr) => acc + (curr.Total || 0), 0);
+        const totalCantDevols = (chartDevoluciones as any[]).reduce((acc, curr) => acc + (curr.Cantidad || 0), 0);
+
         return NextResponse.json({
             metrics: {
-                ventas: sales[0] || { TotalVentas: 0, Operaciones: 0, TicketPromedio: 0 },
-                aperturas: openings[0]?.TotalAperturas || 0,
-                cancelaciones: cancelaciones[0] || { MontoCancelaciones: 0, CantidadCancelaciones: 0 },
-                retiros: withdrawals[0] || { MontoRetiros: 0, CantidadRetiros: 0, PromedioRetiro: 0 },
-                devoluciones: returns[0] || { MontoDevoluciones: 0, CantidadDevoluciones: 0 }
+                ventas: {
+                    TotalVentas: totalVentas,
+                    Operaciones: totalOps,
+                    TicketPromedio: totalOps > 0 ? totalVentas / totalOps : 0
+                },
+                aperturas: totalAperturas,
+                cancelaciones: {
+                    MontoCancelaciones: totalMontoCancel,
+                    CantidadCancelaciones: totalCantCancel,
+                    PromedioCancelacion: totalCantCancel > 0 ? totalMontoCancel / totalCantCancel : 0
+                },
+                retiros: {
+                    MontoRetiros: totalMontoRetiros,
+                    CantidadRetiros: totalCantRetiros,
+                    PromedioRetiro: totalCantRetiros > 0 ? totalMontoRetiros / totalCantRetiros : 0
+                },
+                devoluciones: {
+                    MontoDevoluciones: totalMontoDevols,
+                    CantidadDevoluciones: totalCantDevols,
+                    Promedio: totalCantDevols > 0 ? totalMontoDevols / totalCantDevols : 0
+                }
             },
             data: {
                 ventas: chartVentas,
-                ventas_depto: chartVentasDepto,
-                ventas_familia: chartVentasFamilia,
                 aperturas: chartAperturas,
                 cancelaciones: chartCancelaciones,
                 retiros: chartRetiros,

@@ -23,7 +23,7 @@ const sqlConfig: sql.config = {
         encrypt: false, // Set to false for local dev with IP addresses to avoid TLS SNI errors
         trustServerCertificate: true
     },
-    requestTimeout: 20000 // 20 seconds timeout for queries
+    requestTimeout: 60000 // 60 seconds timeout for queries
 };
 
 let pool: sql.ConnectionPool | null = null;

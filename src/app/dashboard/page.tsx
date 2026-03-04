@@ -72,6 +72,11 @@ export default function DashboardPage() {
     const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
     const [selectedStoreName, setSelectedStoreName] = useState<string | null>(null);
 
+    // On-demand chart data for Deptos / Familias
+    const [ventasDepto, setVentasDepto] = useState<any[]>([]);
+    const [ventasFamilia, setVentasFamilia] = useState<any[]>([]);
+    const [loadingDesglose, setLoadingDesglose] = useState(false);
+
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isMaximized, setIsMaximized] = useState(false);
@@ -240,10 +245,33 @@ export default function DashboardPage() {
             const res = await fetch(url);
             const json = await res.json();
             setData(json);
+            // Reset on-demand charts so they reload with the new date range
+            setVentasDepto([]);
+            setVentasFamilia([]);
+            // If we were on a desglose tab, refresh immediately
+            if (selectedVentasTab === 'departamento') fetchVentasDesglose('departamento');
+            else if (selectedVentasTab === 'familia') fetchVentasDesglose('familia');
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Fetch desglose data on-demand when user switches to Deptos or Familias tab
+    const fetchVentasDesglose = async (tipo: 'departamento' | 'familia') => {
+        setLoadingDesglose(true);
+        try {
+            let url = `/api/dashboard/ventas-desglose?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&tipo=${tipo}`;
+            if (selectedStoreId) url += `&storeId=${selectedStoreId}`;
+            const res = await fetch(url);
+            const json = await res.json();
+            if (tipo === 'departamento') setVentasDepto(json.data || []);
+            else setVentasFamilia(json.data || []);
+        } catch (err) {
+            console.error('Error fetching ventas desglose:', err);
+        } finally {
+            setLoadingDesglose(false);
         }
     };
 
@@ -740,7 +768,7 @@ export default function DashboardPage() {
     };
 
     const chartData = selectedMetric === 'ventas'
-        ? (selectedVentasTab === 'departamento' ? data?.data?.ventas_depto : (selectedVentasTab === 'familia' ? data?.data?.ventas_familia : data?.data?.ventas)) || []
+        ? (selectedVentasTab === 'departamento' ? ventasDepto : (selectedVentasTab === 'familia' ? ventasFamilia : data?.data?.ventas)) || []
         : data?.data?.[selectedMetric] || [];
 
     const listData = data?.data?.[selectedMetric] || [];
@@ -849,6 +877,58 @@ export default function DashboardPage() {
                         <FileDown size={18} className="group-hover:scale-110 transition-transform" />
                         <span>Exportar PDF</span>
                     </button>
+
+                    {/* Quick Date Period Buttons */}
+                    <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-none p-0.5 print:hidden">
+                        {(() => {
+                            const mtyDate = (offset = 0) => {
+                                const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
+                                d.setDate(d.getDate() + offset);
+                                return d.toLocaleDateString('en-CA');
+                            };
+                            const mtyMonth = (monthOffset = 0) => {
+                                const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
+                                d.setMonth(d.getMonth() + monthOffset);
+                                return d;
+                            };
+                            const today = mtyDate();
+                            const periods = [
+                                { label: 'Hoy', start: today, end: today },
+                                { label: 'Ayer', start: mtyDate(-1), end: mtyDate(-1) },
+                                {
+                                    label: 'Semana',
+                                    start: (() => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' })); d.setDate(d.getDate() - d.getDay()); return d.toLocaleDateString('en-CA'); })(),
+                                    end: today
+                                },
+                                { label: '7 días', start: mtyDate(-6), end: today },
+                                {
+                                    label: 'Este mes',
+                                    start: (() => { const d = mtyMonth(0); d.setDate(1); return d.toLocaleDateString('en-CA'); })(),
+                                    end: today
+                                },
+                                {
+                                    label: 'Mes ant.',
+                                    start: (() => { const d = mtyMonth(-1); d.setDate(1); return d.toLocaleDateString('en-CA'); })(),
+                                    end: (() => { const d = mtyMonth(0); d.setDate(0); return d.toLocaleDateString('en-CA'); })()
+                                },
+                            ];
+                            return periods.map(({ label, start, end }) => {
+                                const isActive = fechaInicio === start && fechaFin === end;
+                                return (
+                                    <button
+                                        key={label}
+                                        onClick={() => { setFechaInicio(start); setFechaFin(end); }}
+                                        className={cn(
+                                            'px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap',
+                                            isActive ? 'bg-[#4050B4] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-white'
+                                        )}
+                                    >
+                                        {label}
+                                    </button>
+                                );
+                            });
+                        })()}
+                    </div>
 
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-none px-3 py-1.5 focus-within:ring-2 focus-within:ring-[#4050B4]/20 transition-all">
                         <Calendar size={16} className="text-[#4050B4]" />
@@ -1114,7 +1194,10 @@ export default function DashboardPage() {
                                             Sucursales
                                         </button>
                                         <button
-                                            onClick={() => setSelectedVentasTab('departamento')}
+                                            onClick={() => {
+                                                setSelectedVentasTab('departamento');
+                                                fetchVentasDesglose('departamento');
+                                            }}
                                             className={cn(
                                                 "px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-all",
                                                 selectedVentasTab === 'departamento' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
@@ -1123,7 +1206,10 @@ export default function DashboardPage() {
                                             Deptos
                                         </button>
                                         <button
-                                            onClick={() => setSelectedVentasTab('familia')}
+                                            onClick={() => {
+                                                setSelectedVentasTab('familia');
+                                                fetchVentasDesglose('familia');
+                                            }}
                                             className={cn(
                                                 "px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-all",
                                                 selectedVentasTab === 'familia' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
@@ -1240,9 +1326,10 @@ export default function DashboardPage() {
 
                     {!isChartMinimized && (
                         <div className="h-[400px] w-full animate-in fade-in slide-in-from-top-2 duration-300">
-                            {loading ? (
-                                <div className="h-full flex items-center justify-center">
+                            {(loading || loadingDesglose) ? (
+                                <div className="h-full flex flex-col items-center justify-center gap-2">
                                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4050B4]"></div>
+                                    {loadingDesglose && <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Cargando desglose...</p>}
                                 </div>
                             ) : (
                                 <ResponsiveContainer width="100%" height="100%">
