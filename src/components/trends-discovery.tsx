@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
     TrendingUp, TrendingDown, AlertCircle, Clock, Store, ChevronUp,
     UserCheck, ShieldCheck, X, FileText, Download, Receipt,
@@ -18,6 +18,10 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
 
     // Modal State
     const [selectedAudit, setSelectedAudit] = useState<any>(null);
+
+    const handleCloseAudit = useCallback(() => {
+        setSelectedAudit(null);
+    }, []);
 
     useEffect(() => {
         async function fetchTrends() {
@@ -40,6 +44,9 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
         return d.toISOString().split('T')[0];
     };
     const getToday = () => new Date().toISOString().split('T')[0];
+
+    const sevenDaysAgo = useMemo(() => getSevenDaysAgo(), []);
+    const today = useMemo(() => getToday(), []);
 
     if (loading) return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse mt-4">
@@ -262,12 +269,12 @@ export function TrendsDiscovery({ idTienda }: { idTienda?: string }) {
             {/* Cancellation Detail Modal */}
             <CancellationDetailModal
                 isOpen={!!selectedAudit}
-                onClose={() => setSelectedAudit(null)}
+                onClose={handleCloseAudit}
                 idUsuario={selectedAudit?.IdUsuario}
                 idTienda={selectedAudit?.IdTienda}
                 role={cancelRole}
-                fechaInicio={getSevenDaysAgo()}
-                fechaFin={getToday()}
+                fechaInicio={sevenDaysAgo}
+                fechaFin={today}
                 storeName={selectedAudit?.tiendaName}
                 userName={selectedAudit?.name}
             />

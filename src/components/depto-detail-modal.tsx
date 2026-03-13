@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import {
     X, Search, FileSpreadsheet, Minimize2,
     Maximize2, User, Package, ChevronUp, ChevronDown
@@ -21,7 +21,7 @@ interface DeptoDetailModalProps {
     storeName?: string;
 }
 
-export function DeptoDetailModal({
+function DeptoDetailModalComponent({
     isOpen,
     onClose,
     idDepto,
@@ -33,7 +33,8 @@ export function DeptoDetailModal({
     storeName
 }: DeptoDetailModalProps) {
     const [details, setDetails] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(isOpen);
+    const prevParams = useRef<string>('');
     const [isMaximized, setIsMaximized] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({ key: 'Total', direction: 'desc' });
@@ -94,14 +95,20 @@ export function DeptoDetailModal({
     };
 
     useEffect(() => {
+        const currentParams = JSON.stringify({ isOpen, idDepto, familia, idTienda, fechaInicio, fechaFin });
+
         if (isOpen) {
-            setLoading(true);
-            fetchDetails();
+            if (prevParams.current !== currentParams) {
+                setLoading(true);
+                fetchDetails();
+                prevParams.current = currentParams;
+            }
         } else {
             setDetails([]);
             setSearchTerm('');
             setIsMaximized(false);
             setLoading(false);
+            prevParams.current = '';
         }
     }, [isOpen, idDepto, familia, idTienda, fechaInicio, fechaFin]);
 
@@ -238,7 +245,7 @@ export function DeptoDetailModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[12000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[12000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <div
                 className={cn(
                     "bg-white shadow-2xl overflow-hidden flex flex-col transition-[width,height,transform] duration-300 border border-slate-200 rounded-none",
@@ -308,7 +315,7 @@ export function DeptoDetailModal({
 
                 {/* Content */}
                 <div className="flex-1 overflow-auto bg-white relative">
-                    {loading ? (
+                    {(loading || (isOpen && details.length === 0)) ? (
                         <LoadingScreen message={`Consultando detalle de ${familia ? 'familia' : idDepto ? 'departamento' : 'artículos'}...`} />
                     ) : (
                         <div className="min-w-full inline-block align-middle">
@@ -442,3 +449,4 @@ export function DeptoDetailModal({
         </div>
     );
 }
+export const DeptoDetailModal = memo(DeptoDetailModalComponent);

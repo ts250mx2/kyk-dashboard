@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import {
     X, AlertCircle, Search, FileSpreadsheet, Minimize2,
     Maximize2, User, FileDown, RotateCcw
@@ -21,7 +21,7 @@ interface CancellationDetailModalProps {
     userName?: string;
 }
 
-export function CancellationDetailModal({
+function CancellationDetailModalComponent({
     isOpen,
     onClose,
     idTienda,
@@ -33,7 +33,8 @@ export function CancellationDetailModal({
     userName
 }: CancellationDetailModalProps) {
     const [details, setDetails] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(isOpen);
+    const prevParams = useRef<string>('');
     const [isMaximized, setIsMaximized] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({ key: 'FechaCancelacion', direction: 'desc' });
@@ -94,14 +95,24 @@ export function CancellationDetailModal({
     };
 
     useEffect(() => {
+        const currentParams = JSON.stringify({ isOpen, idTienda, idUsuario, role, fechaInicio, fechaFin });
+
         if (isOpen) {
-            setLoading(true);
-            fetchDetails();
+            // Only fetch if parameters actually changed
+            if (prevParams.current !== currentParams) {
+                setLoading(true);
+                fetchDetails();
+                prevParams.current = currentParams;
+            }
         } else {
-            setDetails([]);
-            setSearchTerm('');
-            setIsMaximized(false);
-            setLoading(false);
+            // Reset when closed
+            if (prevParams.current !== '') {
+                setDetails([]);
+                setSearchTerm('');
+                setIsMaximized(false);
+                setLoading(false);
+                prevParams.current = '';
+            }
         }
     }, [isOpen, idTienda, idUsuario, role, fechaInicio, fechaFin]);
 
@@ -115,6 +126,8 @@ export function CancellationDetailModal({
 
             const res = await fetch(url);
             const json = await res.json();
+
+            // Batch update to prevent intermediate renders
             setDetails(Array.isArray(json) ? json : []);
         } catch (error) {
             console.error('Error fetching cancellation details:', error);
@@ -190,7 +203,7 @@ export function CancellationDetailModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[11000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[11000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <div
                 className={cn(
                     "bg-white shadow-2xl overflow-hidden flex flex-col transition-[width,height,transform] duration-300 border border-slate-200",
@@ -256,8 +269,8 @@ export function CancellationDetailModal({
 
                 {/* Content */}
                 <div className="flex-1 overflow-auto bg-white relative">
-                    {loading ? (
-                        <LoadingScreen message="Obteniendo cancelaciones..." />
+                    {(loading || (isOpen && details.length === 0)) ? (
+                        <LoadingScreen message="Consultando detalle de cancelaciones..." />
                     ) : (
                         <div className="min-w-full inline-block align-middle">
                             <table className="min-w-full border-collapse">
@@ -362,3 +375,4 @@ export function CancellationDetailModal({
         </div>
     );
 }
+export const CancellationDetailModal = memo(CancellationDetailModalComponent);

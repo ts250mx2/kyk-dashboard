@@ -11,7 +11,7 @@ interface LoadingScreenProps {
 export function LoadingScreen({ message = "Sincronizando datos...", className }: LoadingScreenProps) {
     return (
         <div className={cn(
-            "flex flex-col items-center justify-center p-12 min-h-[300px] w-full animate-in fade-in duration-150",
+            "flex flex-col items-center justify-center p-12 min-h-[300px] w-full",
             className
         )}>
             <div className="relative mb-6">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
     TrendingUp,
     ShoppingCart,
@@ -198,6 +198,17 @@ export default function DashboardPage() {
     useEffect(() => { if (isSalesPositionLoaded) localStorage.setItem('kyk_sales_modal_position', JSON.stringify(salesModalPosition)); }, [salesModalPosition, isSalesPositionLoaded]);
     useEffect(() => { if (isOpeningPositionLoaded) localStorage.setItem('kyk_opening_modal_position', JSON.stringify(openingModalPosition)); }, [openingModalPosition, isOpeningPositionLoaded]);
     useEffect(() => { if (isWithdrawalPositionLoaded) localStorage.setItem('kyk_withdrawal_modal_position', JSON.stringify(withdrawalModalPosition)); }, [withdrawalModalPosition, isWithdrawalPositionLoaded]);
+
+    const handleCloseCancellation = useCallback(() => {
+        setIsCancellationModalOpen(false);
+    }, []);
+
+    const handleCloseDepto = useCallback(() => {
+        setIsDeptoModalOpen(false);
+        setSelectedDeptoId(undefined);
+        setSelectedDeptoName(undefined);
+        setSelectedFamilia(undefined);
+    }, []);
     useEffect(() => { if (isReturnPositionLoaded) localStorage.setItem('kyk_return_modal_position', JSON.stringify(returnModalPosition)); }, [returnModalPosition, isReturnPositionLoaded]);
     useEffect(() => { if (isItemsPositionLoaded) localStorage.setItem('kyk_items_modal_position', JSON.stringify(itemsModalPosition)); }, [itemsModalPosition, isItemsPositionLoaded]);
 
@@ -222,9 +233,13 @@ export default function DashboardPage() {
             if (!dragRef.current) return;
             const deltaX = moveEvent.clientX - dragRef.current.startX;
             const deltaY = moveEvent.clientY - dragRef.current.startY;
-            setPos({
-                x: dragRef.current.initialX + deltaX,
-                y: dragRef.current.initialY + deltaY
+
+            // Use requestAnimationFrame for smoother updates and less reactor stress
+            requestAnimationFrame(() => {
+                setPos({
+                    x: dragRef.current!.initialX + deltaX,
+                    y: dragRef.current!.initialY + deltaY
+                });
             });
         };
 
@@ -323,7 +338,7 @@ export default function DashboardPage() {
         else setSubMetric('Total');
     }, [selectedMetric]);
 
-    const handleStoreClick = async (store: any) => {
+    const handleStoreClick = useCallback(async (store: any) => {
         if (selectedMetric !== 'ventas' && selectedMetric !== 'aperturas' && selectedMetric !== 'cancelaciones' && selectedMetric !== 'retiros' && selectedMetric !== 'devoluciones') return;
 
         setSelectedStoreData(store);
@@ -388,7 +403,7 @@ export default function DashboardPage() {
                 setLoadingReturns(false);
             }
         }
-    };
+    }, [selectedMetric, fechaInicio, fechaFin]);
 
     const handleReturnRowClick = async (item: any) => {
         setSelectedReturn(item);
@@ -855,7 +870,7 @@ export default function DashboardPage() {
 
     return (
         <div className={cn(
-            "space-y-4 animate-in fade-in duration-500",
+            "space-y-4",
             isDashboardMaximized && "fixed inset-0 z-[100] bg-slate-50 overflow-y-auto p-4 sm:p-8 md:p-10"
         )}>
             {/* Trends Ticker Marquee */}
@@ -2272,7 +2287,7 @@ export default function DashboardPage() {
             {/* Cancellation Drill-down Modal */}
             <CancellationDetailModal
                 isOpen={isCancellationModalOpen}
-                onClose={() => setIsCancellationModalOpen(false)}
+                onClose={handleCloseCancellation}
                 idTienda={selectedStoreData?.IdTienda}
                 fechaInicio={fechaInicio}
                 fechaFin={fechaFin}
@@ -2282,12 +2297,7 @@ export default function DashboardPage() {
             {/* Depto Detail Modal */}
             <DeptoDetailModal
                 isOpen={isDeptoModalOpen}
-                onClose={() => {
-                    setIsDeptoModalOpen(false);
-                    setSelectedDeptoId(undefined);
-                    setSelectedDeptoName(undefined);
-                    setSelectedFamilia(undefined);
-                }}
+                onClose={handleCloseDepto}
                 idDepto={selectedDeptoId}
                 deptoName={selectedDeptoName}
                 familia={selectedFamilia}
