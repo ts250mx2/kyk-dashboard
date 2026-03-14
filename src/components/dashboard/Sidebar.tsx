@@ -49,6 +49,7 @@ const menuSections: MenuSection[] = [
         emoji: "🛒",
         items: [
             { name: "Ordenes de Compra", emoji: "📝", href: "/dashboard/purchases/orders" },
+            { name: "Distribuciones Cedis", emoji: "🏭", href: "/dashboard/purchases/distributions" },
             { name: "Precios", emoji: "🏷️", href: "/dashboard/purchases/prices" },
             { name: "Reportes de Compras", emoji: "📈", href: "/dashboard/purchases/reports" },
             { name: "Rutas", emoji: "🛣️", href: "/dashboard/purchases/routes" },
@@ -94,6 +95,18 @@ export function Sidebar({
         }))
     }
 
+    // Lock body scroll when mobile menu is open
+    React.useEffect(() => {
+        if (isMobileOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [isMobileOpen]);
+
     const filteredSections = useMemo(() => {
         return menuSections.map(section => ({
             ...section,
@@ -109,21 +122,21 @@ export function Sidebar({
             {/* Mobile Nav Button trigger would typically be in the Header now */}
             <button
                 onClick={() => setIsMobileOpen(!isMobileOpen)}
-                className="lg:hidden fixed top-3 left-4 z-[60] p-2 bg-[#4050B4] text-white rounded-none shadow-lg"
+                className="lg:hidden fixed top-3 left-4 z-[70] p-2 bg-[#4050B4] text-white rounded-none shadow-lg"
             >
                 {isMobileOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
 
             {isMobileOpen && (
                 <div
-                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 lg:hidden"
+                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[55] lg:hidden"
                     onClick={() => setIsMobileOpen(false)}
                 />
             )}
 
             {/* Sidebar Container */}
             <aside className={cn(
-                "fixed left-0 top-16 h-[calc(100vh-4rem)] transition-all duration-300 z-40 flex flex-col shadow-2xl overflow-hidden",
+                "fixed left-0 top-16 h-[calc(100vh-4rem)] transition-all duration-300 z-[60] flex flex-col shadow-2xl overflow-hidden",
                 "bg-[#4050B4] text-white",
                 isCollapsed ? "w-[80px]" : "w-72",
                 isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"

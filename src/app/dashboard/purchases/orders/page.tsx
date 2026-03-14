@@ -18,7 +18,8 @@ import {
     Minimize2,
     Columns,
     Rows,
-    Clock
+    Clock,
+    Receipt
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LoadingScreen } from '@/components/ui/loading-screen';
@@ -107,6 +108,7 @@ interface DistributionItem {
     FolioEntrada: string | null;
     FechaEntrada: string | null;
     UsuarioEntrada: string | null;
+    UUID?: string | null;
 }
 
 interface DistributionDetailItem {
@@ -993,7 +995,7 @@ export default function PurchaseOrdersPage() {
                                                             {/* Distribution Card */}
                                                             <div className={cn(
                                                                 "bg-white border-l-4 p-4 shadow-sm space-y-3 relative group overflow-hidden transition-all",
-                                                                isPendingDist ? "border-rose-500 bg-rose-50/10" : "border-amber-400"
+                                                                isPendingDist ? "border-rose-500 bg-rose-50/10" : (dist.UUID ? "border-purple-500" : "border-amber-400")
                                                             )}>
                                                                 {isPendingDist && (
                                                                     <div className="absolute top-0 right-0 bg-rose-500 text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-tighter animate-pulse flex items-center gap-1 z-30">
@@ -1001,26 +1003,46 @@ export default function PurchaseOrdersPage() {
                                                                         Distribución Pendiente
                                                                     </div>
                                                                 )}
+                                                                {!isPendingDist && dist.UUID && (
+                                                                    <div className="absolute top-0 right-0 bg-purple-600 text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 z-30 shadow-sm">
+                                                                        <Receipt size={8} />
+                                                                        Factura
+                                                                    </div>
+                                                                )}
                                                                 <div className="grid grid-cols-2 gap-y-3 gap-x-4 relative z-10">
                                                                     <KanbanItem 
                                                                         label="Tienda Destino" 
                                                                         value={dist.TiendaDestino} 
                                                                         colSpan={2} 
-                                                                        color={isPendingDist ? "text-rose-700" : "text-amber-700"} 
+                                                                        color={isPendingDist ? "text-rose-700" : (dist.UUID ? "text-purple-700" : "text-amber-700")} 
                                                                     />
                                                                     <KanbanItem label="Artículos" value={dist.CantidadArticulos} />
                                                                     <KanbanItem 
                                                                         label="Folio Salida" 
                                                                         value={dist.FolioSalida || 'PENDIENTE'} 
                                                                         highlight 
-                                                                        color={isPendingDist ? "text-rose-600 font-black italic" : "text-amber-600"} 
+                                                                        color={isPendingDist ? "text-rose-600 font-black italic" : (dist.UUID ? "text-purple-600" : "text-amber-600")} 
                                                                     />
                                                                     <KanbanItem label="Fecha Salida" value={dist.FechaSalida ? formatDateTime(dist.FechaSalida) : '---'} textSize="text-[11px]" />
                                                                     <KanbanItem label="Usuario" value={dist.UsuarioSalida || '---'} />
+                                                                    {dist.UUID && (
+                                                                        <div className="col-span-2 mt-1">
+                                                                            <KanbanItem 
+                                                                                label="UUID" 
+                                                                                value={dist.UUID} 
+                                                                                colSpan={2}
+                                                                                textSize="text-[9px]"
+                                                                                color="text-purple-600"
+                                                                            />
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                                 <button 
                                                                     onClick={() => fetchDistDetails(dist)}
-                                                                    className="w-full mt-2 py-1.5 bg-slate-100 hover:bg-amber-500 hover:text-white text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 group/btn"
+                                                                    className={cn(
+                                                                        "w-full mt-2 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 group/btn",
+                                                                        dist.UUID ? "bg-purple-50 hover:bg-purple-600 hover:text-white text-purple-700" : "bg-slate-100 hover:bg-amber-500 hover:text-white text-slate-700"
+                                                                    )}
                                                                 >
                                                                     Ver Detalle
                                                                     <ExternalLink size={10} className="group-hover/btn:translate-x-0.5 transition-transform" />
