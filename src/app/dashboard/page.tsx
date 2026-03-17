@@ -815,12 +815,12 @@ export default function DashboardPage() {
             case 'ventas': return {
                 title: mainTitle,
                 sub: selectedStoreName ? `Detalle de ${selectedStoreName}` : (selectedVentasTab === 'familia' ? 'Distribución del ingreso por familias de artículos' : 'Distribución del ingreso por tienda'),
-                color: '#4050B4'
+                color: '#10b981'
             };
-            case 'aperturas': return { title: 'Aperturas por Sucursal', sub: 'Cantidad de aperturas por tienda', color: '#f59e0b' };
+            case 'aperturas': return { title: 'Aperturas por Sucursal', sub: 'Cantidad de aperturas por tienda', color: '#3b82f6' };
             case 'cancelaciones': return { title: 'Cancelaciones por Sucursal', sub: 'Monto de cancelaciones por tienda', color: '#e11d48' };
-            case 'retiros': return { title: 'Retiros por Sucursal', sub: 'Monto de retiros por tienda', color: '#10b981' };
-            case 'devoluciones': return { title: 'Devoluciones por Sucursal', sub: 'Monto de devoluciones por tienda', color: '#6366F1' };
+            case 'retiros': return { title: 'Retiros por Sucursal', sub: 'Monto de retiros por tienda', color: '#f59e0b' };
+            case 'devoluciones': return { title: 'Devoluciones por Sucursal', sub: 'Monto de devoluciones por tienda', color: '#e11d48' };
         }
     };
 
@@ -1019,11 +1019,11 @@ export default function DashboardPage() {
                     onClick={() => setSelectedMetric('ventas')}
                     className={cn(
                         "bg-white p-4 rounded-none border shadow-sm hover:shadow-md transition-all relative overflow-hidden group text-left print-visible",
-                        selectedMetric === 'ventas' ? "border-[#4050B4] ring-2 ring-[#4050B4]/10" : "border-slate-100"
+                        selectedMetric === 'ventas' ? "border-emerald-500 ring-2 ring-emerald-500/10" : "border-slate-100"
                     )}
                 >
                     <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <TrendingUp size={80} className="text-[#4050B4]" />
+                        <TrendingUp size={80} className="text-emerald-500" />
                     </div>
                     <div className="flex flex-col h-full justify-between">
                         <div>
@@ -1033,7 +1033,7 @@ export default function DashboardPage() {
                         <div className="flex flex-col gap-2 border-t border-slate-50 pt-4 mt-2">
                             <div className="flex justify-between items-center text-xs font-bold">
                                 <span className="text-slate-500">Operaciones</span>
-                                <span className="text-[#4050B4] px-2 py-0.5 bg-[#4050B4]/5 rounded-none">{metrics.ventas.Operaciones}</span>
+                                <span className="text-emerald-500 px-2 py-0.5 bg-emerald-500/5 rounded-none">{metrics.ventas.Operaciones}</span>
                             </div>
                             <div className="flex justify-between items-center text-xs font-bold">
                                 <span className="text-slate-500">Ticket Promedio</span>
@@ -1048,11 +1048,11 @@ export default function DashboardPage() {
                     onClick={() => setSelectedMetric('aperturas')}
                     className={cn(
                         "bg-white p-4 rounded-none border shadow-sm hover:shadow-md transition-all relative overflow-hidden group text-left print-visible",
-                        selectedMetric === 'aperturas' ? "border-amber-500 ring-2 ring-amber-500/10" : "border-slate-100"
+                        selectedMetric === 'aperturas' ? "border-blue-500 ring-2 ring-blue-500/10" : "border-slate-100"
                     )}
                 >
                     <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Store size={80} className="text-amber-500" />
+                        <Store size={80} className="text-blue-500" />
                     </div>
                     <div className="flex flex-col h-full justify-between">
                         <div>
@@ -1060,7 +1060,7 @@ export default function DashboardPage() {
                             <h2 className="text-2xl font-black text-slate-900 mb-2">{metrics.aperturas}</h2>
                         </div>
                         <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-50 p-2 rounded-none mt-4">
-                            <ArrowUpRight size={14} className="text-amber-500" />
+                            <ArrowUpRight size={14} className="text-blue-500" />
                             <span>Registros activos en periodo</span>
                         </div>
                     </div>
@@ -1100,11 +1100,11 @@ export default function DashboardPage() {
                     onClick={() => setSelectedMetric('retiros')}
                     className={cn(
                         "bg-white p-4 rounded-none border shadow-sm hover:shadow-md transition-all relative overflow-hidden group text-left print-visible",
-                        selectedMetric === 'retiros' ? "border-emerald-500 ring-2 ring-emerald-500/10" : "border-slate-100"
+                        selectedMetric === 'retiros' ? "border-amber-500 ring-2 ring-amber-500/10" : "border-slate-100"
                     )}
                 >
                     <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Wallet size={80} className="text-emerald-500" />
+                        <Wallet size={80} className="text-amber-500" />
                     </div>
                     <div className="flex flex-col h-full justify-between">
                         <div>
@@ -1114,11 +1114,11 @@ export default function DashboardPage() {
                         <div className="flex flex-col gap-2 border-t border-slate-50 pt-4 mt-2">
                             <div className="flex justify-between items-center text-xs font-bold">
                                 <span className="text-slate-500">Operaciones</span>
-                                <span className="text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded-none">{metrics.retiros.CantidadRetiros}</span>
+                                <span className="text-amber-500 px-2 py-0.5 bg-amber-50 rounded-none">{metrics.retiros.CantidadRetiros}</span>
                             </div>
                             <div className="flex justify-between items-center text-xs font-bold">
                                 <span className="text-slate-500">Retiro Promedio</span>
-                                <span className="text-emerald-600">{formatCurrency(metrics.retiros.PromedioRetiro)}</span>
+                                <span className="text-amber-600">{formatCurrency(metrics.retiros.PromedioRetiro)}</span>
                             </div>
                         </div>
                     </div>
@@ -1129,21 +1129,21 @@ export default function DashboardPage() {
                     onClick={() => setSelectedMetric('devoluciones')}
                     className={cn(
                         "bg-white p-4 rounded-none border shadow-sm hover:shadow-md transition-all relative overflow-hidden group text-left print-visible",
-                        selectedMetric === 'devoluciones' ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-slate-100"
+                        selectedMetric === 'devoluciones' ? "border-rose-500 ring-2 ring-rose-500/10" : "border-slate-100"
                     )}
                 >
                     <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <RotateCcw size={80} className="text-indigo-500" />
+                        <RotateCcw size={80} className="text-rose-500" />
                     </div>
                     <div className="flex flex-col h-full justify-between">
                         <div>
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Devoluciones</span>
-                            <h2 className="text-2xl font-black text-indigo-600 mb-2">{formatCurrency(metrics.devoluciones.MontoDevoluciones)}</h2>
+                            <h2 className="text-2xl font-black text-rose-600 mb-2">{formatCurrency(metrics.devoluciones.MontoDevoluciones)}</h2>
                         </div>
                         <div className="flex flex-col gap-2 border-t border-slate-50 pt-4 mt-2">
                             <div className="flex justify-between items-center text-xs font-bold">
                                 <span className="text-slate-500">Cantidad</span>
-                                <span className="text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded-none">{metrics.devoluciones.CantidadDevoluciones}</span>
+                                <span className="text-rose-600 px-2 py-0.5 bg-rose-50 rounded-none">{metrics.devoluciones.CantidadDevoluciones}</span>
                             </div>
                             <div className="flex justify-between items-center text-xs font-bold">
                                 <span className="text-slate-500">Estado</span>

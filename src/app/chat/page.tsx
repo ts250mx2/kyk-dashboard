@@ -17,6 +17,7 @@ interface Message {
     suggestedQuestions?: string[];
     timestamp?: number;
     error?: string;
+    ai_model?: string;
 }
 
 const DEFAULT_SUGGESTIONS = [
@@ -98,10 +99,11 @@ export default function ChatFullPage() {
         setLoading(true);
 
         try {
+            const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'gpt-4o' : 'gpt-4o';
             const response = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: finalPrompt }),
+                body: JSON.stringify({ prompt: finalPrompt, model: selectedModel }),
             });
             const data = await response.json();
 
@@ -115,6 +117,7 @@ export default function ChatFullPage() {
                     insight: data.insight,
                     suggestedQuestions: data.suggested_questions,
                     timestamp: Date.now(),
+                    ai_model: data.ai_model,
                 };
                 setMessages((prev) => [...prev, assistantMsg]);
             } else {
@@ -207,7 +210,9 @@ export default function ChatFullPage() {
                                     <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 flex items-center justify-between">
                                         <div className="flex items-center space-x-2">
                                             <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" />
-                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Reporte Analítico Senior</span>
+                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
+                                                Reporte Analítico Senior {message.ai_model && `(${message.ai_model})`}
+                                            </span>
                                         </div>
                                         <div className="flex space-x-1">
                                             <div className="w-1.5 h-1.5 bg-slate-200 rounded-full" />

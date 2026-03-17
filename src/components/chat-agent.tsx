@@ -26,6 +26,7 @@ interface Message {
     suggestedQuestions?: string[];
     timestamp?: number;
     error?: string;
+    ai_model?: string;
 }
 
 const PAGE_SUGGESTIONS: Record<string, string[]> = {
@@ -42,6 +43,48 @@ const PAGE_SUGGESTIONS: Record<string, string[]> = {
         'Analizar tendencia de ventas de los últimos 7 días',
         'Ver distribución de ventas por sucursal',
         '¿Cómo van las aperturas de caja hoy?'
+    ],
+    '/dashboard/sales/operations': [
+        '¿Cómo van las ventas de hoy por sucursal?',
+        'Comparar ventas de esta semana vs semana pasada',
+        '¿Cuál es el producto más vendido hoy?',
+        'Listar tickets con cancelaciones de hoy',
+        'Ticket promedio por tienda hoy'
+    ],
+    '/dashboard/sales/heatmap': [
+        '¿Cuáles son las horas de mayor tráfico hoy?',
+        '¿Qué día de la semana tiene mejores ventas promedio?',
+        'Ver mapa de calor de ventas por hora',
+        'Análisis de horas pico del último mes',
+        'Días con mayor volumen de transacciones'
+    ],
+    '/dashboard/purchases/dashboard': [
+        '¿Cuál es el total de compras de este mes?',
+        '¿Qué proveedor tiene más pedidos pendientes?',
+        'Ver desglose de recibos de hoy',
+        'Comparar compras vs devoluciones este mes',
+        'Top 10 proveedores por volumen de compra'
+    ],
+    '/dashboard/purchases/orders': [
+        'Listar órdenes de compra pendientes de entrega',
+        '¿Cuáles son los próximos arribos programados?',
+        'Buscar órdenes de compra de un proveedor específico',
+        'Estatus de órdenes de compra del mes',
+        'Órdenes de compra con retraso en entrega'
+    ],
+    '/dashboard/purchases/distributions': [
+        '¿Cómo va la distribución de mercancía hoy?',
+        'Ver estatus de envíos a sucursales',
+        'Listar transferencias de salida urgentes',
+        'Resumen de logística de distribución hoy',
+        'Eficiencia de surtido por almacén'
+    ],
+    '/dashboard/purchases/routes': [
+        'Ver eficiencia de rutas de entrega de hoy',
+        '¿Qué rutas tienen más retrasos programados?',
+        'Listar entregas por unidad de transporte',
+        'Resumen de entregas completadas hoy',
+        'Rutas críticas para el día de mañana'
     ],
     '/dashboard/system': [
         'Ver log de preguntas recientes',
@@ -158,10 +201,11 @@ export function ChatAgent() {
         setLoading(true);
 
         try {
+            const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'gpt-4o' : 'gpt-4o';
             const response = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: finalPrompt }),
+                body: JSON.stringify({ prompt: finalPrompt, model: selectedModel }),
             });
             const data = await response.json();
 
@@ -175,6 +219,7 @@ export function ChatAgent() {
                     insight: data.insight,
                     suggestedQuestions: data.suggested_questions,
                     timestamp: Date.now(),
+                    ai_model: data.ai_model,
                 };
                 setMessages((prev) => [...prev, assistantMsg]);
             } else {
@@ -301,7 +346,9 @@ export function ChatAgent() {
                                             <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 flex items-center justify-between">
                                                 <div className="flex items-center space-x-2">
                                                     <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" />
-                                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Reporte Analítico Senior</span>
+                                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
+                                                        Reporte Analítico Senior {message.ai_model && `(${message.ai_model})`}
+                                                    </span>
                                                 </div>
                                                 <div className="flex space-x-1">
                                                     <div className="w-1.5 h-1.5 bg-slate-200 rounded-full" />

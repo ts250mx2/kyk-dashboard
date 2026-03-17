@@ -13,6 +13,8 @@ interface CancellationDetailModalProps {
     isOpen: boolean;
     onClose: () => void;
     idTienda?: string;
+    idApertura?: string | number;
+    idCaja?: string | number;
     idUsuario?: string;
     role?: 'cajeros' | 'supervisores';
     fechaInicio: string;
@@ -25,6 +27,8 @@ function CancellationDetailModalComponent({
     isOpen,
     onClose,
     idTienda,
+    idApertura,
+    idCaja,
     idUsuario,
     role,
     fechaInicio,
@@ -95,7 +99,7 @@ function CancellationDetailModalComponent({
     };
 
     useEffect(() => {
-        const currentParams = JSON.stringify({ isOpen, idTienda, idUsuario, role, fechaInicio, fechaFin });
+        const currentParams = JSON.stringify({ isOpen, idTienda, idApertura, idCaja, idUsuario, role, fechaInicio, fechaFin });
 
         if (isOpen) {
             // Only fetch if parameters actually changed
@@ -114,13 +118,15 @@ function CancellationDetailModalComponent({
                 prevParams.current = '';
             }
         }
-    }, [isOpen, idTienda, idUsuario, role, fechaInicio, fechaFin]);
+    }, [isOpen, idTienda, idApertura, idCaja, idUsuario, role, fechaInicio, fechaFin]);
 
     const fetchDetails = async () => {
         setLoading(true);
         try {
             let url = `/api/dashboard/cancellation-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
             if (idTienda) url += `&idTienda=${idTienda}`;
+            if (idApertura) url += `&idApertura=${idApertura}`;
+            if (idCaja) url += `&idCaja=${idCaja}`;
             if (idUsuario) url += `&idUsuario=${idUsuario}`;
             if (role) url += `&role=${role}`;
 
@@ -229,7 +235,7 @@ function CancellationDetailModalComponent({
                         <div>
                             <h3 className="font-black text-sm uppercase tracking-widest leading-none mb-1 text-slate-800">Detalle de Cancelaciones</h3>
                             <p className="text-[10px] font-bold text-slate-400 uppercase">
-                                {storeName || 'Todas las Tiendas'} {userName ? `• ${role === 'cajeros' ? 'Cajero' : 'Supervisor'}: ${userName}` : ''} • {fechaInicio} a {fechaFin}
+                                {storeName || 'Todas las Tiendas'} {idCaja ? `• CAJA ${idCaja}` : ''} {idApertura ? `• Z ${idApertura}` : ''} {userName ? `• ${role === 'cajeros' ? 'Cajero' : 'Supervisor'}: ${userName}` : ''} • {fechaInicio} a {fechaFin}
                             </p>
                         </div>
                     </div>

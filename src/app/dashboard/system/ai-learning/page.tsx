@@ -354,6 +354,53 @@ export default function AILearningPage() {
                 </div>
             </div>
 
+            {/* Model Selection */}
+            <div className="bg-white border-2 border-slate-100 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-indigo-50 flex items-center justify-center text-2xl">
+                        🤖
+                    </div>
+                    <div>
+                        <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">Modelo de Inteligencia Artificial</h2>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">Selecciona el motor para las consultas del agente</p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-slate-50 p-1 border border-slate-200">
+                    {[
+                        { id: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', icon: '⚡' },
+                        { id: 'claude-opus-4-6', label: 'Claude-Opus-4-6', provider: 'Anthropic', icon: '🧠' }
+                    ].map((model) => {
+                        const isSelected = (typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'gpt-4o' : 'gpt-4o') === model.id;
+                        return (
+                            <button
+                                key={model.id}
+                                onClick={() => {
+                                    localStorage.setItem('ai_query_model', model.id);
+                                    window.dispatchEvent(new Event('storage'));
+                                    window.location.reload();
+                                }}
+                                className={cn(
+                                    "flex items-center gap-3 px-4 py-2.5 transition-all relative group",
+                                    isSelected 
+                                        ? "bg-white text-slate-900 shadow-md ring-1 ring-slate-200" 
+                                        : "text-slate-400 hover:text-slate-600 hover:bg-white/50"
+                                )}
+                            >
+                                <span className="text-lg">{model.icon}</span>
+                                <div className="text-left">
+                                    <div className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">{model.label}</div>
+                                    <div className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">{model.provider}</div>
+                                </div>
+                                {isSelected && (
+                                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-500/50" />
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
 
             {/* Grid */}
             <div className="bg-white rounded-none shadow-sm border border-slate-100 overflow-hidden">

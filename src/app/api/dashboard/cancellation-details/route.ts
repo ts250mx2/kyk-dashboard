@@ -8,6 +8,8 @@ export async function GET(req: Request) {
         const fechaFin = searchParams.get('fechaFin');
         const idUsuario = searchParams.get('idUsuario');
         const idTienda = searchParams.get('idTienda');
+        const idApertura = searchParams.get('idApertura');
+        const idCaja = searchParams.get('idCaja');
         const role = searchParams.get('role');
 
         let dateFilter = '';
@@ -24,6 +26,8 @@ export async function GET(req: Request) {
 
         let filters = [dateFilter];
         if (idTienda) filters.push(`A.IdTienda = ${idTienda}`);
+        if (idApertura) filters.push(`A.IdApertura = ${idApertura}`);
+        if (idCaja) filters.push(`A.IdComputadora = ${idCaja}`);
 
         if (idUsuario) {
             if (role === 'supervisores') {

@@ -48,6 +48,7 @@ const menuSections: MenuSection[] = [
         title: "Compras",
         emoji: "🛒",
         items: [
+            { name: "Dashboard de Compras", emoji: "🛒", href: "/dashboard/purchases/dashboard" },
             { name: "Ordenes de Compra", emoji: "📝", href: "/dashboard/purchases/orders" },
             { name: "Distribuciones Cedis", emoji: "🏭", href: "/dashboard/purchases/distributions" },
             { name: "Precios", emoji: "🏷️", href: "/dashboard/purchases/prices" },
@@ -61,7 +62,10 @@ const menuSections: MenuSection[] = [
         items: [
             { name: "Facturas", emoji: "🧾", href: "/dashboard/sales/invoices" },
             { name: "Cortes de Caja", emoji: "💸", href: "/dashboard/sales/cash-closure" },
+            { name: "Operaciones", emoji: "🏢", href: "/dashboard/sales/operations" },
+            { name: "Mapa de Calor", emoji: "🔥", href: "/dashboard/sales/heatmap" },
             { name: "Reportes de Ventas", emoji: "📊", href: "/dashboard/sales/reports" },
+            { name: "Tendencias de Venta", emoji: "📈", href: "/dashboard/sales/reports/trends" },
         ]
     },
     {
