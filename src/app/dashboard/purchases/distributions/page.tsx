@@ -521,7 +521,7 @@ export default function CedisDistributionsPage() {
                     <div className="w-5 shrink-0" />
                     <div className="w-1/5 shrink-0 flex items-center gap-1 px-2 py-1 bg-emerald-600 text-white">
                         <Package size={10} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Recibo</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Recibo Cedis</span>
                     </div>
                     <div className="w-5 shrink-0" />
                     <div className="flex-1 flex items-center gap-1 px-2 py-1 bg-amber-500 text-white">
@@ -531,7 +531,7 @@ export default function CedisDistributionsPage() {
                     <div className="w-5 shrink-0" />
                     <div className="flex-1 flex items-center gap-1 px-2 py-1 bg-emerald-900 text-white">
                         <ArrowRight size={10} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Entrada</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Entrada Tienda</span>
                     </div>
                 </div>
             </div>
@@ -691,8 +691,8 @@ export default function CedisDistributionsPage() {
                                                          ) : isPendingEntrada ? (
                                                              <KanbanNode
                                                                  label={`SIN ENTRADA · ${row.TiendaDestino}`}
-                                                                 color="border-rose-500/50 border-dashed bg-rose-50"
-                                                                 textColor="text-rose-600"
+                                                                 color={isPendingSalida ? "border-amber-400/50 border-dashed bg-amber-50" : "border-rose-500/50 border-dashed bg-rose-50"}
+                                                                  textColor={isPendingSalida ? "text-amber-600" : "text-rose-600"}
                                                                  isPending
                                                                  isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
                                                                  onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
@@ -781,7 +781,7 @@ export default function CedisDistributionsPage() {
                 <div className="flex items-center gap-3">
                     {[
                         { color: 'bg-[#4050B4]', label: 'Orden' },
-                        { color: 'bg-emerald-500', label: 'Recibo' },
+                        { color: 'bg-emerald-500', label: 'Recibo Cedis' },
                         { color: 'bg-amber-400', label: 'Distribución' },
                         { color: 'bg-purple-500', label: 'Factura' },
                         { color: 'bg-rose-400', label: 'Pendiente' },
