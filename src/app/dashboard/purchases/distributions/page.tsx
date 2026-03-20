@@ -244,11 +244,14 @@ const KanbanDetailItem = memo(({ label, value, colSpan = 1, color = 'text-slate-
 ));
 
 export default function CedisDistributionsPage() {
-    const getEsteMesRange = () => {
+    
+    const getSieteDiasRange = () => {
         const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
         const today = d.toLocaleDateString('en-CA');
-        d.setDate(1);
+        d.setDate(d.getDate() - 6);
         return { start: d.toLocaleDateString('en-CA'), end: today };
+    };
+
     };
 
     const getSemanaRange = () => {
@@ -270,7 +273,7 @@ export default function CedisDistributionsPage() {
         return d;
     };
 
-    const initialRange = getEsteMesRange();
+    const initialRange = getSieteDiasRange();
     const [fechaInicio, setFechaInicio] = useState(initialRange.start);
     const [fechaFin, setFechaFin] = useState(initialRange.end);
     const [rows, setRows] = useState<CedisRow[]>([]);
@@ -279,7 +282,7 @@ export default function CedisDistributionsPage() {
     const [minimizedCards, setMinimizedCards] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState('');
     const [idComputadora, setIdComputadora] = useState<number | null>(null);
-    const [kanbanFilter, setKanbanFilter] = useState<'TODOS' | 'PENDIENTE_RECIBO' | 'PENDIENTE_SALIDA' | 'PENDIENTE_ENTRADA'>('PENDIENTE_ENTRADA');
+    const [kanbanFilter, setKanbanFilter] = useState<'TODOS' | 'PENDIENTE_RECIBO' | 'PENDIENTE_SALIDA' | 'PENDIENTE_ENTRADA'>('TODOS');
     const [visibleCount, setVisibleCount] = useState(50);
 
     // Order Detail Modal
@@ -644,7 +647,7 @@ export default function CedisDistributionsPage() {
                                                 isMinimized={minimizedCards.has(`receipt-${orderId}`)}
                                                 onToggle={() => toggleCard(`receipt-${orderId}`)}
                                             >
-                                                <KanbanDetailItem label="Proveedor" value={firstRow.Proveedor} colSpan={2} />
+                                                
                                                  <KanbanDetailItem label="Usuario" value={firstRow.UsuarioRecibo} colSpan={2} />
                                                 <KanbanDetailItem label="Total Recibo" value={formatCurrency(firstRow.TotalRecibo || 0)} color="text-emerald-600" />
                                                 <KanbanDetailItem label="Arts. Recibo" value={firstRow.Recibidos} />

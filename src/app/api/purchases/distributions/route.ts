@@ -60,7 +60,8 @@ export async function GET(request: Request) {
                        SUM(CASE WHEN Det.Cantidad > 0 THEN 1 ELSE 0 END) AS Ordenados
                 FROM tblDetalleOrdenesCompra Det
                 INNER JOIN tblArticulosSAP Art ON Det.CodigoInterno = Art.CodigoInterno
-                WHERE Det.IdOrdenCompra IN (SELECT IdOrdenCompra FROM tblOrdenesCompra WHERE FechaOrdenCompra >= ? AND FechaOrdenCompra <= CONCAT(?, ' 23:59:59'))
+                INNER JOIN tblOrdenesCompra FilterOC ON Det.IdOrdenCompra = FilterOC.IdOrdenCompra
+                WHERE FilterOC.FechaOrdenCompra >= ? AND FilterOC.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
                 GROUP BY Det.IdOrdenCompra
             ) TotOC ON A.IdOrdenCompra = TotOC.IdOrdenCompra
             LEFT JOIN (
@@ -74,10 +75,11 @@ export async function GET(request: Request) {
             ) TotRec ON A.IdReciboMovil = TotRec.IdReciboMovil AND A.IdTienda = TotRec.IdTienda
             INNER JOIN tblDetalleDistribuciones B ON A.IdOrdenCompra = B.IdOrdenCompra
             INNER JOIN (
-                SELECT IdOrdenCompra, IdTiendaDestino, COUNT(*) as CantidadArticulos
-                FROM tblDetalleDistribuciones
-                WHERE IdOrdenCompra IN (SELECT IdOrdenCompra FROM tblOrdenesCompra WHERE FechaOrdenCompra >= ? AND FechaOrdenCompra <= CONCAT(?, ' 23:59:59'))
-                GROUP BY IdOrdenCompra, IdTiendaDestino
+                SELECT Det.IdOrdenCompra, Det.IdTiendaDestino, COUNT(*) as CantidadArticulos
+                FROM tblDetalleDistribuciones Det
+                INNER JOIN tblOrdenesCompra FilterOC ON Det.IdOrdenCompra = FilterOC.IdOrdenCompra
+                WHERE FilterOC.FechaOrdenCompra >= ? AND FilterOC.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
+                GROUP BY Det.IdOrdenCompra, Det.IdTiendaDestino
             ) ArtCounts ON B.IdOrdenCompra = ArtCounts.IdOrdenCompra AND B.IdTiendaDestino = ArtCounts.IdTiendaDestino
             INNER JOIN tblTiendas TiendaOrigen ON A.IdTienda = TiendaOrigen.IdTienda
             INNER JOIN tblProveedores Prov ON A.IdProveedor = Prov.IdProveedor
@@ -96,14 +98,14 @@ export async function GET(request: Request) {
               AND A.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
               ${storeFilter}
             GROUP BY A.IdOrdenCompra, B.IdTiendaDestino
-            
 
         ) AS Base
         WHERE 1=1
         ${status === 'PENDIENTE_RECIBO' ? "AND FolioReciboMovil IS NULL" : ""}
         ${status === 'PENDIENTE_SALIDA' ? "AND FolioReciboMovil IS NOT NULL AND FolioSalida IS NULL" : ""}
         ${status === 'PENDIENTE_ENTRADA' ? "AND FolioSalida IS NOT NULL AND (FolioEntrada IS NULL OR FolioEntrada = '' OR FolioEntrada = 'ENTRO RECIBO')" : ""}
-     ORDER BY FechaOrdenCompra DESC, TiendaOrigen ASC, TiendaDestino ASC`;
+      ORDER BY FechaOrdenCompra DESC, TiendaOrigen ASC, TiendaDestino ASC
+`;
 
         const results = await mysqlQuery(sql, params);
         return NextResponse.json(results);
