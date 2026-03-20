@@ -180,7 +180,7 @@ const KanbanNode = memo(({
                 )}
 
                 {isMinimized && tag && (
-                    <span className="text-[7px] font-bold text-slate-400 whitespace-nowrap">{tag}</span>
+                    <span className="text-[9px] font-bold text-slate-400 whitespace-nowrap">{tag}</span>
                 )}
                 {!isMinimized && badge && <div className="absolute top-0 right-[-4px]">{badge}</div>}
                 {isMinimized && badge && <div>{badge}</div>}
@@ -677,7 +677,7 @@ export default function CedisDistributionsPage() {
                                                              />
                                                          ) : (
                                                              <KanbanNode
-                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioSalida} â†’ ${row.TiendaDestino}` : row.FolioSalida!}
+                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioSalida || ""} ${row.TiendaDestino}` : row.FolioSalida!}
                                                                  sublabel={`${row.TiendaDestino} · ${row.CantidadArticulos} arts`}
                                                                  tag={formatDateTime(row.FechaSalida)}
                                                                  color={isFactura ? "border-purple-500 bg-purple-50" : "border-amber-500 bg-amber-50"}
@@ -703,7 +703,7 @@ export default function CedisDistributionsPage() {
                                                      <div className="flex-1 px-6">
                                                          {isEntroRecibo ? (
                                                              <KanbanNode
-                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO · ${row.TiendaDestino}` : "Entró por Recibo"}
+                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO ${row.TiendaDestino}` : "Entró por Recibo"}
                                                                  tag={formatDateTime(row.FechaEntrada)}
                                                                  color="border-emerald-600/30 bg-emerald-50/30"
                                                                  textColor="text-emerald-700"
@@ -713,7 +713,7 @@ export default function CedisDistributionsPage() {
                                                              />
                                                          ) : isPendingEntrada ? (
                                                              <KanbanNode
-                                                                 label={daysInTransit && daysInTransit >= 1 ? `⚠️ ${daysInTransit}d TRANSITO · ${row.TiendaDestino}` : `SIN ENTRADA · ${row.TiendaDestino}`}
+                                                                 label={daysInTransit && daysInTransit >= 1 ? `⚠️ ${daysInTransit}d TRANSITO ${row.TiendaDestino}` : `SIN ENTRADA ${row.TiendaDestino}`}
                                                                  color={isPendingSalida ? "border-amber-400/50 border-dashed bg-amber-50" : "border-rose-500/50 border-dashed bg-rose-50"}
                                                                   textColor={isPendingSalida ? "text-amber-600" : "text-rose-600"}
                                                                  isPending
@@ -727,7 +727,7 @@ export default function CedisDistributionsPage() {
                                                               />
                                                          ) : (
                                                              <KanbanNode
-                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioEntrada} · ${row.TiendaDestino}` : row.FolioEntrada!}
+                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioEntrada} ${row.TiendaDestino}` : row.FolioEntrada!}
                                                                  sublabel={`${row.TiendaDestino}${row.UsuarioEntrada ? ` · ${row.UsuarioEntrada}` : ''}`}
                                                                  tag={formatDateTime(row.FechaEntrada)}
                                                                  color="border-emerald-900 bg-emerald-900/10"
@@ -770,7 +770,7 @@ export default function CedisDistributionsPage() {
                         <span className="px-2 py-0.5 bg-white border border-slate-200 text-[#4050B4] text-[10px] font-black">{filteredRows.length}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Ã“rdenes:</span>
+                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Órdenes:</span>
                         <span className="px-2 py-0.5 bg-white border border-slate-200 text-emerald-600 text-[10px] font-black">{Object.keys(orderGroups).length}</span>
                     </div>
                 </div>

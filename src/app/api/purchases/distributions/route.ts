@@ -35,7 +35,7 @@ export async function GET(request: Request) {
                 UsuRecibo.Usuario AS UsuarioRecibo,
                 B.IdTiendaDestino,
                 TiendaDest.Tienda AS TiendaDestino,
-                COUNT(B.CodigoInterno) AS CantidadArticulos,
+                (SELECT COUNT(*) FROM tblDetalleDistribuciones DD WHERE DD.IdOrdenCompra = A.IdOrdenCompra AND DD.IdTiendaDestino = B.IdTiendaDestino) AS CantidadArticulos,
                 CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.IdTransferenciaSalida ELSE C.IdTransferenciaSalida END AS IdTransferenciaSalida,
                 CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FolioSalida ELSE C.FolioSalida END AS FolioSalida,
                 CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE C.FechaSalida END AS FechaSalida,
@@ -57,7 +57,8 @@ export async function GET(request: Request) {
                        SUM(CASE WHEN Det.Cantidad > 0 THEN 1 ELSE 0 END) AS Ordenados
                 FROM tblDetalleOrdenesCompra Det
                 INNER JOIN tblArticulosSAP Art ON Det.CodigoInterno = Art.CodigoInterno
-                WHERE Det.IdOrdenCompra IN (SELECT IdOrdenCompra FROM tblOrdenesCompra WHERE FechaOrdenCompra >= ? AND FechaOrdenCompra <= CONCAT(?, ' 23:59:59'))
+                INNER JOIN tblOrdenesCompra FilterOC ON Det.IdOrdenCompra = FilterOC.IdOrdenCompra
+                WHERE FilterOC.FechaOrdenCompra >= ? AND FilterOC.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
                 GROUP BY Det.IdOrdenCompra
             ) TotOC ON A.IdOrdenCompra = TotOC.IdOrdenCompra
             LEFT JOIN (
@@ -65,7 +66,8 @@ export async function GET(request: Request) {
                        SUM(CASE WHEN Det.Devolucion = 0 THEN Det.Rec * Det.Costo * (1-Det.Desc0)*(1-Det.Desc1)*(1-Det.Desc2)*(1-Det.Desc3)*(1-Det.Desc4)*(CASE WHEN Det.Factor = 0 THEN 1 ELSE Det.Factor END)* (1+Det.IEPS) * (1+Det.IVA) ELSE 0 END) AS TotalRecibo,
                        SUM(CASE WHEN Det.Devolucion = 0 THEN 1 ELSE 0 END) AS Recibidos
                 FROM tblDetalleReciboMovil Det
-                WHERE Det.IdReciboMovil IN (SELECT IdReciboMovil FROM tblReciboMovil WHERE FechaRecibo >= ? AND FechaRecibo <= CONCAT(?, ' 23:59:59'))
+                INNER JOIN tblReciboMovil FilterREC ON Det.IdReciboMovil = FilterREC.IdReciboMovil
+                WHERE FilterREC.FechaRecibo >= ? AND FilterREC.FechaRecibo <= CONCAT(?, ' 23:59:59')
                 GROUP BY Det.IdReciboMovil, Det.IdTienda
             ) TotRec ON A.IdReciboMovil = TotRec.IdReciboMovil AND A.IdTienda = TotRec.IdTienda
             INNER JOIN tblDetalleDistribuciones B ON A.IdOrdenCompra = B.IdOrdenCompra
@@ -85,16 +87,6 @@ export async function GET(request: Request) {
               AND A.FechaOrdenCompra >= ?
               AND A.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
               ${storeFilter}
-            GROUP BY
-                A.IdOrdenCompra, A.FechaOrdenCompra, TiendaOrigen.Tienda, Prov.Proveedor,
-                Status.StatusOrdenCompra, TipoOrden.TipoOrdenCompra,
-                Recibo.FolioReciboMovil, Recibo.FechaRecibo, Recibo.UUID, UsuRecibo.Usuario,
-                B.IdTiendaDestino, TiendaDest.Tienda,
-                C.IdTransferenciaSalida, C.FolioSalida, C.FechaSalida, UsuSalida.Usuario,
-                F.IdTransferenciaEntrada, F.FolioEntrada, F.FechaEntrada, UsuEntrada.Usuario,
-                H.IdTransferenciaSalida, H.FolioSalida, H.FechaSalida, H.UUID,
-                A.IdTienda,
-                TotOC.TotalPedido, TotOC.Ordenados, TotRec.TotalRecibo, TotRec.Recibidos
             ORDER BY A.FechaOrdenCompra DESC, TiendaOrigen.Tienda ASC, TiendaDest.Tienda ASC
         `;
 
