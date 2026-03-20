@@ -646,102 +646,105 @@ export default function CedisDistributionsPage() {
 
                                     {/* Distributions stacked */}
                                     <div className="flex-1 flex flex-col">
-                                        {orderRows.map((row, rowIdx) => {
-                                            const isPendingSalida = !row.FolioSalida;
-                                            const isPendingEntrada = !row.FolioEntrada || row.FolioEntrada === 'ENTRO RECIBO';
-                                            const isFactura = !!row.UUID;
-                                            const isEntroRecibo = row.FolioEntrada === 'ENTRO RECIBO';
-                                            const diffReciboSalida = getDaysDiff(firstRow.FechaRecibo, row.FechaSalida);
-                                            const diffSalidaEntrada = getDaysDiff(row.FechaSalida, row.FechaEntrada);
-                                            const daysInTransit = !isPendingSalida && isPendingEntrada ? getDaysDiff(row.FechaSalida, today) : null;
+                                         {orderRows.map((row, rowIdx) => {
+                                             const isPendingSalida = !row.FolioSalida;
+                                             const isPendingEntrada = !row.FolioEntrada || row.FolioEntrada === 'ENTRO RECIBO';
+                                             const isFactura = !!row.UUID;
+                                             const isEntroRecibo = row.FolioEntrada === 'ENTRO RECIBO';
+                                             const diffReciboSalida = getDaysDiff(firstRow.FechaRecibo, row.FechaSalida);
+                                             const diffSalidaEntrada = getDaysDiff(row.FechaSalida, row.FechaEntrada);
+                                             const daysInTransit = !isPendingSalida && isPendingEntrada ? getDaysDiff(row.FechaSalida, today) : null;
 
-                                            return (
-                                                <div key={`${row.IdOrdenCompra}-${row.IdTiendaDestino}-${rowIdx}`} className={cn("flex items-start flex-1", rowIdx > 0 && "mt-1")}>
+                                             return (
+                                                 <div key={`${row.IdOrdenCompra}-${row.IdTiendaDestino}-${rowIdx}`} className={cn("flex items-start flex-1", rowIdx > 0 && "mt-1")}>
 
-                                                    {/* Connector 2→3 */}
-                                                    <Connector label={diffReciboSalida !== null ? `+${diffReciboSalida}d` : undefined} />
+                                                     {/* Connector 2→3 */}
+                                                     <Connector label={diffReciboSalida !== null ? `+${diffReciboSalida}d` : undefined} />
 
-                                                     {/* Col 3: Distribución */}
-                                                     <div className="flex-1 px-6">
-                                                         {isPendingSalida ? (
-                                                             <KanbanNode
-                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `SIN SALIDA ${row.TiendaDestino} ${row.CantidadArticulos} Productos` : `→ ${row.TiendaDestino}`}
-                                                                 sublabel={`${row.CantidadArticulos} arts`}
-                                                                 color="border-amber-300 border-dashed bg-amber-50/30"
-                                                                 textColor="text-amber-500"
-                                                                 isPending
-                                                                 showDetail={true}
-                                                                 onClick={() => fetchDistDetails(row)}
-                                                                 isMinimized={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`)}
-                                                                 onToggle={() => toggleCard(`dist-${orderId}-${row.IdTiendaDestino}`)}
-                                                             />
-                                                         ) : (
-                                                             <KanbanNode
-                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioSalida || ""} ${row.TiendaDestino}` : row.FolioSalida!}
-                                                                 sublabel={`${row.TiendaDestino} · ${row.CantidadArticulos} arts`}
-                                                                 tag={formatDateTime(row.FechaSalida)}
-                                                                 color={isFactura ? "border-purple-500 bg-purple-50" : "border-amber-500 bg-amber-50"}
-                                                                 textColor={isFactura ? "text-purple-700" : "text-amber-700"}
-                                                                 isFactura={isFactura}
-                                                                 showDetail={true}
-                                                                 onClick={() => fetchDistDetails(row)}
-                                                                 isMinimized={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`)}
-                                                                 onToggle={() => toggleCard(`dist-${orderId}-${row.IdTiendaDestino}`)}
-                                                                 badge={isFactura ? (
-                                                                     <span className="bg-purple-600 text-white px-1 py-0.5 text-[6px] font-black uppercase tracking-tight flex items-center gap-0.5">
-                                                                         <Receipt size={5} />FAC
-                                                                     </span>
-                                                                 ) : undefined}
-                                                             />
-                                                         )}
-                                                     </div>
-
-                                                     {/* Connector 3→4 */}
-                                                     <Connector label={diffSalidaEntrada !== null && !isEntroRecibo ? `+${diffSalidaEntrada}d` : undefined} />
-
-                                                     {/* Col 4: Entrada */}
-                                                     <div className="flex-1 px-6">
-                                                         {isEntroRecibo ? (
-                                                             <KanbanNode
-                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO ${row.TiendaDestino}` : "Entró por Recibo"}
-                                                                 tag={formatDateTime(row.FechaEntrada)}
-                                                                 color="border-emerald-600/30 bg-emerald-50/30"
-                                                                 textColor="text-emerald-700"
-                                                                 isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                 onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                 badge={<CheckCircle2 size={10} className="text-emerald-600" />}
-                                                             />
-                                                         ) : isPendingEntrada ? (
-                                                             <KanbanNode
-                                                                 label={daysInTransit && daysInTransit >= 1 ? `⚠️ ${daysInTransit}d TRANSITO ${row.TiendaDestino}` : `SIN ENTRADA ${row.TiendaDestino}`}
-                                                                 color={isPendingSalida ? "border-amber-400/50 border-dashed bg-amber-50" : "border-rose-500/50 border-dashed bg-rose-50"}
-                                                                  textColor={isPendingSalida ? "text-amber-600" : "text-rose-600"}
-                                                                 isPending
-                                                                 isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                 onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                  badge={daysInTransit && daysInTransit >= 1 ? (
-                                                                       <div className="bg-rose-600 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg text-[10px] font-black animate-pulse border-2 border-white">
-                                                                           {daysInTransit}d
-                                                                       </div>
-                                                                   ) : undefined}
+                                                      {/* Col 3: Distribución */}
+                                                      <div className="flex-1 px-6">
+                                                          {isPendingSalida ? (
+                                                              <KanbanNode
+                                                                  label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.TiendaDestino} ${row.CantidadArticulos} Productos` : `→ ${row.TiendaDestino}`}
+                                                                  sublabel={`${row.CantidadArticulos} arts`}
+                                                                  color="border-amber-300 border-dashed bg-amber-50/30"
+                                                                  textColor="text-amber-500"
+                                                                  isPending
+                                                                  showDetail={true}
+                                                                  onClick={() => fetchDistDetails(row)}
+                                                                  isMinimized={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`)}
+                                                                  onToggle={() => toggleCard(`dist-${orderId}-${row.IdTiendaDestino}`)}
                                                               />
-                                                         ) : (
-                                                             <KanbanNode
-                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioEntrada} ${row.TiendaDestino}` : row.FolioEntrada!}
-                                                                 sublabel={`${row.TiendaDestino}${row.UsuarioEntrada ? ` · ${row.UsuarioEntrada}` : ''}`}
-                                                                 tag={formatDateTime(row.FechaEntrada)}
-                                                                 color="border-emerald-900 bg-emerald-900/10"
-                                                                 textColor="text-emerald-900"
-                                                                 isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                 onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                 badge={<CheckCircle2 size={10} className="text-emerald-600" />}
-                                                             />
-                                                         )}
-                                                     </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                                                          ) : (
+                                                              <KanbanNode
+                                                                  label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioSalida || ""} ${row.TiendaDestino}` : row.FolioSalida!}
+                                                                  sublabel={`${row.TiendaDestino} · ${row.CantidadArticulos} arts`}
+                                                                  tag={formatDateTime(row.FechaSalida)}
+                                                                  color={isFactura ? "border-purple-500 bg-purple-50" : "border-amber-500 bg-amber-50"}
+                                                                  textColor={isFactura ? "text-purple-700" : "text-amber-700"}
+                                                                  isFactura={isFactura}
+                                                                  showDetail={true}
+                                                                  onClick={() => fetchDistDetails(row)}
+                                                                  isMinimized={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`)}
+                                                                  onToggle={() => toggleCard(`dist-${orderId}-${row.IdTiendaDestino}`)}
+                                                                  badge={isFactura ? (
+                                                                      <span className="bg-purple-600 text-white px-1 py-0.5 text-[6px] font-black uppercase tracking-tight flex items-center gap-0.5">
+                                                                          <Receipt size={5} />FAC
+                                                                      </span>
+                                                                  ) : undefined}
+                                                              />
+                                                          )}
+                                                      </div>
+
+                                                      {!isPendingSalida && (
+                                                          <>
+                                                              {/* Connector 3→4 */}
+                                                              <Connector label={diffSalidaEntrada !== null && !isEntroRecibo ? `+${diffSalidaEntrada}d` : undefined} />
+
+                                                              {/* Col 4: Entrada */}
+                                                              <div className="flex-1 px-6">
+                                                                  {isEntroRecibo ? (
+                                                                      <KanbanNode
+                                                                          label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO ${row.TiendaDestino}` : "Entró por Recibo"}
+                                                                          tag={formatDateTime(row.FechaEntrada)}
+                                                                          color="border-emerald-600/30 bg-emerald-50/30"
+                                                                          textColor="text-emerald-700"
+                                                                          isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                          onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                          badge={<CheckCircle2 size={10} className="text-emerald-600" />}
+                                                                      />
+                                                                  ) : isPendingEntrada ? (
+                                                                      <KanbanNode
+                                                                          label={daysInTransit && daysInTransit >= 1 ? `⚠️ ${daysInTransit}d TRANSITO ${row.TiendaDestino}` : `SIN ENTRADA ${row.TiendaDestino}`}
+                                                                          color={isPendingSalida ? "border-amber-400/50 border-dashed bg-amber-50" : "border-rose-500/50 border-dashed bg-rose-50"}
+                                                                          textColor={isPendingSalida ? "text-amber-600" : "text-rose-600"}
+                                                                          isPending
+                                                                          isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                          onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                          badge={daysInTransit && daysInTransit >= 1 ? (
+                                                                              <div className="bg-rose-600 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg text-[10px] font-black animate-pulse border-2 border-white">
+                                                                                  {daysInTransit}d
+                                                                              </div>
+                                                                          ) : undefined}
+                                                                      />
+                                                                  ) : (
+                                                                      <KanbanNode
+                                                                          label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioEntrada} ${row.TiendaDestino}` : row.FolioEntrada!}
+                                                                          sublabel={`${row.TiendaDestino}${row.UsuarioEntrada ? ` · ${row.UsuarioEntrada}` : ''}`}
+                                                                          tag={formatDateTime(row.FechaEntrada)}
+                                                                          color="border-emerald-900 bg-emerald-900/10"
+                                                                          textColor="text-emerald-900"
+                                                                          isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                          onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                          badge={<CheckCircle2 size={10} className="text-emerald-600" />}
+                                                                      />
+                                                                  )}
+                                                              </div>
+                                                          </>
+                                                      )}
+                                                 </div>
+                                             );
+                                         })}
                                 </div>
                             </div>
                         );
