@@ -696,7 +696,9 @@ export default function CedisDistributionsPage() {
                                                           )}
                                                       </div>
 
-                                                      {!isPendingSalida && (
+                                                      {isPendingSalida ? (
+                                                          <div className="flex-1" />
+                                                      ) : (
                                                           <>
                                                               {/* Connector 3→4 */}
                                                               <Connector label={diffSalidaEntrada !== null && !isEntroRecibo ? `+${diffSalidaEntrada}d` : undefined} />
