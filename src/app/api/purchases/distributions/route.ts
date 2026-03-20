@@ -15,97 +15,80 @@ export async function GET(request: Request) {
     try {
         const storeIds = storeIdsStr ? storeIdsStr.split(',').map(Number).filter(n => !isNaN(n)) : [];
         let storeFilter = '';
-        const params: (string | number)[] = [startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate];
+        const params: (string | number)[] = [startDate, endDate];
 
         if (storeIds.length > 0) {
             storeFilter = ` AND A.IdTienda IN (${storeIds.map(() => '?').join(',')})`;
             params.push(...storeIds);
         }
 
-        const sql = `
-        SELECT * FROM (
-            
-            SELECT 
-                A.IdOrdenCompra,
-                MAX(A.FechaOrdenCompra) as FechaOrdenCompra,
-                MAX(TiendaOrigen.Tienda) AS TiendaOrigen,
-                MAX(Prov.Proveedor) as Proveedor,
-                MAX(Status.StatusOrdenCompra) AS Status,
-                MAX(TipoOrden.TipoOrdenCompra) as TipoOrdenCompra,
-                MAX(Recibo.FolioReciboMovil) as FolioReciboMovil,
-                MAX(Recibo.FechaRecibo) as FechaRecibo,
-                MAX(Recibo.UUID) AS UUIDRecibo,
-                MAX(UsuRecibo.Usuario) AS UsuarioRecibo,
-                B.IdTiendaDestino,
-                MAX(TiendaDest.Tienda) AS TiendaDestino,
-                MAX(ArtCounts.CantidadArticulos) as CantidadArticulos,
-                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.IdTransferenciaSalida ELSE C.IdTransferenciaSalida END) AS IdTransferenciaSalida,
-                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FolioSalida ELSE C.FolioSalida END) AS FolioSalida,
-                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE C.FechaSalida END) AS FechaSalida,
-                MAX(UsuSalida.Usuario) AS UsuarioSalida,
-                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 0 ELSE F.IdTransferenciaEntrada END) AS IdTransferenciaEntrada,
-                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 'ENTRO RECIBO' ELSE F.FolioEntrada END) AS FolioEntrada,
-                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE F.FechaEntrada END) AS FechaEntrada,
-                MAX(UsuEntrada.Usuario) AS UsuarioEntrada,
-                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.UUID ELSE NULL END) AS UUID,
-                MAX(A.IdTienda) AS IdTiendaOrigen,
-                MAX(TotOC.TotalPedido) as TotalPedido,
-                MAX(TotOC.Ordenados) as Ordenados,
-                MAX(TotRec.TotalRecibo) as TotalRecibo,
-                MAX(TotRec.Recibidos) as Recibidos
-            FROM tblOrdenesCompra A
-            INNER JOIN (
-                SELECT Det.IdOrdenCompra,
-                       SUM(Det.Cantidad * Det.Costo * (1-Det.Desc0)*(1-Det.Desc1)*(1-Det.Desc2)*(1-Det.Desc3)*(1-Det.Desc4)*(CASE WHEN Det.FactorVolumen = 0 THEN 1 ELSE Det.FactorVolumen END)*(1+Art.IEPS)*(1+Det.IVA)) AS TotalPedido,
-                       SUM(CASE WHEN Det.Cantidad > 0 THEN 1 ELSE 0 END) AS Ordenados
-                FROM tblDetalleOrdenesCompra Det
-                INNER JOIN tblArticulosSAP Art ON Det.CodigoInterno = Art.CodigoInterno
-                INNER JOIN tblOrdenesCompra FilterOC ON Det.IdOrdenCompra = FilterOC.IdOrdenCompra
-                WHERE FilterOC.FechaOrdenCompra >= ? AND FilterOC.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
-                GROUP BY Det.IdOrdenCompra
-            ) TotOC ON A.IdOrdenCompra = TotOC.IdOrdenCompra
-            LEFT JOIN (
-                SELECT FilterRec.IdReciboMovil, FilterRec.IdTienda,
-                       SUM(CASE WHEN Det.Devolucion = 0 THEN Det.Rec * Det.Costo * (1-Det.Desc0)*(1-Det.Desc1)*(1-Det.Desc2)*(1-Det.Desc3)*(1-Det.Desc4)*(CASE WHEN Det.Factor = 0 THEN 1 ELSE Det.Factor END)* (1+Det.IEPS) * (1+Det.IVA) ELSE 0 END) AS TotalRecibo,
-                       SUM(CASE WHEN Det.Devolucion = 0 THEN 1 ELSE 0 END) AS Recibidos
-                FROM tblDetalleReciboMovil Det
-                INNER JOIN tblReciboMovil FilterRec ON Det.IdReciboMovil = FilterRec.IdReciboMovil
-                WHERE FilterRec.FechaRecibo >= ? AND FilterRec.FechaRecibo <= CONCAT(?, ' 23:59:59')
-                GROUP BY FilterRec.IdReciboMovil, FilterRec.IdTienda
-            ) TotRec ON A.IdReciboMovil = TotRec.IdReciboMovil AND A.IdTienda = TotRec.IdTienda
-            INNER JOIN tblDetalleDistribuciones B ON A.IdOrdenCompra = B.IdOrdenCompra
-            INNER JOIN (
-                SELECT Det.IdOrdenCompra, Det.IdTiendaDestino, COUNT(*) as CantidadArticulos
-                FROM tblDetalleDistribuciones Det
-                INNER JOIN tblOrdenesCompra FilterOC ON Det.IdOrdenCompra = FilterOC.IdOrdenCompra
-                WHERE FilterOC.FechaOrdenCompra >= ? AND FilterOC.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
-                GROUP BY Det.IdOrdenCompra, Det.IdTiendaDestino
-            ) ArtCounts ON B.IdOrdenCompra = ArtCounts.IdOrdenCompra AND B.IdTiendaDestino = ArtCounts.IdTiendaDestino
-            INNER JOIN tblTiendas TiendaOrigen ON A.IdTienda = TiendaOrigen.IdTienda
-            INNER JOIN tblProveedores Prov ON A.IdProveedor = Prov.IdProveedor
-            INNER JOIN tblStatusOrdenesCompra Status ON A.IdStatusOrdenCompra = Status.IdStatusOrdenCompra
-            INNER JOIN tblTiposOrdenesCompra TipoOrden ON A.IdTipoOrdenCompra = TipoOrden.IdTipoOrdenCompra
-            INNER JOIN tblTiendas TiendaDest ON B.IdTiendaDestino = TiendaDest.IdTienda
-            LEFT JOIN tblReciboMovil Recibo ON A.IdReciboMovil = Recibo.IdReciboMovil AND A.IdTienda = Recibo.IdTienda
-            LEFT JOIN tblUsuarios UsuRecibo ON Recibo.IdUsuarioRecibo = UsuRecibo.IdUsuario
-            LEFT JOIN tblTransferenciasSalidas C ON B.IdOrdenCompra = C.IdOrdenCompra AND B.IdTiendaDestino = C.IdTiendaDestino
-            LEFT JOIN tblUsuarios UsuSalida ON C.IdUsuarioSalida = UsuSalida.IdUsuario
-            LEFT JOIN tblTransferenciasEntradas F ON C.IdTransferenciaEntrada = F.IdTransferenciaEntrada AND C.IdTiendaDestino = F.IdTienda
-            LEFT JOIN tblUsuarios UsuEntrada ON F.IdUsuarioEntrada = UsuEntrada.IdUsuario
-            LEFT JOIN tblTransferenciasSalidasFacturas H ON B.IdOrdenCompra = H.IdOrdenCompra AND B.IdTiendaDestino = H.IdTiendaDestino
-            WHERE A.TieneDistribucion = 1
-              AND A.FechaOrdenCompra >= ?
-              AND A.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
-              ${storeFilter}
-            GROUP BY A.IdOrdenCompra, B.IdTiendaDestino
+        // Build status filter for the outer WHERE
+        let statusFilter = '';
+        if (status === 'PENDIENTE_RECIBO') statusFilter = "AND FolioReciboMovil IS NULL";
+        if (status === 'PENDIENTE_SALIDA') statusFilter = "AND FolioReciboMovil IS NOT NULL AND FolioSalida IS NULL";
+        if (status === 'PENDIENTE_ENTRADA') statusFilter = "AND FolioSalida IS NOT NULL AND (FolioEntrada IS NULL OR FolioEntrada = '' OR FolioEntrada = 'ENTRO RECIBO')";
 
-        ) AS Base
-        WHERE 1=1
-        ${status === 'PENDIENTE_RECIBO' ? "AND FolioReciboMovil IS NULL" : ""}
-        ${status === 'PENDIENTE_SALIDA' ? "AND FolioReciboMovil IS NOT NULL AND FolioSalida IS NULL" : ""}
-        ${status === 'PENDIENTE_ENTRADA' ? "AND FolioSalida IS NOT NULL AND (FolioEntrada IS NULL OR FolioEntrada = '' OR FolioEntrada = 'ENTRO RECIBO')" : ""}
-      ORDER BY FechaOrdenCompra DESC, TiendaOrigen ASC, TiendaDestino ASC
-`;
+        // RADICAL SIMPLIFICATION:
+        // - Removed TotOC (heavy SUM scan) — totals are only shown in the detail modal
+        // - Removed TotRec (heavy SUM scan) — totals are only shown in the detail modal  
+        // - ArtCounts now uses a simple COUNT without joining back to tblOrdenesCompra
+        // - Anchor the query from tblDetalleDistribuciones (narrow table) not tblOrdenesCompra
+        // - Single date filter applied only at A (tblOrdenesCompra) level
+        const sql = `
+            SELECT * FROM (
+                SELECT
+                    A.IdOrdenCompra,
+                    A.FechaOrdenCompra,
+                    A.IdTienda AS IdTiendaOrigen,
+                    TiendaOrigen.Tienda AS TiendaOrigen,
+                    Prov.Proveedor,
+                    Status.StatusOrdenCompra AS Status,
+                    TipoOrden.TipoOrdenCompra,
+                    Recibo.FolioReciboMovil,
+                    Recibo.FechaRecibo,
+                    Recibo.UUID AS UUIDRecibo,
+                    UsuRecibo.Usuario AS UsuarioRecibo,
+                    B.IdTiendaDestino,
+                    TiendaDest.Tienda AS TiendaDestino,
+                    ArtCounts.CantidadArticulos,
+                    COALESCE(H.IdTransferenciaSalida, C.IdTransferenciaSalida) AS IdTransferenciaSalida,
+                    COALESCE(H.FolioSalida, C.FolioSalida) AS FolioSalida,
+                    COALESCE(H.FechaSalida, C.FechaSalida) AS FechaSalida,
+                    UsuSalida.Usuario AS UsuarioSalida,
+                    CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 0 ELSE F.IdTransferenciaEntrada END AS IdTransferenciaEntrada,
+                    CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 'ENTRO RECIBO' ELSE F.FolioEntrada END AS FolioEntrada,
+                    CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE F.FechaEntrada END AS FechaEntrada,
+                    UsuEntrada.Usuario AS UsuarioEntrada,
+                    CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.UUID ELSE NULL END AS UUID
+                FROM tblOrdenesCompra A
+                INNER JOIN tblDetalleDistribuciones B ON A.IdOrdenCompra = B.IdOrdenCompra
+                INNER JOIN (
+                    SELECT IdOrdenCompra, IdTiendaDestino, COUNT(*) AS CantidadArticulos
+                    FROM tblDetalleDistribuciones
+                    GROUP BY IdOrdenCompra, IdTiendaDestino
+                ) ArtCounts ON B.IdOrdenCompra = ArtCounts.IdOrdenCompra AND B.IdTiendaDestino = ArtCounts.IdTiendaDestino
+                INNER JOIN tblTiendas TiendaOrigen ON A.IdTienda = TiendaOrigen.IdTienda
+                INNER JOIN tblProveedores Prov ON A.IdProveedor = Prov.IdProveedor
+                INNER JOIN tblStatusOrdenesCompra Status ON A.IdStatusOrdenCompra = Status.IdStatusOrdenCompra
+                INNER JOIN tblTiposOrdenesCompra TipoOrden ON A.IdTipoOrdenCompra = TipoOrden.IdTipoOrdenCompra
+                INNER JOIN tblTiendas TiendaDest ON B.IdTiendaDestino = TiendaDest.IdTienda
+                LEFT JOIN tblReciboMovil Recibo ON A.IdReciboMovil = Recibo.IdReciboMovil AND A.IdTienda = Recibo.IdTienda
+                LEFT JOIN tblUsuarios UsuRecibo ON Recibo.IdUsuarioRecibo = UsuRecibo.IdUsuario
+                LEFT JOIN tblTransferenciasSalidas C ON B.IdOrdenCompra = C.IdOrdenCompra AND B.IdTiendaDestino = C.IdTiendaDestino
+                LEFT JOIN tblUsuarios UsuSalida ON C.IdUsuarioSalida = UsuSalida.IdUsuario
+                LEFT JOIN tblTransferenciasEntradas F ON C.IdTransferenciaEntrada = F.IdTransferenciaEntrada AND C.IdTiendaDestino = F.IdTienda
+                LEFT JOIN tblUsuarios UsuEntrada ON F.IdUsuarioEntrada = UsuEntrada.IdUsuario
+                LEFT JOIN tblTransferenciasSalidasFacturas H ON B.IdOrdenCompra = H.IdOrdenCompra AND B.IdTiendaDestino = H.IdTiendaDestino
+                WHERE A.TieneDistribucion = 1
+                  AND A.FechaOrdenCompra >= ?
+                  AND A.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
+                  ${storeFilter}
+                GROUP BY A.IdOrdenCompra, B.IdTiendaDestino
+            ) AS Base
+            WHERE 1=1
+            ${statusFilter}
+            ORDER BY FechaOrdenCompra DESC, TiendaOrigen ASC, TiendaDestino ASC
+        `;
 
         const results = await mysqlQuery(sql, params);
         return NextResponse.json(results);

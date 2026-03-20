@@ -647,8 +647,8 @@ export default function CedisDistributionsPage() {
                                             >
                                                 
                                                  <KanbanDetailItem label="Usuario" value={firstRow.UsuarioRecibo} colSpan={2} />
-                                                <KanbanDetailItem label="Total Recibo" value={formatCurrency(firstRow.TotalRecibo || 0)} color="text-emerald-600" />
-                                                <KanbanDetailItem label="Arts. Recibo" value={firstRow.Recibidos} />
+                                                <KanbanDetailItem label="Folio Móvil" value={firstRow.FolioReciboMovil || '—'} />
+                                                <KanbanDetailItem label="Arts. Dist." value={firstRow.CantidadArticulos} />
                                             </KanbanNode>
                                         )}
                                     </div>
