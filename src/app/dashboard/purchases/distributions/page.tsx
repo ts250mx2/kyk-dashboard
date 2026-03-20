@@ -15,6 +15,7 @@ import {
     Package,
     Check,
     Clock,
+    CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -42,6 +43,10 @@ interface CedisRow {
     UsuarioEntrada: string | null;
     UUID: string | null;
     IdTiendaOrigen: number;
+    TotalPedido: number;
+    Ordenados: number;
+    TotalRecibo: number | null;
+    Recibidos: number | null;
 }
 
 interface OrderDetail {
@@ -123,6 +128,9 @@ const KanbanNode = ({
     onClick,
     badge,
     showDetail,
+    isMinimized,
+    onToggle,
+    children,
 }: {
     label: string;
     sublabel?: string | null;
@@ -134,53 +142,91 @@ const KanbanNode = ({
     onClick?: () => void;
     badge?: React.ReactNode;
     showDetail?: boolean;
+    isMinimized?: boolean;
+    onToggle?: (e: React.MouseEvent) => void;
+    children?: React.ReactNode;
 }) => (
-    <button
-        onClick={onClick}
-        disabled={!onClick}
-        className={cn(
-            "relative border-2 px-3 py-4 flex flex-col gap-2 text-left w-full rounded-none transition-all group overflow-hidden",
-            color,
-            onClick && "cursor-pointer hover:brightness-95"
-        )}
-    >
-        <span className={cn("text-[11px] font-black uppercase tracking-wider truncate w-full pr-6", textColor)}>
-            {label}
-        </span>
-        {sublabel && (
-            <span className="text-[14px] font-black text-slate-800 truncate w-full leading-tight">{sublabel}</span>
-        )}
-        {tag && (
-            <span className={cn(
-                "text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 self-start mt-1 rounded-none bg-black/5 text-slate-500"
-            )}>{tag}</span>
-        )}
-        {badge && <div className="absolute top-3 right-3">{badge}</div>}
-        {showDetail && (
-            <div 
-                onClick={(e) => { e.stopPropagation(); onClick?.(); }}
-                className={cn(
-                    "w-full mt-2 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 rounded-none",
-                    isFactura ? "bg-purple-100/50 hover:bg-purple-600 hover:text-white text-purple-700" : "bg-slate-100 hover:bg-amber-500 hover:text-white text-slate-700"
+    <div className="relative group/kanban w-full">
+        <button
+            onClick={onClick}
+            disabled={!onClick}
+            className={cn(
+                "relative border-2 px-3 py-4 flex flex-col gap-2 text-left w-full rounded-none transition-all group overflow-hidden",
+                color,
+                onClick && "cursor-pointer hover:brightness-95",
+                isMinimized && "py-1.5 gap-1 shadow-sm"
+            )}
+        >
+            <div className={cn("flex items-center justify-between w-full relative", isMinimized ? "flex-row gap-2" : "flex-col items-start gap-1")}>
+                <span className={cn(
+                    "font-black uppercase tracking-wider truncate", 
+                    textColor,
+                    isMinimized ? "text-[8px] flex-1 pr-4" : "text-[11px] w-full pr-6"
+                )}>
+                    {label}
+                </span>
+
+                {onToggle && (
+                    <div 
+                        onClick={(e) => { e.stopPropagation(); onToggle(e); }}
+                        className={cn(
+                            "absolute z-10 p-0.5 hover:bg-black/5 transition-all cursor-pointer",
+                            isMinimized ? "right-[-4px] top-[-2px]" : "right-[-8px] top-[-10px]"
+                        )}
+                    >
+                        {isMinimized ? <Maximize2 size={8} className="text-slate-400" /> : <Minimize2 size={8} className="text-slate-300 opacity-0 group-hover/kanban:opacity-100" />}
+                    </div>
                 )}
-            >
-                Ver Detalle
-                <ExternalLink size={10} />
+
+                {isMinimized && tag && (
+                    <span className="text-[7px] font-bold text-slate-400 whitespace-nowrap">{tag}</span>
+                )}
+                {!isMinimized && badge && <div className="absolute top-0 right-[-4px]">{badge}</div>}
+                {isMinimized && badge && <div>{badge}</div>}
             </div>
-        )}
-        {!showDetail && onClick && (
-            <ExternalLink size={10} className="absolute bottom-3 right-3 text-slate-300 group-hover:text-slate-500 transition-colors" />
-        )}
-    </button>
+
+            {!isMinimized && sublabel && (
+                <span className="text-[14px] font-black text-slate-800 truncate w-full leading-tight">{sublabel}</span>
+            )}
+            
+            {!isMinimized && tag && (
+                <span className={cn(
+                    "text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 self-start mt-1 rounded-none bg-black/5 text-slate-500"
+                )}>{tag}</span>
+            )}
+
+            {!isMinimized && children && (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 mt-2 pt-2 border-t border-black/5 w-full">
+                    {children}
+                </div>
+            )}
+
+            {showDetail && !isMinimized && (
+                <div 
+                    onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+                    className={cn(
+                        "w-full mt-2 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 rounded-none",
+                        isFactura ? "bg-purple-100/50 hover:bg-purple-600 hover:text-white text-purple-700" : "bg-slate-100 hover:bg-amber-500 hover:text-white text-slate-700"
+                    )}
+                >
+                    Ver Detalle
+                    <ExternalLink size={10} />
+                </div>
+            )}
+            {!showDetail && onClick && !isMinimized && (
+                <ExternalLink size={10} className="absolute bottom-3 right-3 text-slate-300 group-hover:text-slate-500 transition-colors" />
+            )}
+        </button>
+    </div>
 );
 
 // Arrow connector between cards
 const Connector = ({ label }: { label?: string | null }) => (
-    <div className="flex items-center justify-center px-0.5 shrink-0 relative">
-        <div className="h-px w-4 bg-slate-300" />
-        <ArrowRight size={10} className="text-slate-400 -ml-1" />
+    <div className="flex items-center justify-center px-1 shrink-0 relative">
+        <div className="h-px w-6 bg-slate-100" />
+        <ArrowRight size={12} className="text-slate-300 -ml-1" />
         {label && (
-            <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[7px] font-black text-slate-400 whitespace-nowrap bg-white px-0.5">
+            <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[9px] font-black text-[#4050B4] whitespace-nowrap bg-white border border-slate-200 rounded-full w-8 h-8 flex items-center justify-center shadow-sm z-10 transition-transform group-hover:scale-110">
                 {label}
             </span>
         )}
@@ -222,6 +268,7 @@ export default function CedisDistributionsPage() {
     const [rows, setRows] = useState<CedisRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [isMaximized, setIsMaximized] = useState(false);
+    const [minimizedCards, setMinimizedCards] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState('');
     const [idComputadora, setIdComputadora] = useState<number | null>(null);
     const [kanbanFilter, setKanbanFilter] = useState<'TODOS' | 'PENDIENTE_RECIBO' | 'PENDIENTE_SALIDA' | 'PENDIENTE_ENTRADA'>('TODOS');
@@ -281,7 +328,16 @@ export default function CedisDistributionsPage() {
         try {
             const res = await fetch(`/api/purchases/distributions?startDate=${fechaInicio}&endDate=${fechaFin}`);
             const data = await res.json();
-            if (Array.isArray(data)) setRows(data);
+            if (Array.isArray(data)) {
+                setRows(data);
+                // Minimize ONLY distributions and entries by default
+                const initialMinimized = new Set<string>();
+                data.forEach((r: CedisRow) => {
+                    initialMinimized.add(`dist-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
+                    initialMinimized.add(`entry-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
+                });
+                setMinimizedCards(initialMinimized);
+            }
             else setRows([]);
         } catch (e) {
             console.error(e);
@@ -495,26 +551,40 @@ export default function CedisDistributionsPage() {
                     </div>
                 ) : (
                     <div className="space-y-px pb-4">
-                        {Object.entries(orderGroups).map(([orderId, orderRows]) => {
+                        {Object.entries(orderGroups).map(([orderIdStr, orderRows]) => {
+                            const orderId = parseInt(orderIdStr);
                             const firstRow = orderRows[0];
                             const isPendingRecibo = !firstRow.FolioReciboMovil;
                             const diffOrdenRecibo = getDaysDiff(firstRow.FechaOrdenCompra, firstRow.FechaRecibo);
+                            
+                            const toggleCard = (cardId: string) => {
+                                const next = new Set(minimizedCards);
+                                if (next.has(cardId)) next.delete(cardId);
+                                else next.add(cardId);
+                                setMinimizedCards(next);
+                            };
 
                             return (
-                                <div key={orderId} className="flex items-start gap-0 py-2">
-
-                                    {/* Col 1: Orden — once per order, spans all distribution rows */}
-                                    <div className="w-1/5 shrink-0 px-6 py-0">
-                                        <KanbanNode
-                                            label={`#${firstRow.IdOrdenCompra} · ${firstRow.TiendaOrigen}`}
-                                            sublabel={firstRow.Proveedor}
-                                            tag={formatDate(firstRow.FechaOrdenCompra)}
-                                            color="border-[#4050B4] bg-blue-50/50"
-                                            textColor="text-[#4050B4]"
-                                            onClick={() => fetchOrderDetails(firstRow)}
-                                            badge={<StatusBadge status={firstRow.Status} />}
-                                        />
-                                    </div>
+                                <div key={orderId} className="flex flex-col border-b border-slate-100 hover:bg-slate-50/50 transition-colors py-2">
+                                    <div className="flex items-start gap-0">
+                                        <div className="w-1/5 shrink-0 px-6 py-0 relative group/order">
+                                            <KanbanNode
+                                                label={`#${firstRow.IdOrdenCompra} · ${firstRow.TiendaOrigen}`}
+                                                sublabel={firstRow.Proveedor}
+                                                tag={formatDateTime(firstRow.FechaOrdenCompra)}
+                                                color="border-[#4050B4] bg-blue-50/50"
+                                                textColor="text-[#4050B4]"
+                                                onClick={() => fetchOrderDetails(firstRow)}
+                                                badge={<StatusBadge status={firstRow.Status} />}
+                                                isMinimized={minimizedCards.has(`order-${orderId}`)}
+                                                onToggle={() => toggleCard(`order-${orderId}`)}
+                                            >
+                                                <KanbanDetailItem label="Tipo" value={firstRow.TipoOrdenCompra} />
+                                                <KanbanDetailItem label="Status" value={<StatusBadge status={firstRow.Status} />} />
+                                                <KanbanDetailItem label="Total Pedido" value={formatCurrency(firstRow.TotalPedido)} color="text-[#4050B4]" />
+                                                <KanbanDetailItem label="Arts. Pedido" value={firstRow.Ordenados} />
+                                            </KanbanNode>
+                                        </div>
 
                                     {/* Connector 1→2 */}
                                     <Connector label={diffOrdenRecibo !== null ? `+${diffOrdenRecibo}d` : undefined} />
@@ -524,10 +594,16 @@ export default function CedisDistributionsPage() {
                                         {isPendingRecibo ? (
                                             <KanbanNode
                                                 label="Sin Recibo"
-                                                color="border-emerald-200 border-dashed bg-emerald-50/30"
-                                                textColor="text-emerald-400"
+                                                color="border-rose-500/50 border-dashed bg-rose-50"
+                                                textColor="text-rose-600"
                                                 isPending
-                                            />
+                                                isMinimized={minimizedCards.has(`receipt-${orderId}`)}
+                                                onToggle={() => toggleCard(`receipt-${orderId}`)}
+                                            >
+                                                <div className="col-span-2 py-4 flex flex-col items-center justify-center border border-dashed border-rose-200 bg-rose-50/50">
+                                                    <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Esperando Recibo Móvil</span>
+                                                </div>
+                                            </KanbanNode>
                                         ) : (
                                             <KanbanNode
                                                 label={firstRow.FolioReciboMovil!}
@@ -536,7 +612,13 @@ export default function CedisDistributionsPage() {
                                                 color="border-emerald-600 bg-emerald-50"
                                                 textColor="text-emerald-700"
                                                 onClick={() => fetchReceiptDetails(firstRow)}
-                                            />
+                                                isMinimized={minimizedCards.has(`receipt-${orderId}`)}
+                                                onToggle={() => toggleCard(`receipt-${orderId}`)}
+                                            >
+                                                <KanbanDetailItem label="Usuario" value={firstRow.UsuarioRecibo} colSpan={2} />
+                                                <KanbanDetailItem label="Total Recibo" value={formatCurrency(firstRow.TotalRecibo || 0)} color="text-emerald-600" />
+                                                <KanbanDetailItem label="Arts. Recibo" value={firstRow.Recibidos} />
+                                            </KanbanNode>
                                         )}
                                     </div>
 
@@ -556,72 +638,85 @@ export default function CedisDistributionsPage() {
                                                     {/* Connector 2→3 */}
                                                     <Connector label={diffReciboSalida !== null ? `+${diffReciboSalida}d` : undefined} />
 
-                                                    {/* Col 3: Distribución */}
-                                                    <div className="flex-1 px-6">
-                                                        {isPendingSalida ? (
-                                                            <KanbanNode
-                                                                label={`→ ${row.TiendaDestino}`}
-                                                                sublabel={`${row.CantidadArticulos} arts`}
-                                                                color="border-amber-300 border-dashed bg-amber-50/30"
-                                                                textColor="text-amber-500"
-                                                                isPending
-                                                                showDetail={true}
-                                                                onClick={() => fetchDistDetails(row)}
-                                                            />
-                                                        ) : (
-                                                            <KanbanNode
-                                                                label={row.FolioSalida!}
-                                                                sublabel={`${row.TiendaDestino} · ${row.CantidadArticulos} arts`}
-                                                                tag={formatDateTime(row.FechaSalida)}
-                                                                color={isFactura ? "border-purple-500 bg-purple-50" : "border-amber-500 bg-amber-50"}
-                                                                textColor={isFactura ? "text-purple-700" : "text-amber-700"}
-                                                                isFactura={isFactura}
-                                                                showDetail={true}
-                                                                onClick={() => fetchDistDetails(row)}
-                                                                badge={isFactura ? (
-                                                                    <span className="bg-purple-600 text-white px-1 py-0.5 text-[6px] font-black uppercase tracking-tight flex items-center gap-0.5">
-                                                                        <Receipt size={5} />FAC
-                                                                    </span>
-                                                                ) : undefined}
-                                                            />
-                                                        )}
-                                                    </div>
+                                                     {/* Col 3: Distribución */}
+                                                     <div className="flex-1 px-6">
+                                                         {isPendingSalida ? (
+                                                             <KanbanNode
+                                                                 label={`→ ${row.TiendaDestino}`}
+                                                                 sublabel={`${row.CantidadArticulos} arts`}
+                                                                 color="border-amber-300 border-dashed bg-amber-50/30"
+                                                                 textColor="text-amber-500"
+                                                                 isPending
+                                                                 showDetail={true}
+                                                                 onClick={() => fetchDistDetails(row)}
+                                                                 isMinimized={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`)}
+                                                                 onToggle={() => toggleCard(`dist-${orderId}-${row.IdTiendaDestino}`)}
+                                                             />
+                                                         ) : (
+                                                             <KanbanNode
+                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioSalida} → ${row.TiendaDestino}` : row.FolioSalida!}
+                                                                 sublabel={`${row.TiendaDestino} · ${row.CantidadArticulos} arts`}
+                                                                 tag={formatDateTime(row.FechaSalida)}
+                                                                 color={isFactura ? "border-purple-500 bg-purple-50" : "border-amber-500 bg-amber-50"}
+                                                                 textColor={isFactura ? "text-purple-700" : "text-amber-700"}
+                                                                 isFactura={isFactura}
+                                                                 showDetail={true}
+                                                                 onClick={() => fetchDistDetails(row)}
+                                                                 isMinimized={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`)}
+                                                                 onToggle={() => toggleCard(`dist-${orderId}-${row.IdTiendaDestino}`)}
+                                                                 badge={isFactura ? (
+                                                                     <span className="bg-purple-600 text-white px-1 py-0.5 text-[6px] font-black uppercase tracking-tight flex items-center gap-0.5">
+                                                                         <Receipt size={5} />FAC
+                                                                     </span>
+                                                                 ) : undefined}
+                                                             />
+                                                         )}
+                                                     </div>
 
-                                                    {/* Connector 3→4 */}
-                                                    <Connector label={diffSalidaEntrada !== null && !isEntroRecibo ? `+${diffSalidaEntrada}d` : undefined} />
+                                                     {/* Connector 3→4 */}
+                                                     <Connector label={diffSalidaEntrada !== null && !isEntroRecibo ? `+${diffSalidaEntrada}d` : undefined} />
 
-                                                    {/* Col 4: Entrada */}
-                                                    <div className="flex-1 px-6">
-                                                        {isEntroRecibo ? (
-                                                            <KanbanNode
-                                                                label="Entró por Recibo"
-                                                                tag={formatDate(row.FechaEntrada)}
-                                                                color="border-emerald-600/30 bg-emerald-50/30"
-                                                                textColor="text-emerald-700"
-                                                            />
-                                                        ) : isPendingEntrada ? (
-                                                            <KanbanNode
-                                                                label="Sin Entrada"
-                                                                color="border-emerald-900/20 border-dashed bg-emerald-900/5"
-                                                                textColor="text-emerald-400"
-                                                                isPending
-                                                            />
-                                                        ) : (
-                                                            <KanbanNode
-                                                                label={row.FolioEntrada!}
-                                                                sublabel={`${row.TiendaDestino} · ${row.UsuarioEntrada}`}
-                                                                tag={formatDateTime(row.FechaEntrada)}
-                                                                color="border-emerald-900 bg-emerald-900/10"
-                                                                textColor="text-emerald-900"
-                                                            />
-                                                        )}
-                                                    </div>
+                                                     {/* Col 4: Entrada */}
+                                                     <div className="flex-1 px-6">
+                                                         {isEntroRecibo ? (
+                                                             <KanbanNode
+                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO · ${row.TiendaDestino}` : "Entró por Recibo"}
+                                                                 tag={formatDateTime(row.FechaEntrada)}
+                                                                 color="border-emerald-600/30 bg-emerald-50/30"
+                                                                 textColor="text-emerald-700"
+                                                                 isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                 onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                 badge={<CheckCircle2 size={10} className="text-emerald-600" />}
+                                                             />
+                                                         ) : isPendingEntrada ? (
+                                                             <KanbanNode
+                                                                 label={`SIN ENTRADA · ${row.TiendaDestino}`}
+                                                                 color="border-rose-500/50 border-dashed bg-rose-50"
+                                                                 textColor="text-rose-600"
+                                                                 isPending
+                                                                 isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                 onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                             />
+                                                         ) : (
+                                                             <KanbanNode
+                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioEntrada} · ${row.TiendaDestino}` : row.FolioEntrada!}
+                                                                 sublabel={`${row.TiendaDestino}${row.UsuarioEntrada ? ` · ${row.UsuarioEntrada}` : ''}`}
+                                                                 tag={formatDateTime(row.FechaEntrada)}
+                                                                 color="border-emerald-900 bg-emerald-900/10"
+                                                                 textColor="text-emerald-900"
+                                                                 isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                 onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
+                                                                 badge={<CheckCircle2 size={10} className="text-emerald-600" />}
+                                                             />
+                                                         )}
+                                                     </div>
                                                 </div>
                                             );
                                         })}
                                     </div>
                                 </div>
-                            );
+                            </div>
+                        );
                         })}
                     </div>
                 )}
@@ -640,25 +735,47 @@ export default function CedisDistributionsPage() {
                     </div>
                 </div>
                 
-                {/* Status Filters */}
-                <div className="flex bg-slate-200 p-0.5 border border-slate-300">
-                    {[
-                        { id: 'TODOS', label: 'Todos' },
-                        { id: 'PENDIENTE_RECIBO', label: 'Pendientes Recibo' },
-                        { id: 'PENDIENTE_SALIDA', label: 'Dist. Pend. Salida' },
-                        { id: 'PENDIENTE_ENTRADA', label: 'Dist. Pend. Entrada' },
-                    ].map(f => (
-                        <button
-                            key={f.id}
-                            onClick={() => setKanbanFilter(f.id as any)}
-                            className={cn(
-                                "px-3 py-1 text-[8px] font-black uppercase tracking-widest transition-all",
-                                kanbanFilter === f.id ? "bg-[#4050B4] text-white" : "text-slate-500 hover:bg-white hover:text-slate-800"
-                            )}
-                        >
-                            {f.label}
-                        </button>
-                    ))}
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => {
+                            const allInitialMinimized = new Set<string>();
+                            rows.forEach(r => {
+                                allInitialMinimized.add(`dist-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
+                                allInitialMinimized.add(`entry-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
+                            });
+
+                            if (minimizedCards.size > 0) {
+                                setMinimizedCards(new Set());
+                            } else {
+                                setMinimizedCards(allInitialMinimized);
+                            }
+                        }}
+                        className="px-3 py-1 bg-white border border-slate-300 text-[8px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors"
+                        title={minimizedCards.size > 0 ? "Expandir todo" : "Minimizar todo"}
+                    >
+                        {minimizedCards.size > 0 ? "Expandir todo" : "Minimizar todo"}
+                    </button>
+
+                    {/* Status Filters */}
+                    <div className="flex bg-slate-200 p-0.5 border border-slate-300">
+                        {[
+                            { id: 'TODOS', label: 'Todos' },
+                            { id: 'PENDIENTE_RECIBO', label: 'Pendientes Recibo' },
+                            { id: 'PENDIENTE_SALIDA', label: 'Dist. Pend. Salida' },
+                            { id: 'PENDIENTE_ENTRADA', label: 'Dist. Pend. Entrada' },
+                        ].map(f => (
+                            <button
+                                key={f.id}
+                                onClick={() => setKanbanFilter(f.id as any)}
+                                className={cn(
+                                    "px-3 py-1 text-[8px] font-black uppercase tracking-widest transition-all",
+                                    kanbanFilter === f.id ? "bg-[#4050B4] text-white" : "text-slate-500 hover:bg-white hover:text-slate-800"
+                                )}
+                            >
+                                {f.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-3">
