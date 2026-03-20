@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, memo } from 'react';
 import {
@@ -238,7 +238,7 @@ const KanbanDetailItem = memo(({ label, value, colSpan = 1, color = 'text-slate-
 }) => (
     <div className={cn("flex flex-col gap-0.5", colSpan === 2 && "col-span-2")}>
         <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-        <span className={cn("font-black leading-tight", textSize, color)}>{value || '—'}</span>
+        <span className={cn("font-black leading-tight", textSize, color)}>{value || 'â€”'}</span>
     </div>
 ));
 
@@ -311,7 +311,7 @@ export default function CedisDistributionsPage() {
             start: (() => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' })); d.setDate(d.getDate() - d.getDay()); return d.toLocaleDateString('en-CA'); })(),
             end: today
         },
-        { label: '7 días', start: mtyDate(-6), end: today },
+        { label: '7 dÃ­as', start: mtyDate(-6), end: today },
         {
             label: 'Este mes',
             start: (() => { const d = mtyMonth(0); d.setDate(1); return d.toLocaleDateString('en-CA'); })(),
@@ -463,11 +463,11 @@ export default function CedisDistributionsPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white py-2 px-4 shadow-sm border border-slate-100">
                     <div className="flex flex-col">
                         <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-2">
-                            <span>🏭</span>
+                            <span>ðŸ­</span>
                             Distribuciones Cedis
                         </h1>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                            Kanban general · {Object.keys(orderGroups).length} órdenes · {filteredRows.length} distribuciones
+                            Kanban general · {Object.keys(orderGroups).length} Ã³rdenes · {filteredRows.length} distribuciones
                         </p>
                     </div>
 
@@ -539,7 +539,7 @@ export default function CedisDistributionsPage() {
                     <div className="w-5 shrink-0" />
                     <div className="flex-1 flex items-center gap-1 px-2 py-1 bg-amber-500 text-white">
                         <RotateCcw size={10} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Distribución</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">DistribuciÃ³n</span>
                     </div>
                     <div className="w-5 shrink-0" />
                     <div className="flex-1 flex items-center gap-1 px-2 py-1 bg-emerald-900 text-white">
@@ -558,7 +558,7 @@ export default function CedisDistributionsPage() {
                     </div>
                 ) : filteredRows.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center p-8">
-                        <span className="text-4xl mb-3">🏭</span>
+                        <span className="text-4xl mb-3">ðŸ­</span>
                         <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-1">Sin Distribuciones</h2>
                         <p className="text-slate-400 text-sm">No se encontraron distribuciones en el rango seleccionado.</p>
                     </div>
@@ -599,10 +599,10 @@ export default function CedisDistributionsPage() {
                                             </KanbanNode>
                                         </div>
 
-                                    {/* Connector 1→2 */}
+                                    {/* Connector 1â†’2 */}
                                     <Connector label={diffOrdenRecibo !== null ? `+${diffOrdenRecibo}d` : undefined} />
 
-                                    {/* Col 2: Recibo — once per order */}
+                                    {/* Col 2: Recibo â€” once per order */}
                                     <div className="w-1/5 shrink-0 px-6">
                                         {isPendingRecibo ? (
                                             <KanbanNode
@@ -614,7 +614,7 @@ export default function CedisDistributionsPage() {
                                                 onToggle={() => toggleCard(`receipt-${orderId}`)}
                                             >
                                                 <div className="col-span-2 py-4 flex flex-col items-center justify-center border border-dashed border-rose-200 bg-rose-50/50">
-                                                    <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Esperando Recibo Móvil</span>
+                                                    <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Esperando Recibo MÃ³vil</span>
                                                 </div>
                                             </KanbanNode>
                                         ) : (
@@ -644,18 +644,19 @@ export default function CedisDistributionsPage() {
                                             const isEntroRecibo = row.FolioEntrada === 'ENTRO RECIBO';
                                             const diffReciboSalida = getDaysDiff(firstRow.FechaRecibo, row.FechaSalida);
                                             const diffSalidaEntrada = getDaysDiff(row.FechaSalida, row.FechaEntrada);
+                                            const daysInTransit = !isPendingSalida && isPendingEntrada ? getDaysDiff(row.FechaSalida, today) : null;
 
                                             return (
                                                 <div key={`${row.IdOrdenCompra}-${row.IdTiendaDestino}-${rowIdx}`} className={cn("flex items-start flex-1", rowIdx > 0 && "mt-1")}>
 
-                                                    {/* Connector 2→3 */}
+                                                    {/* Connector 2â†’3 */}
                                                     <Connector label={diffReciboSalida !== null ? `+${diffReciboSalida}d` : undefined} />
 
-                                                     {/* Col 3: Distribución */}
+                                                     {/* Col 3: DistribuciÃ³n */}
                                                      <div className="flex-1 px-6">
                                                          {isPendingSalida ? (
                                                              <KanbanNode
-                                                                 label={`→ ${row.TiendaDestino}`}
+                                                                 label={`â†’ ${row.TiendaDestino}`}
                                                                  sublabel={`${row.CantidadArticulos} arts`}
                                                                  color="border-amber-300 border-dashed bg-amber-50/30"
                                                                  textColor="text-amber-500"
@@ -667,7 +668,7 @@ export default function CedisDistributionsPage() {
                                                              />
                                                          ) : (
                                                              <KanbanNode
-                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioSalida} → ${row.TiendaDestino}` : row.FolioSalida!}
+                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioSalida} â†’ ${row.TiendaDestino}` : row.FolioSalida!}
                                                                  sublabel={`${row.TiendaDestino} · ${row.CantidadArticulos} arts`}
                                                                  tag={formatDateTime(row.FechaSalida)}
                                                                  color={isFactura ? "border-purple-500 bg-purple-50" : "border-amber-500 bg-amber-50"}
@@ -686,14 +687,14 @@ export default function CedisDistributionsPage() {
                                                          )}
                                                      </div>
 
-                                                     {/* Connector 3→4 */}
+                                                     {/* Connector 3â†’4 */}
                                                      <Connector label={diffSalidaEntrada !== null && !isEntroRecibo ? `+${diffSalidaEntrada}d` : undefined} />
 
                                                      {/* Col 4: Entrada */}
                                                      <div className="flex-1 px-6">
                                                          {isEntroRecibo ? (
                                                              <KanbanNode
-                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO · ${row.TiendaDestino}` : "Entró por Recibo"}
+                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO · ${row.TiendaDestino}` : "EntrÃ³ por Recibo"}
                                                                  tag={formatDateTime(row.FechaEntrada)}
                                                                  color="border-emerald-600/30 bg-emerald-50/30"
                                                                  textColor="text-emerald-700"
@@ -703,13 +704,18 @@ export default function CedisDistributionsPage() {
                                                              />
                                                          ) : isPendingEntrada ? (
                                                              <KanbanNode
-                                                                 label={`SIN ENTRADA · ${row.TiendaDestino}`}
+                                                                 label={daysInTransit && daysInTransit >= 1 ? `⚠️ ${daysInTransit}d TRANSITO · ${row.TiendaDestino}` : `SIN ENTRADA · ${row.TiendaDestino}`}
                                                                  color={isPendingSalida ? "border-amber-400/50 border-dashed bg-amber-50" : "border-rose-500/50 border-dashed bg-rose-50"}
                                                                   textColor={isPendingSalida ? "text-amber-600" : "text-rose-600"}
                                                                  isPending
                                                                  isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
                                                                  onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                             />
+                                                                  badge={daysInTransit && daysInTransit >= 1 ? (
+                                                                      <span className="flex items-center gap-1 bg-rose-600 text-white px-1.5 py-0.5 text-[8px] font-black animate-pulse shadow-sm">
+                                                                          <Clock size={8} /> {daysInTransit} DÍAS
+                                                                      </span>
+                                                                  ) : undefined}
+                                                              />
                                                          ) : (
                                                              <KanbanNode
                                                                  label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioEntrada} · ${row.TiendaDestino}` : row.FolioEntrada!}
@@ -738,7 +744,7 @@ export default function CedisDistributionsPage() {
                                     onClick={() => setVisibleCount(prev => prev + 50)}
                                     className="px-12 py-3 bg-white border-2 border-[#4050B4] text-[#4050B4] text-[11px] font-black uppercase tracking-widest hover:bg-[#4050B4] hover:text-white transition-all shadow-lg active:scale-95"
                                 >
-                                    Cargar {Math.min(50, orderEntries.length - visibleCount)} más
+                                    Cargar {Math.min(50, orderEntries.length - visibleCount)} mÃ¡s
                                     <span className="ml-2 opacity-50">({orderEntries.length - visibleCount} pendientes)</span>
                                 </button>
                             </div>
@@ -755,7 +761,7 @@ export default function CedisDistributionsPage() {
                         <span className="px-2 py-0.5 bg-white border border-slate-200 text-[#4050B4] text-[10px] font-black">{filteredRows.length}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Órdenes:</span>
+                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Ã“rdenes:</span>
                         <span className="px-2 py-0.5 bg-white border border-slate-200 text-emerald-600 text-[10px] font-black">{Object.keys(orderGroups).length}</span>
                     </div>
                 </div>
@@ -807,7 +813,7 @@ export default function CedisDistributionsPage() {
                     {[
                         { color: 'bg-[#4050B4]', label: 'Orden' },
                         { color: 'bg-emerald-500', label: 'Recibo Cedis' },
-                        { color: 'bg-amber-400', label: 'Distribución' },
+                        { color: 'bg-amber-400', label: 'DistribuciÃ³n' },
                         { color: 'bg-purple-500', label: 'Factura' },
                         { color: 'bg-rose-400', label: 'Pendiente' },
                     ].map(({ color, label }) => (
@@ -1018,7 +1024,7 @@ export default function CedisDistributionsPage() {
                                     </tbody>
                                     <tfoot className="bg-slate-50 border-t-2 border-slate-200 sticky bottom-0">
                                         <tr>
-                                            <td colSpan={activeReceiptTab === 'recibo' ? 14 : 5} className="p-4 text-right text-[11px] font-black uppercase text-slate-500 tracking-widest">Total {activeReceiptTab === 'recibo' ? 'Recibido' : 'Devolución'}</td>
+                                            <td colSpan={activeReceiptTab === 'recibo' ? 14 : 5} className="p-4 text-right text-[11px] font-black uppercase text-slate-500 tracking-widest">Total {activeReceiptTab === 'recibo' ? 'Recibido' : 'DevoluciÃ³n'}</td>
                                             <td className={cn("p-4 text-right text-base font-black", activeReceiptTab === 'recibo' ? "text-emerald-600" : "text-rose-600")}>
                                                 {formatCurrency((activeReceiptTab === 'recibo' ? receiptData?.receiptItems : receiptData?.returnItems)?.reduce((a, i) => a + i.Total, 0) || 0)}
                                             </td>
@@ -1042,7 +1048,7 @@ export default function CedisDistributionsPage() {
                             <div className="flex flex-col">
                                 <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
                                     <RotateCcw className="text-amber-500" size={20} />
-                                    Detalle de Distribución - {selectedDistHeader?.tienda}
+                                    Detalle de DistribuciÃ³n - {selectedDistHeader?.tienda}
                                 </h2>
                                 <div className="flex items-center gap-4 mt-1">
                                     <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Folio Transferencia: {selectedDistHeader?.folio || 'PENDIENTE'}</p>
@@ -1113,7 +1119,7 @@ export default function CedisDistributionsPage() {
                             ) : (
                                 <div className="h-full flex flex-col items-center justify-center text-center p-12">
                                     <div className="w-16 h-16 bg-slate-100 flex items-center justify-center rounded-full mb-4 text-slate-400"><Search size={32} /></div>
-                                    <p className="text-slate-500 text-[11px] font-bold uppercase tracking-widest italic">No se encontraron artículos distribuidos</p>
+                                    <p className="text-slate-500 text-[11px] font-bold uppercase tracking-widest italic">No se encontraron artÃ­culos distribuidos</p>
                                 </div>
                             )}
                         </div>
