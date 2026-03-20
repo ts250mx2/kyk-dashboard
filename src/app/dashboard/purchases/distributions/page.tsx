@@ -629,7 +629,7 @@ export default function CedisDistributionsPage() {
                                         ) : (
                                             <KanbanNode
                                                 label={firstRow.FolioReciboMovil!}
-                                                sublabel={firstRow.UsuarioRecibo}
+                                                sublabel={firstRow.Proveedor}
                                                 tag={formatDateTime(firstRow.FechaRecibo)}
                                                 color="border-emerald-600 bg-emerald-50"
                                                 textColor="text-emerald-700"
@@ -637,7 +637,8 @@ export default function CedisDistributionsPage() {
                                                 isMinimized={minimizedCards.has(`receipt-${orderId}`)}
                                                 onToggle={() => toggleCard(`receipt-${orderId}`)}
                                             >
-                                                <KanbanDetailItem label="Usuario" value={firstRow.UsuarioRecibo} colSpan={2} />
+                                                <KanbanDetailItem label="Proveedor" value={firstRow.Proveedor} colSpan={2} />
+                                                 <KanbanDetailItem label="Usuario" value={firstRow.UsuarioRecibo} colSpan={2} />
                                                 <KanbanDetailItem label="Total Recibo" value={formatCurrency(firstRow.TotalRecibo || 0)} color="text-emerald-600" />
                                                 <KanbanDetailItem label="Arts. Recibo" value={firstRow.Recibidos} />
                                             </KanbanNode>

@@ -24,32 +24,32 @@ export async function GET(request: Request) {
         const sql = `
             SELECT 
                 A.IdOrdenCompra,
-                A.FechaOrdenCompra,
-                TiendaOrigen.Tienda AS TiendaOrigen,
-                Prov.Proveedor,
-                Status.StatusOrdenCompra AS Status,
-                TipoOrden.TipoOrdenCompra,
-                Recibo.FolioReciboMovil,
-                Recibo.FechaRecibo,
-                Recibo.UUID AS UUIDRecibo,
-                UsuRecibo.Usuario AS UsuarioRecibo,
+                MAX(A.FechaOrdenCompra) as FechaOrdenCompra,
+                MAX(TiendaOrigen.Tienda) AS TiendaOrigen,
+                MAX(Prov.Proveedor) as Proveedor,
+                MAX(Status.StatusOrdenCompra) AS Status,
+                MAX(TipoOrden.TipoOrdenCompra) as TipoOrdenCompra,
+                MAX(Recibo.FolioReciboMovil) as FolioReciboMovil,
+                MAX(Recibo.FechaRecibo) as FechaRecibo,
+                MAX(Recibo.UUID) AS UUIDRecibo,
+                MAX(UsuRecibo.Usuario) AS UsuarioRecibo,
                 B.IdTiendaDestino,
-                TiendaDest.Tienda AS TiendaDestino,
-                ArtCounts.CantidadArticulos,
-                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.IdTransferenciaSalida ELSE C.IdTransferenciaSalida END AS IdTransferenciaSalida,
-                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FolioSalida ELSE C.FolioSalida END AS FolioSalida,
-                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE C.FechaSalida END AS FechaSalida,
-                UsuSalida.Usuario AS UsuarioSalida,
-                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 0 ELSE F.IdTransferenciaEntrada END AS IdTransferenciaEntrada,
-                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 'ENTRO RECIBO' ELSE F.FolioEntrada END AS FolioEntrada,
-                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE F.FechaEntrada END AS FechaEntrada,
-                UsuEntrada.Usuario AS UsuarioEntrada,
-                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.UUID ELSE NULL END AS UUID,
-                A.IdTienda AS IdTiendaOrigen,
-                TotOC.TotalPedido,
-                TotOC.Ordenados,
-                TotRec.TotalRecibo,
-                TotRec.Recibidos
+                MAX(TiendaDest.Tienda) AS TiendaDestino,
+                MAX(ArtCounts.CantidadArticulos) as CantidadArticulos,
+                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.IdTransferenciaSalida ELSE C.IdTransferenciaSalida END) AS IdTransferenciaSalida,
+                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FolioSalida ELSE C.FolioSalida END) AS FolioSalida,
+                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE C.FechaSalida END) AS FechaSalida,
+                MAX(UsuSalida.Usuario) AS UsuarioSalida,
+                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 0 ELSE F.IdTransferenciaEntrada END) AS IdTransferenciaEntrada,
+                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 'ENTRO RECIBO' ELSE F.FolioEntrada END) AS FolioEntrada,
+                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE F.FechaEntrada END) AS FechaEntrada,
+                MAX(UsuEntrada.Usuario) AS UsuarioEntrada,
+                MAX(CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.UUID ELSE NULL END) AS UUID,
+                MAX(A.IdTienda) AS IdTiendaOrigen,
+                MAX(TotOC.TotalPedido) as TotalPedido,
+                MAX(TotOC.Ordenados) as Ordenados,
+                MAX(TotRec.TotalRecibo) as TotalRecibo,
+                MAX(TotRec.Recibidos) as Recibidos
             FROM tblOrdenesCompra A
             INNER JOIN (
                 SELECT Det.IdOrdenCompra,
@@ -92,7 +92,8 @@ export async function GET(request: Request) {
               AND A.FechaOrdenCompra >= ?
               AND A.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
               ${storeFilter}
-            ORDER BY A.FechaOrdenCompra DESC, TiendaOrigen.Tienda ASC, TiendaDest.Tienda ASC
+            GROUP BY A.IdOrdenCompra, B.IdTiendaDestino
+            ORDER BY FechaOrdenCompra DESC, TiendaOrigen ASC, TiendaDestino ASC
 `;
 
         const results = await mysqlQuery(sql, params);
