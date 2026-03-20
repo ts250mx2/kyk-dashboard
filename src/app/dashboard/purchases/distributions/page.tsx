@@ -162,7 +162,7 @@ const KanbanNode = memo(({
                 <span className={cn(
                     "font-black uppercase tracking-wider truncate", 
                     textColor,
-                    isMinimized ? "text-[8px] flex-1 pr-4" : "text-[11px] w-full pr-6"
+                    isMinimized ? "text-[10px] flex-1 pr-4" : "text-[11px] w-full pr-6"
                 )}>
                     {label}
                 </span>
@@ -472,7 +472,7 @@ export default function CedisDistributionsPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white py-2 px-4 shadow-sm border border-slate-100">
                     <div className="flex flex-col">
                         <h1 className="text-xl font-black text-[#4050B4] tracking-tighter uppercase flex items-center gap-2">
-                            <Warehouse size={24} className="text-[#4050B4]" />
+                            <span>🏭</span>
                             DISTRIBUCIONES CEDIS
                         </h1>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
@@ -548,7 +548,7 @@ export default function CedisDistributionsPage() {
                     <div className="w-5 shrink-0" />
                     <div className="flex-1 flex items-center gap-1 px-2 py-1 bg-amber-500 text-white">
                         <RotateCcw size={10} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">DistribuciÃ³n</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Distribución</span>
                     </div>
                     <div className="w-5 shrink-0" />
                     <div className="flex-1 flex items-center gap-1 px-2 py-1 bg-emerald-900 text-white">
@@ -623,7 +623,7 @@ export default function CedisDistributionsPage() {
                                                 onToggle={() => toggleCard(`receipt-${orderId}`)}
                                             >
                                                 <div className="col-span-2 py-4 flex flex-col items-center justify-center border border-dashed border-rose-200 bg-rose-50/50">
-                                                    <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Esperando Recibo MÃ³vil</span>
+                                                    <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Esperando Recibo Móvil</span>
                                                 </div>
                                             </KanbanNode>
                                         ) : (
@@ -661,7 +661,7 @@ export default function CedisDistributionsPage() {
                                                     {/* Connector 2â†’3 */}
                                                     <Connector label={diffReciboSalida !== null ? `+${diffReciboSalida}d` : undefined} />
 
-                                                     {/* Col 3: DistribuciÃ³n */}
+                                                     {/* Col 3: Distribución */}
                                                      <div className="flex-1 px-6">
                                                          {isPendingSalida ? (
                                                              <KanbanNode
@@ -703,7 +703,7 @@ export default function CedisDistributionsPage() {
                                                      <div className="flex-1 px-6">
                                                          {isEntroRecibo ? (
                                                              <KanbanNode
-                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO · ${row.TiendaDestino}` : "EntrÃ³ por Recibo"}
+                                                                 label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO · ${row.TiendaDestino}` : "Entró por Recibo"}
                                                                  tag={formatDateTime(row.FechaEntrada)}
                                                                  color="border-emerald-600/30 bg-emerald-50/30"
                                                                  textColor="text-emerald-700"
@@ -753,7 +753,7 @@ export default function CedisDistributionsPage() {
                                     onClick={() => setVisibleCount(prev => prev + 50)}
                                     className="px-12 py-3 bg-white border-2 border-[#4050B4] text-[#4050B4] text-[11px] font-black uppercase tracking-widest hover:bg-[#4050B4] hover:text-white transition-all shadow-lg active:scale-95"
                                 >
-                                    Cargar {Math.min(50, orderEntries.length - visibleCount)} mÃ¡s
+                                    Cargar {Math.min(50, orderEntries.length - visibleCount)} más
                                     <span className="ml-2 opacity-50">({orderEntries.length - visibleCount} pendientes)</span>
                                 </button>
                             </div>
@@ -822,7 +822,7 @@ export default function CedisDistributionsPage() {
                     {[
                         { color: 'bg-[#4050B4]', label: 'Orden' },
                         { color: 'bg-emerald-500', label: 'Recibo Cedis' },
-                        { color: 'bg-amber-400', label: 'DistribuciÃ³n' },
+                        { color: 'bg-amber-400', label: 'Distribución' },
                         { color: 'bg-purple-500', label: 'Factura' },
                         { color: 'bg-rose-400', label: 'Pendiente' },
                     ].map(({ color, label }) => (
@@ -1033,7 +1033,7 @@ export default function CedisDistributionsPage() {
                                     </tbody>
                                     <tfoot className="bg-slate-50 border-t-2 border-slate-200 sticky bottom-0">
                                         <tr>
-                                            <td colSpan={activeReceiptTab === 'recibo' ? 14 : 5} className="p-4 text-right text-[11px] font-black uppercase text-slate-500 tracking-widest">Total {activeReceiptTab === 'recibo' ? 'Recibido' : 'DevoluciÃ³n'}</td>
+                                            <td colSpan={activeReceiptTab === 'recibo' ? 14 : 5} className="p-4 text-right text-[11px] font-black uppercase text-slate-500 tracking-widest">Total {activeReceiptTab === 'recibo' ? 'Recibido' : 'Devolución'}</td>
                                             <td className={cn("p-4 text-right text-base font-black", activeReceiptTab === 'recibo' ? "text-emerald-600" : "text-rose-600")}>
                                                 {formatCurrency((activeReceiptTab === 'recibo' ? receiptData?.receiptItems : receiptData?.returnItems)?.reduce((a, i) => a + i.Total, 0) || 0)}
                                             </td>
@@ -1057,7 +1057,7 @@ export default function CedisDistributionsPage() {
                             <div className="flex flex-col">
                                 <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
                                     <RotateCcw className="text-amber-500" size={20} />
-                                    Detalle de DistribuciÃ³n - {selectedDistHeader?.tienda}
+                                    Detalle de Distribución - {selectedDistHeader?.tienda}
                                 </h2>
                                 <div className="flex items-center gap-4 mt-1">
                                     <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Folio Transferencia: {selectedDistHeader?.folio || 'PENDIENTE'}</p>
@@ -1128,7 +1128,7 @@ export default function CedisDistributionsPage() {
                             ) : (
                                 <div className="h-full flex flex-col items-center justify-center text-center p-12">
                                     <div className="w-16 h-16 bg-slate-100 flex items-center justify-center rounded-full mb-4 text-slate-400"><Search size={32} /></div>
-                                    <p className="text-slate-500 text-[11px] font-bold uppercase tracking-widest italic">No se encontraron artÃ­culos distribuidos</p>
+                                    <p className="text-slate-500 text-[11px] font-bold uppercase tracking-widest italic">No se encontraron artículos distribuidos</p>
                                 </div>
                             )}
                         </div>
