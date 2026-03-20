@@ -665,7 +665,7 @@ export default function CedisDistributionsPage() {
                                                      <div className="flex-1 px-6">
                                                          {isPendingSalida ? (
                                                              <KanbanNode
-                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.TiendaDestino} ${row.CantidadArticulos}` : `→ ${row.TiendaDestino}`}
+                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `SIN SALIDA ${row.TiendaDestino} ${row.CantidadArticulos} Productos` : `→ ${row.TiendaDestino}`}
                                                                  sublabel={`${row.CantidadArticulos} arts`}
                                                                  color="border-amber-300 border-dashed bg-amber-50/30"
                                                                  textColor="text-amber-500"
@@ -720,10 +720,10 @@ export default function CedisDistributionsPage() {
                                                                  isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
                                                                  onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
                                                                   badge={daysInTransit && daysInTransit >= 1 ? (
-                                                                      <span className="flex items-center gap-1 bg-rose-600 text-white px-1.5 py-0.5 text-[8px] font-black animate-pulse shadow-sm">
-                                                                          <Clock size={8} /> {daysInTransit} DÍAS
-                                                                      </span>
-                                                                  ) : undefined}
+                                                                       <div className="bg-rose-600 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg text-[10px] font-black animate-pulse border-2 border-white">
+                                                                           {daysInTransit}d
+                                                                       </div>
+                                                                   ) : undefined}
                                                               />
                                                          ) : (
                                                              <KanbanNode
