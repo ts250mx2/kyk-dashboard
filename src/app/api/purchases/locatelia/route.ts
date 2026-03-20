@@ -21,10 +21,10 @@ export async function GET(request: Request) {
         }
 
         const xmlText = await response.text();
-        
+
         // Simple regex parser for flat XML schema
         const vehicles = [];
-        const vehicleNodes = xmlText.match(/<M_Vehiculo>([\s\S]*?)<\/M_Vehiculo>/g) || [];
+        const vehicleNodes = xmlText.match(/<coches[^>]*>([\s\S]*?)<\/coches>/g) || [];
 
         for (const node of vehicleNodes) {
             const extract = (tag: string) => {
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
         }
 
         return NextResponse.json(vehicles);
-        
+
     } catch (error: any) {
         console.error('Error fetching locatelia data:', error);
         return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });

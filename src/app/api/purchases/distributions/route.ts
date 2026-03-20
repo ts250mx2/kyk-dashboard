@@ -22,75 +22,64 @@ export async function GET(request: Request) {
             params.push(...storeIds);
         }
 
-        // Build status filter for the outer WHERE
-        let statusFilter = '';
-        if (status === 'PENDIENTE_RECIBO') statusFilter = "AND FolioReciboMovil IS NULL";
-        if (status === 'PENDIENTE_SALIDA') statusFilter = "AND FolioReciboMovil IS NOT NULL AND FolioSalida IS NULL";
-        if (status === 'PENDIENTE_ENTRADA') statusFilter = "AND FolioSalida IS NOT NULL AND (FolioEntrada IS NULL OR FolioEntrada = '' OR FolioEntrada = 'ENTRO RECIBO')";
+        // Build status filter for the outer query
+        let outerStatusFilter = '';
+        if (status === 'PENDIENTE_RECIBO') outerStatusFilter = "AND Recibo.FolioReciboMovil IS NULL";
+        if (status === 'PENDIENTE_SALIDA') outerStatusFilter = "AND Recibo.FolioReciboMovil IS NOT NULL AND C.IdTransferenciaSalida IS NULL AND H.IdTransferenciaSalida IS NULL";
+        if (status === 'PENDIENTE_ENTRADA') outerStatusFilter = "AND (C.IdTransferenciaSalida IS NOT NULL OR H.IdTransferenciaSalida IS NOT NULL) AND (F.FolioEntrada IS NULL OR F.FolioEntrada = '' OR F.FolioEntrada = 'ENTRO RECIBO')";
 
-        // RADICAL SIMPLIFICATION:
-        // - Removed TotOC (heavy SUM scan) — totals are only shown in the detail modal
-        // - Removed TotRec (heavy SUM scan) — totals are only shown in the detail modal  
-        // - ArtCounts now uses a simple COUNT without joining back to tblOrdenesCompra
-        // - Anchor the query from tblDetalleDistribuciones (narrow table) not tblOrdenesCompra
-        // - Single date filter applied only at A (tblOrdenesCompra) level
         const sql = `
-            SELECT * FROM (
-                SELECT
-                    A.IdOrdenCompra,
-                    A.FechaOrdenCompra,
-                    A.IdTienda AS IdTiendaOrigen,
-                    TiendaOrigen.Tienda AS TiendaOrigen,
-                    Prov.Proveedor,
-                    Status.StatusOrdenCompra AS Status,
-                    TipoOrden.TipoOrdenCompra,
-                    Recibo.FolioReciboMovil,
-                    Recibo.FechaRecibo,
-                    Recibo.UUID AS UUIDRecibo,
-                    UsuRecibo.Usuario AS UsuarioRecibo,
-                    B.IdTiendaDestino,
-                    TiendaDest.Tienda AS TiendaDestino,
-                    ArtCounts.CantidadArticulos,
-                    COALESCE(H.IdTransferenciaSalida, C.IdTransferenciaSalida) AS IdTransferenciaSalida,
-                    COALESCE(H.FolioSalida, C.FolioSalida) AS FolioSalida,
-                    COALESCE(H.FechaSalida, C.FechaSalida) AS FechaSalida,
-                    UsuSalida.Usuario AS UsuarioSalida,
-                    CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 0 ELSE F.IdTransferenciaEntrada END AS IdTransferenciaEntrada,
-                    CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 'ENTRO RECIBO' ELSE F.FolioEntrada END AS FolioEntrada,
-                    CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE F.FechaEntrada END AS FechaEntrada,
-                    UsuEntrada.Usuario AS UsuarioEntrada,
-                    CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.UUID ELSE NULL END AS UUID
-                FROM tblOrdenesCompra A
-                INNER JOIN tblDetalleDistribuciones B ON A.IdOrdenCompra = B.IdOrdenCompra
-                INNER JOIN (
-                    SELECT IdOrdenCompra, IdTiendaDestino, COUNT(*) AS CantidadArticulos
-                    FROM tblDetalleDistribuciones
-                    GROUP BY IdOrdenCompra, IdTiendaDestino
-                ) ArtCounts ON B.IdOrdenCompra = ArtCounts.IdOrdenCompra AND B.IdTiendaDestino = ArtCounts.IdTiendaDestino
-                INNER JOIN tblTiendas TiendaOrigen ON A.IdTienda = TiendaOrigen.IdTienda
-                INNER JOIN tblProveedores Prov ON A.IdProveedor = Prov.IdProveedor
-                INNER JOIN tblStatusOrdenesCompra Status ON A.IdStatusOrdenCompra = Status.IdStatusOrdenCompra
-                INNER JOIN tblTiposOrdenesCompra TipoOrden ON A.IdTipoOrdenCompra = TipoOrden.IdTipoOrdenCompra
-                INNER JOIN tblTiendas TiendaDest ON B.IdTiendaDestino = TiendaDest.IdTienda
-                LEFT JOIN tblReciboMovil Recibo ON A.IdReciboMovil = Recibo.IdReciboMovil AND A.IdTienda = Recibo.IdTienda
-                LEFT JOIN tblUsuarios UsuRecibo ON Recibo.IdUsuarioRecibo = UsuRecibo.IdUsuario
-                LEFT JOIN tblTransferenciasSalidas C ON B.IdOrdenCompra = C.IdOrdenCompra AND B.IdTiendaDestino = C.IdTiendaDestino
-                LEFT JOIN tblUsuarios UsuSalida ON C.IdUsuarioSalida = UsuSalida.IdUsuario
-                LEFT JOIN tblTransferenciasEntradas F ON C.IdTransferenciaEntrada = F.IdTransferenciaEntrada AND C.IdTiendaDestino = F.IdTienda
-                LEFT JOIN tblUsuarios UsuEntrada ON F.IdUsuarioEntrada = UsuEntrada.IdUsuario
-                LEFT JOIN tblTransferenciasSalidasFacturas H ON B.IdOrdenCompra = H.IdOrdenCompra AND B.IdTiendaDestino = H.IdTiendaDestino
-                WHERE A.TieneDistribucion = 1
-                  AND A.FechaOrdenCompra >= ?
-                  AND A.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
-                  ${storeFilter}
-                GROUP BY A.IdOrdenCompra, B.IdTiendaDestino
-            ) AS Base
-            WHERE 1=1
-            ${statusFilter}
-            ORDER BY FechaOrdenCompra DESC, TiendaOrigen ASC, TiendaDestino ASC
+            SELECT STRAIGHT_JOIN
+                A.IdOrdenCompra,
+                A.FechaOrdenCompra,
+                A.IdTienda AS IdTiendaOrigen,
+                TiendaOrigen.Tienda AS TiendaOrigen,
+                Prov.Proveedor,
+                Status.StatusOrdenCompra AS Status,
+                TipoOrden.TipoOrdenCompra,
+                A.TotalPedido,
+                A.CantPedido AS Ordenados,
+                Recibo.FolioReciboMovil,
+                Recibo.FechaRecibo,
+                Recibo.UUID AS UUIDRecibo,
+                UsuRecibo.Usuario AS UsuarioRecibo,
+                B.IdTiendaDestino,
+                TiendaDest.Tienda AS TiendaDestino,
+                COUNT(B.CodigoInterno) AS CantidadArticulos,
+                COALESCE(H.IdTransferenciaSalida, C.IdTransferenciaSalida) AS IdTransferenciaSalida,
+                COALESCE(H.FolioSalida, C.FolioSalida) AS FolioSalida,
+                COALESCE(H.FechaSalida, C.FechaSalida) AS FechaSalida,
+                UsuSalida.Usuario AS UsuarioSalida,
+                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 0 ELSE F.IdTransferenciaEntrada END AS IdTransferenciaEntrada,
+                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 'ENTRO RECIBO' ELSE F.FolioEntrada END AS FolioEntrada,
+                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE F.FechaEntrada END AS FechaEntrada,
+                UsuEntrada.Usuario AS UsuarioEntrada,
+                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.UUID ELSE NULL END AS UUID
+            FROM tblOrdenesCompra A
+            INNER JOIN tblTiendas TiendaOrigen ON A.IdTienda = TiendaOrigen.IdTienda
+            INNER JOIN tblProveedores Prov ON A.IdProveedor = Prov.IdProveedor
+            INNER JOIN tblStatusOrdenesCompra Status ON A.IdStatusOrdenCompra = Status.IdStatusOrdenCompra
+            INNER JOIN tblTiposOrdenesCompra TipoOrden ON A.IdTipoOrdenCompra = TipoOrden.IdTipoOrdenCompra
+            INNER JOIN tblDetalleDistribuciones B ON A.IdOrdenCompra = B.IdOrdenCompra
+            INNER JOIN tblTiendas TiendaDest ON B.IdTiendaDestino = TiendaDest.IdTienda
+            LEFT JOIN tblReciboMovil Recibo ON A.IdReciboMovil = Recibo.IdReciboMovil AND A.IdTienda = Recibo.IdTienda
+            LEFT JOIN tblUsuarios UsuRecibo ON Recibo.IdUsuarioRecibo = UsuRecibo.IdUsuario
+            LEFT JOIN tblTransferenciasSalidas C ON B.IdOrdenCompra = C.IdOrdenCompra AND B.IdTiendaDestino = C.IdTiendaDestino
+            LEFT JOIN tblUsuarios UsuSalida ON C.IdUsuarioSalida = UsuSalida.IdUsuario
+            LEFT JOIN tblTransferenciasEntradas F ON C.IdTransferenciaEntrada = F.IdTransferenciaEntrada AND C.IdTiendaDestino = F.IdTienda
+            LEFT JOIN tblUsuarios UsuEntrada ON F.IdUsuarioEntrada = UsuEntrada.IdUsuario
+            LEFT JOIN tblTransferenciasSalidasFacturas H ON B.IdOrdenCompra = H.IdOrdenCompra AND B.IdTiendaDestino = H.IdTiendaDestino
+            WHERE A.TieneDistribucion = 1
+              AND A.FechaOrdenCompra >= ?
+              AND A.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
+              ${storeFilter}
+              ${outerStatusFilter}
+            GROUP BY A.IdOrdenCompra, B.IdTiendaDestino
+            ORDER BY A.FechaOrdenCompra DESC, TiendaOrigen ASC, TiendaDestino ASC
         `;
 
-        const results = await mysqlQuery(sql, params);
+        const fullParams = [startDate, endDate, ...storeIds];
+        const results = await mysqlQuery(sql, fullParams);
         return NextResponse.json(results);
     } catch (error) {
         console.error('Error fetching cedis distributions:', error);

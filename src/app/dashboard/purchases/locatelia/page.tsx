@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api';
-import { MapPin, Navigation, RefreshCcw, Car } from 'lucide-react';
+import { MapPin, Navigation, RefreshCcw, Car, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Vehicle {
@@ -32,6 +32,18 @@ export default function LocateliaPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [mapRef, setMapRef] = useState<google.maps.Map | null>(null);
+
+    const filteredVehicles = useMemo(() => {
+        if (!searchQuery.trim()) return vehicles;
+        const query = searchQuery.toLowerCase();
+        return vehicles.filter(v => 
+            v.alias.toLowerCase().includes(query) || 
+            v.modelo.toLowerCase().includes(query) || 
+            (v.matricula && v.matricula.toLowerCase().includes(query))
+        );
+    }, [vehicles, searchQuery]);
 
     const { isLoaded } = useJsApiLoader({
         id: 'google-map-script',
@@ -63,7 +75,7 @@ export default function LocateliaPage() {
     }, []);
 
     // Calculate dynamic center based on active vehicles
-    const center = useMemo(() => {
+    const initialCenter = useMemo(() => {
         if (vehicles.length === 0) return defaultCenter;
         const validVehicles = vehicles.filter(v => v.latitud !== 0 && v.longitud !== 0);
         if (validVehicles.length === 0) return defaultCenter;
@@ -75,10 +87,33 @@ export default function LocateliaPage() {
             lat: sumLat / validVehicles.length,
             lng: sumLng / validVehicles.length
         };
-    }, [vehicles]);
+    }, [vehicles.length === 0]); // Only recalculate if vehicles array goes from empty to populated
 
     const handleMarkerClick = (vehicle: Vehicle) => {
         setSelectedVehicle(vehicle);
+        if (mapRef) {
+            mapRef.panTo({ lat: vehicle.latitud, lng: vehicle.longitud });
+            mapRef.setZoom(15);
+            // We do not lock these values into React state to avoid map reset when closing info window
+        }
+    };
+
+    const getVehicleIcon = (vehicle: Vehicle) => {
+        const aliasLower = vehicle.alias.toLowerCase();
+        const modeloLower = vehicle.modelo.toLowerCase();
+        
+        // Use Twitter Emoji (Twemoji) SVG CDN for guaranteed OS-independent premium rendering
+        let iconUrl = 'https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f698.svg'; // 🚘 Oncoming Car
+        if (aliasLower.includes('chevrolet') || modeloLower.includes('chevrolet')) {
+            iconUrl = 'https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f69a.svg'; // 🚚 Delivery Truck
+        } else if (aliasLower.includes('nissan') || modeloLower.includes('nissan')) {
+            iconUrl = 'https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f6fb.svg'; // 🛻 Pickup Truck
+        }
+        
+        return {
+            url: iconUrl,
+            scaledSize: new window.google.maps.Size(34, 34), // Explicit perfect size for the map
+        };
     };
 
     return (
@@ -120,17 +155,34 @@ export default function LocateliaPage() {
             <div className="flex-1 flex gap-4 min-h-0">
                 {/* List Sidebar */}
                 <div className="w-80 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden hidden md:flex shrink-0">
-                    <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 font-black text-[#4050B4] flex items-center gap-2 uppercase text-[10px] tracking-widest">
-                        <Car size={14} />
-                        Unidades Activas
+                    <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 pb-3 flex flex-col gap-3">
+                        <div className="font-black text-[#4050B4] flex items-center justify-between uppercase text-[10px] tracking-widest leading-none">
+                            <div className="flex items-center gap-2">
+                                <Car size={14} />
+                                <span>Unidades Activas</span>
+                            </div>
+                            <span className="bg-[#4050B4]/10 text-[#4050B4] px-1.5 py-0.5 rounded-sm">{filteredVehicles.length}</span>
+                        </div>
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
+                            <input 
+                                type="text"
+                                placeholder="Buscar alias, modelo o placa..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs outline-none focus:border-[#4050B4] focus:ring-1 focus:ring-[#4050B4] transition-all"
+                            />
+                        </div>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
                         {loading && vehicles.length === 0 ? (
                             <p className="text-center text-xs text-slate-400 py-10 font-bold uppercase">Cargando unidades...</p>
-                        ) : vehicles.map(vehicle => (
+                        ) : filteredVehicles.length === 0 ? (
+                            <p className="text-center text-xs text-slate-400 py-10 font-bold uppercase">No hay coincidencias</p>
+                        ) : filteredVehicles.map(vehicle => (
                             <div 
                                 key={vehicle.id}
-                                onClick={() => setSelectedVehicle(vehicle)}
+                                onClick={() => handleMarkerClick(vehicle)}
                                 className={cn(
                                     "p-3 rounded-lg border transition-all cursor-pointer flex items-start gap-3",
                                     selectedVehicle?.id === vehicle.id 
@@ -166,8 +218,9 @@ export default function LocateliaPage() {
                     ) : (
                         <GoogleMap
                             mapContainerStyle={mapContainerStyle}
-                            center={selectedVehicle ? { lat: selectedVehicle.latitud, lng: selectedVehicle.longitud } : center}
-                            zoom={selectedVehicle ? 15 : 10}
+                            center={initialCenter}
+                            zoom={10}
+                            onLoad={(map) => setMapRef(map)}
                             options={{
                                 gestureHandling: 'greedy',
                                 disableDefaultUI: false,
@@ -183,7 +236,7 @@ export default function LocateliaPage() {
                                     key={vehicle.id}
                                     position={{ lat: vehicle.latitud, lng: vehicle.longitud }}
                                     onClick={() => handleMarkerClick(vehicle)}
-                                    // Custom icon could be added here
+                                    icon={getVehicleIcon(vehicle)}
                                     animation={selectedVehicle?.id === vehicle.id ? window.google.maps.Animation.BOUNCE : undefined}
                                 />
                             ))}
