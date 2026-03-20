@@ -54,6 +54,7 @@ const menuSections: MenuSection[] = [
             { name: "Precios", emoji: "🏷️", href: "/dashboard/purchases/prices" },
             { name: "Reportes de Compras", emoji: "📈", href: "/dashboard/purchases/reports" },
             { name: "Rutas", emoji: "🛣️", href: "/dashboard/purchases/routes" },
+            { name: "Locatelia", emoji: "🧭", href: "/dashboard/purchases/locatelia" },
         ]
     },
     {
