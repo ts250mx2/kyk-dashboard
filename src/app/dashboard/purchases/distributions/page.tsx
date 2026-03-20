@@ -567,7 +567,7 @@ export default function CedisDistributionsPage() {
                     </div>
                 ) : filteredRows.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center p-8">
-                        <span className="text-4xl mb-3">ðŸ­</span>
+                        <span className="text-4xl mb-3">🏭­</span>
                         <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-1">Sin Distribuciones</h2>
                         <p className="text-slate-400 text-sm">No se encontraron distribuciones en el rango seleccionado.</p>
                     </div>
@@ -608,7 +608,7 @@ export default function CedisDistributionsPage() {
                                             </KanbanNode>
                                         </div>
 
-                                    {/* Connector 1â†’2 */}
+                                    {/* Connector 1→2 */}
                                     <Connector label={diffOrdenRecibo !== null ? `+${diffOrdenRecibo}d` : undefined} />
 
                                     {/* Col 2: Recibo — once per order */}
@@ -658,14 +658,14 @@ export default function CedisDistributionsPage() {
                                             return (
                                                 <div key={`${row.IdOrdenCompra}-${row.IdTiendaDestino}-${rowIdx}`} className={cn("flex items-start flex-1", rowIdx > 0 && "mt-1")}>
 
-                                                    {/* Connector 2â†’3 */}
+                                                    {/* Connector 2→3 */}
                                                     <Connector label={diffReciboSalida !== null ? `+${diffReciboSalida}d` : undefined} />
 
                                                      {/* Col 3: Distribución */}
                                                      <div className="flex-1 px-6">
                                                          {isPendingSalida ? (
                                                              <KanbanNode
-                                                                 label={`â†’ ${row.TiendaDestino}`}
+                                                                 label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.TiendaDestino} ${row.CantidadArticulos}` : `→ ${row.TiendaDestino}`}
                                                                  sublabel={`${row.CantidadArticulos} arts`}
                                                                  color="border-amber-300 border-dashed bg-amber-50/30"
                                                                  textColor="text-amber-500"
@@ -696,7 +696,7 @@ export default function CedisDistributionsPage() {
                                                          )}
                                                      </div>
 
-                                                     {/* Connector 3â†’4 */}
+                                                     {/* Connector 3→4 */}
                                                      <Connector label={diffSalidaEntrada !== null && !isEntroRecibo ? `+${diffSalidaEntrada}d` : undefined} />
 
                                                      {/* Col 4: Entrada */}
