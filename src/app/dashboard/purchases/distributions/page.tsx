@@ -252,8 +252,6 @@ export default function CedisDistributionsPage() {
         return { start: d.toLocaleDateString('en-CA'), end: today };
     };
 
-    };
-
     const getSemanaRange = () => {
         const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
         const today = d.toLocaleDateString('en-CA');
