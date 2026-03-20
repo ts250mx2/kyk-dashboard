@@ -747,8 +747,9 @@ export default function CedisDistributionsPage() {
                                          })}
                                 </div>
                             </div>
-                        );
-                        })}
+                        </div>
+                    );
+                })}
 
                         {orderEntries.length > visibleCount && (
                             <div className="flex justify-center py-8">
