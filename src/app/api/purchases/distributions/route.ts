@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     try {
         const storeIds = storeIdsStr ? storeIdsStr.split(',').map(Number).filter(n => !isNaN(n)) : [];
         let storeFilter = '';
-        const params: (string | number)[] = [startDate, endDate];
+        const params: (string | number)[] = [startDate, endDate, startDate, endDate, startDate, endDate];
 
         if (storeIds.length > 0) {
             storeFilter = ` AND A.IdTienda IN (${storeIds.map(() => '?').join(',')})`;
@@ -57,6 +57,7 @@ export async function GET(request: Request) {
                        SUM(CASE WHEN Det.Cantidad > 0 THEN 1 ELSE 0 END) AS Ordenados
                 FROM tblDetalleOrdenesCompra Det
                 INNER JOIN tblArticulosSAP Art ON Det.CodigoInterno = Art.CodigoInterno
+                WHERE Det.IdOrdenCompra IN (SELECT IdOrdenCompra FROM tblOrdenesCompra WHERE FechaOrdenCompra >= ? AND FechaOrdenCompra <= CONCAT(?, ' 23:59:59'))
                 GROUP BY Det.IdOrdenCompra
             ) TotOC ON A.IdOrdenCompra = TotOC.IdOrdenCompra
             LEFT JOIN (
@@ -64,6 +65,7 @@ export async function GET(request: Request) {
                        SUM(CASE WHEN Det.Devolucion = 0 THEN Det.Rec * Det.Costo * (1-Det.Desc0)*(1-Det.Desc1)*(1-Det.Desc2)*(1-Det.Desc3)*(1-Det.Desc4)*(CASE WHEN Det.Factor = 0 THEN 1 ELSE Det.Factor END)* (1+Det.IEPS) * (1+Det.IVA) ELSE 0 END) AS TotalRecibo,
                        SUM(CASE WHEN Det.Devolucion = 0 THEN 1 ELSE 0 END) AS Recibidos
                 FROM tblDetalleReciboMovil Det
+                WHERE Det.IdReciboMovil IN (SELECT IdReciboMovil FROM tblReciboMovil WHERE FechaRecibo >= ? AND FechaRecibo <= CONCAT(?, ' 23:59:59'))
                 GROUP BY Det.IdReciboMovil, Det.IdTienda
             ) TotRec ON A.IdReciboMovil = TotRec.IdReciboMovil AND A.IdTienda = TotRec.IdTienda
             INNER JOIN tblDetalleDistribuciones B ON A.IdOrdenCompra = B.IdOrdenCompra

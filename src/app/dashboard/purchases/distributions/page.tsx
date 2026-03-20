@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import {
     Calendar,
     Search,
@@ -117,7 +117,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 // Compact pill card for kanban node
-const KanbanNode = ({
+const KanbanNode = memo(({
     label,
     sublabel,
     tag,
@@ -218,7 +218,7 @@ const KanbanNode = ({
             )}
         </button>
     </div>
-);
+));
 
 // Arrow connector between cards
 const Connector = ({ label }: { label?: string | null }) => (
@@ -233,14 +233,14 @@ const Connector = ({ label }: { label?: string | null }) => (
     </div>
 );
 
-const KanbanDetailItem = ({ label, value, colSpan = 1, color = 'text-slate-800', textSize = 'text-xs' }: {
+const KanbanDetailItem = memo(({ label, value, colSpan = 1, color = 'text-slate-800', textSize = 'text-xs' }: {
     label: string; value: React.ReactNode; colSpan?: number; color?: string; textSize?: string;
 }) => (
     <div className={cn("flex flex-col gap-0.5", colSpan === 2 && "col-span-2")}>
         <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">{label}</span>
         <span className={cn("font-black leading-tight", textSize, color)}>{value || '—'}</span>
     </div>
-);
+));
 
 export default function CedisDistributionsPage() {
     const getSemanaRange = () => {
@@ -272,6 +272,7 @@ export default function CedisDistributionsPage() {
     const [search, setSearch] = useState('');
     const [idComputadora, setIdComputadora] = useState<number | null>(null);
     const [kanbanFilter, setKanbanFilter] = useState<'TODOS' | 'PENDIENTE_RECIBO' | 'PENDIENTE_SALIDA' | 'PENDIENTE_ENTRADA'>('TODOS');
+    const [visibleCount, setVisibleCount] = useState(50);
 
     // Order Detail Modal
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -348,8 +349,13 @@ export default function CedisDistributionsPage() {
     };
 
     useEffect(() => {
+        setVisibleCount(50);
         fetchData();
     }, [fechaInicio, fechaFin]);
+
+    useEffect(() => {
+        setVisibleCount(50);
+    }, [search, kanbanFilter]);
 
     const fetchOrderDetails = async (row: CedisRow) => {
         if (!idComputadora) return;
@@ -433,6 +439,13 @@ export default function CedisDistributionsPage() {
         acc[row.IdOrdenCompra].push(row);
         return acc;
     }, {});
+
+    const orderEntries = Object.entries(orderGroups).sort((a, b) => {
+        // Sort by the first row's date (descending)
+        return new Date(b[1][0].FechaOrdenCompra).getTime() - new Date(a[1][0].FechaOrdenCompra).getTime();
+    });
+
+    const displayedOrders = orderEntries.slice(0, visibleCount);
 
     const getDaysDiff = (start: string | null, end: string | null) => {
         if (!start || !end) return null;
@@ -551,7 +564,7 @@ export default function CedisDistributionsPage() {
                     </div>
                 ) : (
                     <div className="space-y-px pb-4">
-                        {Object.entries(orderGroups).map(([orderIdStr, orderRows]) => {
+                        {displayedOrders.map(([orderIdStr, orderRows]) => {
                             const orderId = parseInt(orderIdStr);
                             const firstRow = orderRows[0];
                             const isPendingRecibo = !firstRow.FolioReciboMovil;
@@ -718,6 +731,18 @@ export default function CedisDistributionsPage() {
                             </div>
                         );
                         })}
+
+                        {orderEntries.length > visibleCount && (
+                            <div className="flex justify-center py-8">
+                                <button
+                                    onClick={() => setVisibleCount(prev => prev + 50)}
+                                    className="px-12 py-3 bg-white border-2 border-[#4050B4] text-[#4050B4] text-[11px] font-black uppercase tracking-widest hover:bg-[#4050B4] hover:text-white transition-all shadow-lg active:scale-95"
+                                >
+                                    Cargar {Math.min(50, orderEntries.length - visibleCount)} más
+                                    <span className="ml-2 opacity-50">({orderEntries.length - visibleCount} pendientes)</span>
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
