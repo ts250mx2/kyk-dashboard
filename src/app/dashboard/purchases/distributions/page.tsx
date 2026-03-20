@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useMemo } from 'react';
 import {
     Calendar,
     Search,
@@ -16,6 +16,7 @@ import {
     Check,
     Clock,
     CheckCircle2,
+    Warehouse,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -238,7 +239,7 @@ const KanbanDetailItem = memo(({ label, value, colSpan = 1, color = 'text-slate-
 }) => (
     <div className={cn("flex flex-col gap-0.5", colSpan === 2 && "col-span-2")}>
         <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-        <span className={cn("font-black leading-tight", textSize, color)}>{value || 'â€”'}</span>
+        <span className={cn("font-black leading-tight", textSize, color)}>{value || '—'}</span>
     </div>
 ));
 
@@ -311,7 +312,7 @@ export default function CedisDistributionsPage() {
             start: (() => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' })); d.setDate(d.getDate() - d.getDay()); return d.toLocaleDateString('en-CA'); })(),
             end: today
         },
-        { label: '7 dÃ­as', start: mtyDate(-6), end: today },
+        { label: '7 días', start: mtyDate(-6), end: today },
         {
             label: 'Este mes',
             start: (() => { const d = mtyMonth(0); d.setDate(1); return d.toLocaleDateString('en-CA'); })(),
@@ -414,7 +415,8 @@ export default function CedisDistributionsPage() {
         return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
     };
 
-    const filteredRows = rows.filter(r => {
+    const filteredRows = useMemo(() => {
+        return rows.filter(r => {
         const s = search.toLowerCase();
         const passesSearch = !search || (
             r.IdOrdenCompra.toString().includes(s) ||
@@ -433,19 +435,26 @@ export default function CedisDistributionsPage() {
 
         return true;
     });
+    }, [rows, search, kanbanFilter]);
 
-    const orderGroups = filteredRows.reduce<Record<number, CedisRow[]>>((acc, row) => {
+    const orderGroups = useMemo(() => {
+        return filteredRows.reduce<Record<number, CedisRow[]>>((acc, row) => {
         if (!acc[row.IdOrdenCompra]) acc[row.IdOrdenCompra] = [];
         acc[row.IdOrdenCompra].push(row);
         return acc;
     }, {});
+    }, [filteredRows]);
 
-    const orderEntries = Object.entries(orderGroups).sort((a, b) => {
+    const orderEntries = useMemo(() => {
+        return Object.entries(orderGroups).sort((a, b) => {
         // Sort by the first row's date (descending)
         return new Date(b[1][0].FechaOrdenCompra).getTime() - new Date(a[1][0].FechaOrdenCompra).getTime();
     });
+    }, [orderGroups]);
 
-    const displayedOrders = orderEntries.slice(0, visibleCount);
+    const displayedOrders = useMemo(() => {
+        return orderEntries.slice(0, visibleCount);
+    }, [orderEntries, visibleCount]);
 
     const getDaysDiff = (start: string | null, end: string | null) => {
         if (!start || !end) return null;
@@ -462,12 +471,12 @@ export default function CedisDistributionsPage() {
             <div className="bg-slate-50 pb-3 space-y-3 flex-none sticky top-0 z-50">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white py-2 px-4 shadow-sm border border-slate-100">
                     <div className="flex flex-col">
-                        <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-2">
-                            <span>ðŸ­</span>
-                            Distribuciones Cedis
+                        <h1 className="text-xl font-black text-[#4050B4] tracking-tighter uppercase flex items-center gap-2">
+                            <Warehouse size={24} className="text-[#4050B4]" />
+                            DISTRIBUCIONES CEDIS
                         </h1>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                            Kanban general · {Object.keys(orderGroups).length} Ã³rdenes · {filteredRows.length} distribuciones
+                            Kanban general · {Object.keys(orderGroups).length} órdenes · {filteredRows.length} distribuciones
                         </p>
                     </div>
 
@@ -602,7 +611,7 @@ export default function CedisDistributionsPage() {
                                     {/* Connector 1â†’2 */}
                                     <Connector label={diffOrdenRecibo !== null ? `+${diffOrdenRecibo}d` : undefined} />
 
-                                    {/* Col 2: Recibo â€” once per order */}
+                                    {/* Col 2: Recibo — once per order */}
                                     <div className="w-1/5 shrink-0 px-6">
                                         {isPendingRecibo ? (
                                             <KanbanNode
