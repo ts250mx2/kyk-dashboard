@@ -6,6 +6,7 @@ export async function GET(request: Request) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const storeIdsStr = searchParams.get('storeIds');
+    const status = searchParams.get('status');
 
     if (!startDate || !endDate) {
         return NextResponse.json({ error: 'startDate and endDate are required' }, { status: 400 });
@@ -22,6 +23,8 @@ export async function GET(request: Request) {
         }
 
         const sql = `
+        SELECT * FROM (
+            
             SELECT 
                 A.IdOrdenCompra,
                 MAX(A.FechaOrdenCompra) as FechaOrdenCompra,
@@ -93,8 +96,14 @@ export async function GET(request: Request) {
               AND A.FechaOrdenCompra <= CONCAT(?, ' 23:59:59')
               ${storeFilter}
             GROUP BY A.IdOrdenCompra, B.IdTiendaDestino
-            ORDER BY FechaOrdenCompra DESC, TiendaOrigen ASC, TiendaDestino ASC
-`;
+            
+
+        ) AS Base
+        WHERE 1=1
+        ${status === 'PENDIENTE_RECIBO' ? "AND FolioReciboMovil IS NULL" : ""}
+        ${status === 'PENDIENTE_SALIDA' ? "AND FolioReciboMovil IS NOT NULL AND FolioSalida IS NULL" : ""}
+        ${status === 'PENDIENTE_ENTRADA' ? "AND FolioSalida IS NOT NULL AND (FolioEntrada IS NULL OR FolioEntrada = '' OR FolioEntrada = 'ENTRO RECIBO')" : ""}
+     ORDER BY FechaOrdenCompra DESC, TiendaOrigen ASC, TiendaDestino ASC`;
 
         const results = await mysqlQuery(sql, params);
         return NextResponse.json(results);
