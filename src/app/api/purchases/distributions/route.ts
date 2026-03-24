@@ -54,7 +54,8 @@ export async function GET(request: Request) {
                 CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 'ENTRO RECIBO' ELSE F.FolioEntrada END AS FolioEntrada,
                 CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.FechaSalida ELSE F.FechaEntrada END AS FechaEntrada,
                 UsuEntrada.Usuario AS UsuarioEntrada,
-                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN H.UUID ELSE NULL END AS UUID
+                COALESCE(H.UUID, C.UUID) AS UUID,
+                CASE WHEN H.IdTransferenciaSalida IS NOT NULL THEN 1 ELSE 0 END AS EsTransferenciaFactura
             FROM tblOrdenesCompra A
             INNER JOIN tblTiendas TiendaOrigen ON A.IdTienda = TiendaOrigen.IdTienda
             INNER JOIN tblProveedores Prov ON A.IdProveedor = Prov.IdProveedor

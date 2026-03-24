@@ -48,6 +48,7 @@ interface CedisRow {
     Ordenados: number;
     TotalRecibo: number | null;
     Recibidos: number | null;
+    EsTransferenciaFactura: number;
 }
 
 interface OrderDetail {
@@ -207,7 +208,7 @@ const KanbanNode = memo(({
                     onClick={(e) => { e.stopPropagation(); onClick?.(); }}
                     className={cn(
                         "w-full mt-2 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 rounded-none",
-                        isFactura ? "bg-purple-100/50 hover:bg-purple-600 hover:text-white text-purple-700" : "bg-slate-100 hover:bg-amber-500 hover:text-white text-slate-700"
+                        isFactura ? "bg-emerald-100/50 hover:bg-emerald-600 hover:text-white text-emerald-700" : "bg-slate-100 hover:bg-amber-500 hover:text-white text-slate-700"
                     )}
                 >
                     Ver Detalle
@@ -393,17 +394,22 @@ export default function CedisDistributionsPage() {
         finally { setLoadingReceiptDetails(false); }
     };
 
-    const fetchDistDetails = async (row: CedisRow) => {
+    const fetchDistDetails = (row: CedisRow, type: 'SALIDA' | 'ENTRADA' = 'SALIDA') => {
         setSelectedRow(row);
-        setSelectedDistHeader({ tienda: row.TiendaDestino, folio: row.FolioSalida, fecha: row.FechaSalida });
+        const folio = type === 'SALIDA' ? row.FolioSalida : row.FolioEntrada;
+        const fecha = type === 'SALIDA' ? row.FechaSalida : row.FechaEntrada;
+        setSelectedDistHeader({ tienda: row.TiendaDestino, folio: folio, fecha: fecha });
         setIsDistDetailModalOpen(true);
         setLoadingDistDetails(true);
-        try {
-            const res = await fetch(`/api/purchases/orders/distributions/details?idOrdenCompra=${row.IdOrdenCompra}&idTiendaDestino=${row.IdTiendaDestino}&idTransferenciaSalida=${row.IdTransferenciaSalida || 0}&idTiendaOrdenCompra=${row.IdTiendaOrigen}`);
-            const data = await res.json();
-            if (Array.isArray(data)) setDistDetailItems(data); else setDistDetailItems([]);
-        } catch (e) { console.error(e); setDistDetailItems([]); }
-        finally { setLoadingDistDetails(false); }
+        const fetchItems = async () => {
+            try {
+                const res = await fetch(`/api/purchases/orders/distributions/details?idOrdenCompra=${row.IdOrdenCompra}&idTiendaDestino=${row.IdTiendaDestino}&idTransferenciaSalida=${row.IdTransferenciaSalida || 0}&idTiendaOrdenCompra=${row.IdTiendaOrigen}`);
+                const data = await res.json();
+                if (Array.isArray(data)) setDistDetailItems(data); else setDistDetailItems([]);
+            } catch (e) { console.error(e); setDistDetailItems([]); }
+            finally { setLoadingDistDetails(false); }
+        };
+        fetchItems();
     };
 
     const formatDate = (dateStr: string | null) => {
@@ -425,39 +431,39 @@ export default function CedisDistributionsPage() {
 
     const filteredRows = useMemo(() => {
         return rows.filter(r => {
-        const s = search.toLowerCase();
-        const passesSearch = !search || (
-            r.IdOrdenCompra.toString().includes(s) ||
-            r.TiendaOrigen?.toLowerCase().includes(s) ||
-            r.Proveedor?.toLowerCase().includes(s) ||
-            r.TiendaDestino?.toLowerCase().includes(s) ||
-            r.FolioSalida?.toLowerCase().includes(s) ||
-            r.FolioReciboMovil?.toLowerCase().includes(s)
-        );
+            const s = search.toLowerCase();
+            const passesSearch = !search || (
+                r.IdOrdenCompra.toString().includes(s) ||
+                r.TiendaOrigen?.toLowerCase().includes(s) ||
+                r.Proveedor?.toLowerCase().includes(s) ||
+                r.TiendaDestino?.toLowerCase().includes(s) ||
+                r.FolioSalida?.toLowerCase().includes(s) ||
+                r.FolioReciboMovil?.toLowerCase().includes(s)
+            );
 
-        if (!passesSearch) return false;
+            if (!passesSearch) return false;
 
-        if (kanbanFilter === 'PENDIENTE_RECIBO') return !r.FolioReciboMovil;
-        if (kanbanFilter === 'PENDIENTE_SALIDA') return !!r.FolioReciboMovil && !r.FolioSalida;
-        if (kanbanFilter === 'PENDIENTE_ENTRADA') return !!r.FolioSalida && (!r.FolioEntrada || r.FolioEntrada === 'ENTRO RECIBO');
+            if (kanbanFilter === 'PENDIENTE_RECIBO') return !r.FolioReciboMovil;
+            if (kanbanFilter === 'PENDIENTE_SALIDA') return !!r.FolioReciboMovil && !r.FolioSalida;
+            if (kanbanFilter === 'PENDIENTE_ENTRADA') return !!r.FolioSalida && (!r.FolioEntrada || r.FolioEntrada === 'ENTRO RECIBO');
 
-        return true;
-    });
+            return true;
+        });
     }, [rows, search, kanbanFilter]);
 
     const orderGroups = useMemo(() => {
         return filteredRows.reduce<Record<number, CedisRow[]>>((acc, row) => {
-        if (!acc[row.IdOrdenCompra]) acc[row.IdOrdenCompra] = [];
-        acc[row.IdOrdenCompra].push(row);
-        return acc;
-    }, {});
+            if (!acc[row.IdOrdenCompra]) acc[row.IdOrdenCompra] = [];
+            acc[row.IdOrdenCompra].push(row);
+            return acc;
+        }, {});
     }, [filteredRows]);
 
     const orderEntries = useMemo(() => {
         return Object.entries(orderGroups).sort((a, b) => {
-        // Sort by the first row's date (descending)
-        return new Date(b[1][0].FechaOrdenCompra).getTime() - new Date(a[1][0].FechaOrdenCompra).getTime();
-    });
+            // Sort by the first row's date (descending)
+            return new Date(b[1][0].FechaOrdenCompra).getTime() - new Date(a[1][0].FechaOrdenCompra).getTime();
+        });
     }, [orderGroups]);
 
     const displayedOrders = useMemo(() => {
@@ -470,26 +476,38 @@ export default function CedisDistributionsPage() {
         return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
     };
 
+    const toggleCardGlobal = () => {
+        const allInitialMinimized = new Set<string>();
+        rows.forEach(r => {
+            allInitialMinimized.add(`dist-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
+            allInitialMinimized.add(`entry-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
+        });
+
+        if (minimizedCards.size > 0) {
+            setMinimizedCards(new Set());
+        } else {
+            setMinimizedCards(allInitialMinimized);
+        }
+    };
+
     return (
         <div className={cn(
-            "flex flex-col h-[calc(100vh-160px)] min-h-[600px]",
-            isMaximized && "fixed inset-0 z-[100] bg-slate-50 p-4 sm:p-6 h-screen"
+            "flex flex-col h-screen bg-white text-slate-900 font-sans overflow-hidden",
+            isMaximized && "fixed inset-0 z-[100] bg-slate-50 p-4 sm:p-6"
         )}>
             {/* Header */}
-            <div className="bg-slate-50 pb-3 space-y-3 flex-none sticky top-0 z-50">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white py-2 px-4 shadow-sm border border-slate-100">
+            <div className="flex-none bg-slate-50 p-4 border-b border-slate-200">
+                <div className="flex items-center justify-between gap-4">
                     <div className="flex flex-col">
                         <h1 className="text-xl font-black text-[#4050B4] tracking-tighter uppercase flex items-center gap-2">
-                            <span>🏭</span>
-                            DISTRIBUCIONES CEDIS
+                             <span>🏭</span> DISTRIBUCIONES CEDIS
                         </h1>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
                             Kanban general · {Object.keys(orderGroups).length} órdenes · {filteredRows.length} distribuciones
                         </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        {/* Search */}
+                    <div className="flex items-center gap-2">
                         <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
                             <input
@@ -497,12 +515,11 @@ export default function CedisDistributionsPage() {
                                 placeholder="Buscar..."
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
-                                className="pl-8 pr-3 py-1.5 border border-slate-200 bg-slate-50 text-xs focus:outline-none focus:ring-1 focus:ring-[#4050B4] w-44"
+                                className="pl-8 pr-3 py-1.5 border border-slate-200 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-[#4050B4] w-44"
                             />
                         </div>
 
-                        {/* Period Buttons */}
-                        <div className="flex items-center gap-0.5 bg-slate-100 border border-slate-200 p-0.5">
+                        <div className="flex items-center gap-0.5 bg-slate-200 p-0.5 rounded">
                             {periods.map(({ label, start, end }) => {
                                 const isActive = fechaInicio === start && fechaFin === end;
                                 return (
@@ -520,54 +537,43 @@ export default function CedisDistributionsPage() {
                             })}
                         </div>
 
-                        {/* Date Inputs */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-1">
-                            <Calendar size={12} className="text-[#4050B4]" />
-                            <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="bg-transparent text-xs font-bold text-slate-700 outline-none border-none h-auto leading-none" />
-                        </div>
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-1">
-                            <Calendar size={12} className="text-[#4050B4]" />
-                            <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="bg-transparent text-xs font-bold text-slate-700 outline-none border-none h-auto leading-none" />
+                        <div className="flex items-center gap-1">
+                            <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 outline-none" />
+                            <span className="text-slate-400">→</span>
+                            <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 outline-none" />
                         </div>
 
-                        <button onClick={fetchData} className="p-2 bg-slate-50 border border-slate-200 text-[#4050B4] hover:bg-slate-100 group" title="Actualizar">
-                            <RotateCcw size={14} className={cn("group-hover:rotate-180 transition-transform duration-500", loading && "animate-spin")} />
+                        <button onClick={fetchData} className="p-2 bg-white border border-slate-200 text-[#4050B4] hover:bg-slate-50">
+                            <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
                         </button>
-                        <button
-                            onClick={() => setIsMaximized(!isMaximized)}
-                            className={cn("p-2 border transition-all", isMaximized ? "bg-amber-50 border-amber-200 text-amber-600" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100")}
-                        >
+                        <button onClick={() => setIsMaximized(!isMaximized)} className="p-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
                             {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                         </button>
                     </div>
                 </div>
 
-                {/* Column Header Labels */}
-                <div className="flex items-center px-0">
-                    <div className="w-1/5 shrink-0 flex items-center gap-1 px-2 py-1 bg-[#4050B4] text-white">
-                        <FileSpreadsheet size={10} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Orden</span>
+                {/* Column Headers */}
+                <div className="flex items-center mt-4 bg-slate-100 p-1 border border-slate-200">
+                    <div className="w-1/5 shrink-0 flex items-center gap-1.5 px-3 py-1 bg-[#4050B4] text-white font-black text-[10px] uppercase">
+                        <FileSpreadsheet size={12} /> Orden
                     </div>
-                    <div className="w-5 shrink-0" />
-                    <div className="w-1/5 shrink-0 flex items-center gap-1 px-2 py-1 bg-emerald-600 text-white">
-                        <Package size={10} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Recibo Cedis</span>
+                    <div className="w-5" />
+                    <div className="w-1/5 shrink-0 flex items-center gap-1.5 px-3 py-1 bg-emerald-600 text-white font-black text-[10px] uppercase">
+                        <Package size={12} /> Recibo
                     </div>
-                    <div className="w-5 shrink-0" />
-                    <div className="flex-1 flex items-center gap-1 px-2 py-1 bg-amber-500 text-white">
-                        <RotateCcw size={10} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Distribución</span>
+                    <div className="w-5" />
+                    <div className="flex-1 flex items-center gap-1.5 px-3 py-1 bg-amber-500 text-white font-black text-[10px] uppercase">
+                        <RotateCcw size={12} /> Distribución
                     </div>
-                    <div className="w-5 shrink-0" />
-                    <div className="flex-1 flex items-center gap-1 px-2 py-1 bg-emerald-900 text-white">
-                        <ArrowRight size={10} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Entrada Tienda</span>
+                    <div className="w-5" />
+                    <div className="flex-1 flex items-center gap-1.5 px-3 py-1 bg-emerald-900 text-white font-black text-[10px] uppercase">
+                        <ArrowRight size={12} /> Entrada Tienda
                     </div>
                 </div>
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
+            <div className="flex-1 min-h-0 overflow-auto custom-scrollbar bg-slate-50">
                 {loading ? (
                     <div className="h-full flex flex-col items-center justify-center space-y-3">
                         <div className="w-8 h-8 border-4 border-slate-200 border-t-[#4050B4] rounded-full animate-spin" />
@@ -575,12 +581,12 @@ export default function CedisDistributionsPage() {
                     </div>
                 ) : filteredRows.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center p-8">
-                        <span className="text-4xl mb-3">🏭­</span>
+                        <span className="text-4xl mb-3">🏭</span>
                         <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-1">Sin Distribuciones</h2>
                         <p className="text-slate-400 text-sm">No se encontraron distribuciones en el rango seleccionado.</p>
                     </div>
                 ) : (
-                    <div className="space-y-px pb-4">
+                    <div className="pb-20">
                         {displayedOrders.map(([orderIdStr, orderRows]) => {
                             const orderId = parseInt(orderIdStr);
                             const firstRow = orderRows[0];
@@ -588,16 +594,19 @@ export default function CedisDistributionsPage() {
                             const diffOrdenRecibo = getDaysDiff(firstRow.FechaOrdenCompra, firstRow.FechaRecibo);
                             
                             const toggleCard = (cardId: string) => {
-                                const next = new Set(minimizedCards);
-                                if (next.has(cardId)) next.delete(cardId);
-                                else next.add(cardId);
-                                setMinimizedCards(next);
+                                setMinimizedCards(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(cardId)) next.delete(cardId);
+                                    else next.add(cardId);
+                                    return next;
+                                });
                             };
 
                             return (
-                                <div key={orderId} className="flex flex-col border-b border-slate-100 hover:bg-slate-50/50 transition-colors py-2">
-                                    <div className="flex items-start gap-0">
-                                        <div className="w-1/5 shrink-0 px-6 py-0 relative group/order">
+                                <div key={orderId} className="border-b border-slate-200 py-1 bg-white hover:bg-slate-50/50 transition-colors">
+                                    <div className="flex items-start">
+                                        {/* Col 1: Orden */}
+                                        <div className="w-1/5 shrink-0 px-4">
                                             <KanbanNode
                                                 label={`#${firstRow.IdOrdenCompra} · ${firstRow.TiendaOrigen}`}
                                                 sublabel={firstRow.Proveedor}
@@ -616,160 +625,147 @@ export default function CedisDistributionsPage() {
                                             </KanbanNode>
                                         </div>
 
-                                    {/* Connector 1→2 */}
-                                    <Connector label={diffOrdenRecibo !== null ? `+${diffOrdenRecibo}d` : undefined} />
+                                        <Connector label={diffOrdenRecibo !== null ? `+${diffOrdenRecibo}d` : undefined} />
 
-                                    {/* Col 2: Recibo — once per order */}
-                                    <div className="w-1/5 shrink-0 px-6">
-                                        {isPendingRecibo ? (
-                                            <KanbanNode
-                                                label="Sin Recibo"
-                                                color="border-rose-500/50 border-dashed bg-rose-50"
-                                                textColor="text-rose-600"
-                                                isPending
-                                                isMinimized={minimizedCards.has(`receipt-${orderId}`)}
-                                                onToggle={() => toggleCard(`receipt-${orderId}`)}
-                                            >
-                                                <div className="col-span-2 py-4 flex flex-col items-center justify-center border border-dashed border-rose-200 bg-rose-50/50">
-                                                    <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Esperando Recibo Móvil</span>
-                                                </div>
-                                            </KanbanNode>
-                                        ) : (
-                                            <KanbanNode
-                                                label={firstRow.FolioReciboMovil!}
-                                                sublabel={firstRow.Proveedor}
-                                                tag={formatDateTime(firstRow.FechaRecibo)}
-                                                color="border-emerald-600 bg-emerald-50"
-                                                textColor="text-emerald-700"
-                                                onClick={() => fetchReceiptDetails(firstRow)}
-                                                isMinimized={minimizedCards.has(`receipt-${orderId}`)}
-                                                onToggle={() => toggleCard(`receipt-${orderId}`)}
-                                            >
+                                        {/* Col 2: Recibo */}
+                                        <div className="w-1/5 shrink-0 px-4">
+                                            {isPendingRecibo ? (
+                                                <KanbanNode label="Sin Recibo" color="border-rose-300 border-dashed bg-rose-50" textColor="text-rose-600" isPending isMinimized={minimizedCards.has(`receipt-${orderId}`)} onToggle={() => toggleCard(`receipt-${orderId}`)}>
+                                                    <div className="col-span-2 py-4 flex flex-col items-center justify-center">
+                                                        <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Pendiente Recibo</span>
+                                                    </div>
+                                                </KanbanNode>
+                                            ) : (
+                                                <KanbanNode
+                                                    label={firstRow.FolioReciboMovil!}
+                                                    sublabel={firstRow.Proveedor}
+                                                    tag={formatDateTime(firstRow.FechaRecibo)}
+                                                    color="border-emerald-500 bg-emerald-50"
+                                                    textColor="text-emerald-700"
+                                                    onClick={() => fetchReceiptDetails(firstRow)}
+                                                    isMinimized={minimizedCards.has(`receipt-${orderId}`)}
+                                                    onToggle={() => toggleCard(`receipt-${orderId}`)}
+                                                >
+                                                    <KanbanDetailItem label="Usuario" value={firstRow.UsuarioRecibo} colSpan={2} />
+                                                    <KanbanDetailItem label="Arts. Dist." value={firstRow.CantidadArticulos} />
+                                                </KanbanNode>
+                                            )}
+                                        </div>
+
+                                        {/* Distributions column */}
+                                        <div className="flex-1 flex flex-col gap-1">
+                                            {orderRows.map((row, rowIdx) => {
+                                                const isPendingSalida = !row.FolioSalida;
+                                                const isEntroRecibo = row.FolioEntrada === 'ENTRO RECIBO';
+                                                const isPendingEntrada = (!row.FolioEntrada || row.FolioEntrada.trim() === '') && !isEntroRecibo;
+                                                const isFactura = !!row.UUID && row.UUID.trim() !== '' && row.UUID.toLowerCase() !== 'null';
                                                 
-                                                 <KanbanDetailItem label="Usuario" value={firstRow.UsuarioRecibo} colSpan={2} />
-                                                <KanbanDetailItem label="Folio Móvil" value={firstRow.FolioReciboMovil || '—'} />
-                                                <KanbanDetailItem label="Arts. Dist." value={firstRow.CantidadArticulos} />
-                                            </KanbanNode>
-                                        )}
+                                                const diffReciboSalida = getDaysDiff(firstRow.FechaRecibo, row.FechaSalida);
+                                                const diffSalidaEntrada = getDaysDiff(row.FechaSalida, row.FechaEntrada);
+                                                const daysInTransit = !isPendingSalida && isPendingEntrada ? getDaysDiff(row.FechaSalida, today) : null;
+
+                                                const distCardId = `dist-${orderId}-${row.IdTiendaDestino}`;
+                                                const entryCardId = `entry-${orderId}-${row.IdTiendaDestino}`;
+
+                                                return (
+                                                    <div key={rowIdx} className="flex items-start">
+                                                        <Connector label={diffReciboSalida !== null ? `+${diffReciboSalida}d` : undefined} />
+                                                        
+                                                        {/* Col 3: Distribución */}
+                                                        <div className="flex-1 px-4">
+                                                            {isPendingSalida ? (
+                                                                <KanbanNode
+                                                                    label={minimizedCards.has(distCardId) ? `${row.TiendaDestino} - Pendiente` : `→ ${row.TiendaDestino}`}
+                                                                    sublabel={`${row.CantidadArticulos} arts`}
+                                                                    color="border-rose-500 border-dashed bg-rose-50"
+                                                                    textColor="text-rose-600"
+                                                                    isPending
+                                                                    showDetail={true}
+                                                                    onClick={() => fetchDistDetails(row)}
+                                                                    isMinimized={minimizedCards.has(distCardId)}
+                                                                    onToggle={() => toggleCard(distCardId)}
+                                                                />
+                                                            ) : (
+                                                                <KanbanNode
+                                                                    label={minimizedCards.has(distCardId) ? `${row.FolioSalida} ${row.TiendaDestino}` : row.FolioSalida!}
+                                                                    sublabel={`${row.TiendaDestino} · ${row.CantidadArticulos} arts`}
+                                                                    tag={formatDateTime(row.FechaSalida)}
+                                                                    color={
+                                                                        row.EsTransferenciaFactura === 1 ? "border-purple-500 bg-purple-50" :
+                                                                        (isFactura || !isPendingEntrada) ? "border-emerald-500 bg-emerald-50" : 
+                                                                        "border-orange-400 bg-orange-50"
+                                                                    }
+                                                                    textColor={
+                                                                        row.EsTransferenciaFactura === 1 ? "text-purple-700" :
+                                                                        (isFactura || !isPendingEntrada) ? "text-emerald-700" : 
+                                                                        "text-orange-700"
+                                                                    }
+                                                                    isFactura={isFactura}
+                                                                    showDetail={true}
+                                                                    onClick={() => fetchDistDetails(row, 'SALIDA')}
+                                                                    isMinimized={minimizedCards.has(distCardId)}
+                                                                    onToggle={() => toggleCard(distCardId)}
+                                                                    badge={row.EsTransferenciaFactura === 1 ? <span className="bg-purple-600 text-white px-1 py-0.5 text-[6px] font-black uppercase tracking-tighter">FACTURA</span> : isFactura ? <span className="bg-emerald-600 text-white px-1 py-0.5 text-[6px] font-black uppercase">FAC</span> : undefined}
+                                                                >
+                                                                    <KanbanDetailItem label="UUID" value={row.UUID} colSpan={2} textSize="text-[8px]" />
+                                                                </KanbanNode>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Col 4: Entrada */}
+                                                        {isPendingSalida || (!isFactura && isPendingEntrada) ? (
+                                                            <div className="flex-1" />
+                                                        ) : (
+                                                            <>
+                                                                <Connector label={diffSalidaEntrada !== null && !isEntroRecibo ? `+${diffSalidaEntrada}d` : undefined} />
+                                                                <div className="flex-1 px-4">
+                                                                    {isEntroRecibo ? (
+                                                                        <KanbanNode label="Entró por Recibo" tag={formatDateTime(row.FechaEntrada)} color="border-emerald-700/30 bg-emerald-50" textColor="text-emerald-800" isMinimized={minimizedCards.has(entryCardId)} onToggle={() => toggleCard(entryCardId)} />
+                                                                    ) : isPendingEntrada ? (
+                                                                        <KanbanNode
+                                                                            label={daysInTransit && daysInTransit >= 1 ? `⚠️ ${daysInTransit}d TRÁNSITO` : "PENDIENTE ENTRADA"}
+                                                                            sublabel={row.TiendaDestino}
+                                                                            color="border-rose-500 bg-rose-50"
+                                                                            textColor="text-rose-600"
+                                                                            isPending
+                                                                            showDetail={true}
+                                                                            onClick={() => fetchDistDetails(row, 'ENTRADA')}
+                                                                            isMinimized={minimizedCards.has(entryCardId)}
+                                                                            onToggle={() => toggleCard(entryCardId)}
+                                                                        />
+                                                                    ) : (
+                                                                        <KanbanNode
+                                                                            label={row.FolioEntrada!}
+                                                                            sublabel={row.TiendaDestino}
+                                                                            tag={formatDateTime(row.FechaEntrada)}
+                                                                            color="border-emerald-900 bg-slate-100"
+                                                                            textColor="text-emerald-900"
+                                                                            showDetail={true}
+                                                                            onClick={() => fetchDistDetails(row, 'ENTRADA')}
+                                                                            isMinimized={minimizedCards.has(entryCardId)}
+                                                                            onToggle={() => toggleCard(entryCardId)}
+                                                                            badge={<CheckCircle2 size={10} className="text-emerald-600" />}
+                                                                        />
+                                                                    )}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-
-                                    {/* Distributions stacked */}
-                                    <div className="flex-1 flex flex-col">
-                                         {orderRows.map((row, rowIdx) => {
-                                             const isPendingSalida = !row.FolioSalida;
-                                             const isPendingEntrada = !row.FolioEntrada || row.FolioEntrada === 'ENTRO RECIBO';
-                                             const isFactura = !!row.UUID;
-                                             const isEntroRecibo = row.FolioEntrada === 'ENTRO RECIBO';
-                                             const diffReciboSalida = getDaysDiff(firstRow.FechaRecibo, row.FechaSalida);
-                                             const diffSalidaEntrada = getDaysDiff(row.FechaSalida, row.FechaEntrada);
-                                             const daysInTransit = !isPendingSalida && isPendingEntrada ? getDaysDiff(row.FechaSalida, today) : null;
-
-                                             return (
-                                                 <div key={`${row.IdOrdenCompra}-${row.IdTiendaDestino}-${rowIdx}`} className={cn("flex items-start flex-1", rowIdx > 0 && "mt-1")}>
-
-                                                     {/* Connector 2→3 */}
-                                                     <Connector label={diffReciboSalida !== null ? `+${diffReciboSalida}d` : undefined} />
-
-                                                      {/* Col 3: Distribución */}
-                                                      <div className="flex-1 px-6">
-                                                          {isPendingSalida ? (
-                                                              <KanbanNode
-                                                                  label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.TiendaDestino} ${row.CantidadArticulos} Productos` : `→ ${row.TiendaDestino}`}
-                                                                  sublabel={`${row.CantidadArticulos} arts`}
-                                                                  color="border-amber-300 border-dashed bg-amber-50/30"
-                                                                  textColor="text-amber-500"
-                                                                  isPending
-                                                                  showDetail={true}
-                                                                  onClick={() => fetchDistDetails(row)}
-                                                                  isMinimized={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`)}
-                                                                  onToggle={() => toggleCard(`dist-${orderId}-${row.IdTiendaDestino}`)}
-                                                              />
-                                                          ) : (
-                                                              <KanbanNode
-                                                                  label={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioSalida || ""} ${row.TiendaDestino}` : row.FolioSalida!}
-                                                                  sublabel={`${row.TiendaDestino} · ${row.CantidadArticulos} arts`}
-                                                                  tag={formatDateTime(row.FechaSalida)}
-                                                                  color={isFactura ? "border-purple-500 bg-purple-50" : "border-amber-500 bg-amber-50"}
-                                                                  textColor={isFactura ? "text-purple-700" : "text-amber-700"}
-                                                                  isFactura={isFactura}
-                                                                  showDetail={true}
-                                                                  onClick={() => fetchDistDetails(row)}
-                                                                  isMinimized={minimizedCards.has(`dist-${orderId}-${row.IdTiendaDestino}`)}
-                                                                  onToggle={() => toggleCard(`dist-${orderId}-${row.IdTiendaDestino}`)}
-                                                                  badge={isFactura ? (
-                                                                      <span className="bg-purple-600 text-white px-1 py-0.5 text-[6px] font-black uppercase tracking-tight flex items-center gap-0.5">
-                                                                          <Receipt size={5} />FAC
-                                                                      </span>
-                                                                  ) : undefined}
-                                                              />
-                                                          )}
-                                                      </div>
-
-                                                      {isPendingSalida ? (
-                                                          <div className="flex-1" />
-                                                      ) : (
-                                                          <>
-                                                              {/* Connector 3→4 */}
-                                                              <Connector label={diffSalidaEntrada !== null && !isEntroRecibo ? `+${diffSalidaEntrada}d` : undefined} />
-
-                                                              {/* Col 4: Entrada */}
-                                                              <div className="flex-1 px-6">
-                                                                  {isEntroRecibo ? (
-                                                                      <KanbanNode
-                                                                          label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `RECIBO ${row.TiendaDestino}` : "Entró por Recibo"}
-                                                                          tag={formatDateTime(row.FechaEntrada)}
-                                                                          color="border-emerald-600/30 bg-emerald-50/30"
-                                                                          textColor="text-emerald-700"
-                                                                          isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                          onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                          badge={<CheckCircle2 size={10} className="text-emerald-600" />}
-                                                                      />
-                                                                  ) : isPendingEntrada ? (
-                                                                      <KanbanNode
-                                                                          label={daysInTransit && daysInTransit >= 1 ? `⚠️ ${daysInTransit}d TRANSITO ${row.TiendaDestino}` : `SIN ENTRADA ${row.TiendaDestino}`}
-                                                                          color={isPendingSalida ? "border-amber-400/50 border-dashed bg-amber-50" : "border-rose-500/50 border-dashed bg-rose-50"}
-                                                                          textColor={isPendingSalida ? "text-amber-600" : "text-rose-600"}
-                                                                          isPending
-                                                                          isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                          onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                          badge={daysInTransit && daysInTransit >= 1 ? (
-                                                                              <div className="bg-rose-600 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg text-[10px] font-black animate-pulse border-2 border-white">
-                                                                                  {daysInTransit}d
-                                                                              </div>
-                                                                          ) : undefined}
-                                                                      />
-                                                                  ) : (
-                                                                      <KanbanNode
-                                                                          label={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`) ? `${row.FolioEntrada} ${row.TiendaDestino}` : row.FolioEntrada!}
-                                                                          sublabel={`${row.TiendaDestino}${row.UsuarioEntrada ? ` · ${row.UsuarioEntrada}` : ''}`}
-                                                                          tag={formatDateTime(row.FechaEntrada)}
-                                                                          color="border-emerald-900 bg-emerald-900/10"
-                                                                          textColor="text-emerald-900"
-                                                                          isMinimized={minimizedCards.has(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                          onToggle={() => toggleCard(`entry-${orderId}-${row.IdTiendaDestino}`)}
-                                                                          badge={<CheckCircle2 size={10} className="text-emerald-600" />}
-                                                                      />
-                                                                  )}
-                                                              </div>
-                                                          </>
-                                                      )}
-                                                 </div>
-                                             );
-                                         })}
                                 </div>
-                            </div>
-                        </div>
-                    );
-                })}
+                            );
+                        })}
 
                         {orderEntries.length > visibleCount && (
                             <div className="flex justify-center py-8">
                                 <button
                                     onClick={() => setVisibleCount(prev => prev + 50)}
-                                    className="px-12 py-3 bg-white border-2 border-[#4050B4] text-[#4050B4] text-[11px] font-black uppercase tracking-widest hover:bg-[#4050B4] hover:text-white transition-all shadow-lg active:scale-95"
+                                    className="px-12 py-3 bg-white border-2 border-[#4050B4] text-[#4050B4] text-[11px] font-black uppercase tracking-widest hover:bg-[#4050B4] hover:text-white transition-all shadow-lg"
                                 >
-                                    Cargar {Math.min(50, orderEntries.length - visibleCount)} más
-                                    <span className="ml-2 opacity-50">({orderEntries.length - visibleCount} pendientes)</span>
+                                    Cargar más...
                                 </button>
                             </div>
                         )}
@@ -778,53 +774,36 @@ export default function CedisDistributionsPage() {
             </div>
 
             {/* Footer */}
-            <div className="flex-none bg-slate-100 border-t border-slate-200 px-4 py-1.5 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Distribuciones:</span>
-                        <span className="px-2 py-0.5 bg-white border border-slate-200 text-[#4050B4] text-[10px] font-black">{filteredRows.length}</span>
+            <div className="flex-none bg-slate-100 border-t border-slate-200 px-6 py-2 flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase text-slate-400">Distribuciones:</span>
+                        <span className="px-2 py-0.5 bg-white border border-slate-300 text-[#4050B4] text-[10px] font-black">{filteredRows.length}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Órdenes:</span>
-                        <span className="px-2 py-0.5 bg-white border border-slate-200 text-emerald-600 text-[10px] font-black">{Object.keys(orderGroups).length}</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase text-slate-400">Órdenes:</span>
+                        <span className="px-2 py-0.5 bg-white border border-slate-300 text-emerald-600 text-[10px] font-black">{Object.keys(orderGroups).length}</span>
                     </div>
                 </div>
-                
-                <div className="flex items-center gap-2">
-                    <button 
-                        onClick={() => {
-                            const allInitialMinimized = new Set<string>();
-                            rows.forEach(r => {
-                                allInitialMinimized.add(`dist-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
-                                allInitialMinimized.add(`entry-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
-                            });
 
-                            if (minimizedCards.size > 0) {
-                                setMinimizedCards(new Set());
-                            } else {
-                                setMinimizedCards(allInitialMinimized);
-                            }
-                        }}
-                        className="px-3 py-1 bg-white border border-slate-300 text-[8px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors"
-                        title={minimizedCards.size > 0 ? "Expandir todo" : "Minimizar todo"}
-                    >
+                <div className="flex items-center gap-2">
+                    <button onClick={toggleCardGlobal} className="px-3 py-1 bg-white border border-slate-300 text-[9px] font-black uppercase tracking-widest hover:bg-slate-50">
                         {minimizedCards.size > 0 ? "Expandir todo" : "Minimizar todo"}
                     </button>
 
-                    {/* Status Filters */}
-                    <div className="flex bg-slate-200 p-0.5 border border-slate-300">
+                    <div className="flex bg-slate-200 p-0.5 rounded">
                         {[
                             { id: 'TODOS', label: 'Todos' },
-                            { id: 'PENDIENTE_RECIBO', label: 'Pendientes Recibo' },
-                            { id: 'PENDIENTE_SALIDA', label: 'Dist. Pend. Salida' },
-                            { id: 'PENDIENTE_ENTRADA', label: 'Dist. Pend. Entrada' },
+                            { id: 'PENDIENTE_RECIBO', label: 'Pend. Recibo' },
+                            { id: 'PENDIENTE_SALIDA', label: 'Pend. Salida' },
+                            { id: 'PENDIENTE_ENTRADA', label: 'Pend. Entrada' },
                         ].map(f => (
                             <button
                                 key={f.id}
                                 onClick={() => setKanbanFilter(f.id as any)}
                                 className={cn(
-                                    "px-3 py-1 text-[8px] font-black uppercase tracking-widest transition-all",
-                                    kanbanFilter === f.id ? "bg-[#4050B4] text-white" : "text-slate-500 hover:bg-white hover:text-slate-800"
+                                    "px-3 py-1 text-[9px] font-black uppercase tracking-widest transition-all",
+                                    kanbanFilter === f.id ? "bg-[#4050B4] text-white" : "text-slate-500 hover:text-slate-800"
                                 )}
                             >
                                 {f.label}
@@ -833,322 +812,165 @@ export default function CedisDistributionsPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                     {[
                         { color: 'bg-[#4050B4]', label: 'Orden' },
-                        { color: 'bg-emerald-500', label: 'Recibo Cedis' },
-                        { color: 'bg-amber-400', label: 'Distribución' },
+                        { color: 'bg-emerald-500', label: 'Recibo' },
                         { color: 'bg-purple-500', label: 'Factura' },
-                        { color: 'bg-rose-400', label: 'Pendiente' },
+                        { color: 'bg-orange-400', label: 'Salida' },
+                        { color: 'bg-emerald-900', label: 'Entrada' },
+                        { color: 'bg-rose-500', label: 'Pendiente' },
                     ].map(({ color, label }) => (
                         <div key={label} className="flex items-center gap-1.5">
-                            <span className={cn("w-2 h-2 inline-block", color)} />
-                            <span className="text-[7px] text-slate-400 font-bold uppercase">{label}</span>
+                            <span className={cn("w-2 h-2 inline-block rounded-full", color)} />
+                            <span className="text-[8px] text-slate-400 font-bold uppercase">{label}</span>
                         </div>
                     ))}
                 </div>
             </div>
 
-
-            {/* ===== Order Detail Modal ===== */}
+            {/* Modals */}
+            {/* Order Detail Modal */}
             {isDetailModalOpen && (
-                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-6xl h-[85vh] shadow-2xl border border-slate-200 flex flex-col animate-in slide-in-from-bottom-4 duration-300">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
-                            <div className="flex flex-col">
-                                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                                    <FileSpreadsheet className="text-[#4050B4]" size={20} />
-                                    Detalle de Productos - Orden: {selectedRow?.IdOrdenCompra}
-                                </h2>
-                                <div className="flex items-center gap-4 mt-1">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{selectedRow?.Proveedor}</p>
-                                    <div className="w-1 h-1 rounded-full bg-slate-300" />
-                                    <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Fecha: {formatDate(detailItems[0]?.FechaOrdenCompra ?? selectedRow?.FechaOrdenCompra ?? null)}</p>
-                                    <div className="w-1 h-1 rounded-full bg-slate-300" />
-                                    <p className="text-[10px] font-black text-[#4050B4] uppercase tracking-widest">Generado por: {detailItems[0]?.UsuarioOrden || 'N/A'}</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setIsDetailModalOpen(false)} className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
+                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-6xl h-[85vh] shadow-2xl border border-slate-200 flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b">
+                            <h2 className="text-lg font-black text-slate-800 uppercase flex items-center gap-2">
+                                <FileSpreadsheet className="text-[#4050B4]" size={20} /> Detalle de Orden: {selectedRow?.IdOrdenCompra}
+                            </h2>
+                            <button onClick={() => setIsDetailModalOpen(false)} className="p-2 hover:bg-slate-100 text-slate-400"><X size={20} /></button>
                         </div>
-                        <div className="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-50/50">
+                        <div className="flex-1 overflow-auto p-6 bg-slate-50">
                             {loadingDetails ? (
-                                <div className="h-full flex flex-col items-center justify-center space-y-4">
-                                    <div className="w-10 h-10 border-4 border-slate-200 border-t-[#4050B4] rounded-full animate-spin" />
-                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest animate-pulse">Consultando buffer...</p>
+                                <div className="h-full flex flex-col items-center justify-center space-y-2">
+                                    <div className="w-8 h-8 border-4 border-slate-200 border-t-[#4050B4] rounded-full animate-spin" />
+                                    <p className="text-[10px] font-black uppercase text-slate-400">Cargando...</p>
                                 </div>
-                            ) : detailItems.length > 0 ? (
-                                <table className="w-full text-left border-collapse bg-white shadow-sm border border-slate-200">
-                                    <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                            ) : (
+                                <table className="w-full text-left border-collapse bg-white shadow-sm">
+                                    <thead className="bg-slate-50 border-b">
                                         <tr>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">Piezas</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">Pedido</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-24">Pedido Transito</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 w-24">Sin Cargo</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 w-20">Medida</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 w-32">Codigo Barras</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Descripcion</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-24">Costo</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">IVA100</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">IEPS100</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D1</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D2</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D3</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D4</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D5</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-28">Total</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400 text-right">Pedido</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400">Medida</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400">Cód. Barras</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400">Descripción</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400 text-right">Costo</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400 text-right">Total</th>
                                         </tr>
                                     </thead>
                                     <tbody className="text-slate-700">
                                         {detailItems.map((item, idx) => (
-                                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                                                <td className="p-2 text-[11px] text-right font-bold text-slate-600">{item.PiezasPedido}</td>
+                                            <tr key={idx} className="border-b hover:bg-slate-50">
                                                 <td className="p-2 text-[11px] text-right font-black text-[#4050B4]">{item.Pedido}</td>
-                                                <td className="p-2 text-[11px] text-right font-bold text-amber-600">{item.PedidoTransito}</td>
-                                                <td className="p-2 text-[11px] font-bold text-slate-500 uppercase truncate max-w-[100px]" title={item.SinCargo}>{item.SinCargo || '-'}</td>
-                                                <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Medida}</td>
-                                                <td className="p-2 text-[10px] font-mono font-bold text-slate-500">{item.CodigoBarras}</td>
-                                                <td className="p-2 text-[11px] font-bold uppercase tracking-tight truncate max-w-[200px]" title={item.Descripcion}>{item.Descripcion}</td>
-                                                <td className="p-2 text-[11px] text-right font-bold text-slate-600">{formatCurrency(item.Costo)}</td>
-                                                <td className="p-2 text-[11px] text-right font-bold text-slate-500">{item.IVA100}%</td>
-                                                <td className="p-2 text-[11px] text-right font-bold text-slate-500">{item.IEPS100}%</td>
-                                                <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.D1}</td>
-                                                <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.D2}</td>
-                                                <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.D3}</td>
-                                                <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.D4}</td>
-                                                <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.D5}</td>
-                                                <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Total)}</td>
+                                                <td className="p-2 text-[10px] font-bold text-slate-500">{item.Medida}</td>
+                                                <td className="p-2 text-[10px] font-mono text-slate-500">{item.CodigoBarras}</td>
+                                                <td className="p-2 text-[11px] font-bold uppercase">{item.Descripcion}</td>
+                                                <td className="p-2 text-[11px] text-right">{formatCurrency(item.Costo)}</td>
+                                                <td className="p-2 text-[11px] text-right font-black">{formatCurrency(item.Total)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
-                                    <tfoot className="bg-slate-50 border-t-2 border-slate-200 sticky bottom-0">
-                                        <tr>
-                                            <td colSpan={15} className="p-4 text-right text-[11px] font-black uppercase text-slate-500 tracking-widest">Total General</td>
-                                            <td className="p-4 text-right text-base font-black text-[#4050B4]">{formatCurrency(detailItems.reduce((a, i) => a + i.Total, 0))}</td>
-                                        </tr>
-                                    </tfoot>
                                 </table>
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-center p-12">
-                                    <div className="w-16 h-16 bg-slate-100 flex items-center justify-center rounded-full mb-4 text-slate-400"><Search size={32} /></div>
-                                    <h3 className="text-lg font-black text-slate-800 uppercase mb-1">Sin detalles</h3>
-                                    <p className="text-slate-500 text-sm max-w-xs mx-auto">No se encontraron partidas para esta orden en el buffer.</p>
-                                </div>
                             )}
                         </div>
-                        <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end">
-                            <button onClick={() => setIsDetailModalOpen(false)} className="px-8 py-2.5 bg-[#4050B4] text-white text-[11px] font-black uppercase tracking-widest hover:bg-[#344196] transition-all shadow-lg">Cerrar Detalle</button>
+                        <div className="px-6 py-4 border-t flex justify-end">
+                            <button onClick={() => setIsDetailModalOpen(false)} className="px-6 py-2 bg-slate-800 text-white text-[11px] font-black uppercase tracking-widest hover:bg-slate-700">Cerrar</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ===== Receipt Detail Modal ===== */}
-            {isReceiptModalOpen && (
-                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-6xl h-[85vh] shadow-2xl border border-slate-200 flex flex-col animate-in slide-in-from-bottom-4 duration-300">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
-                            <div className="flex flex-col">
-                                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                                    <Check className="text-emerald-600" size={20} />
-                                    Detalle de Recibo: {receiptData?.header.folioRecibo}
-                                </h2>
-                                <div className="flex flex-wrap items-center gap-3 mt-1">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{selectedRow?.TiendaOrigen}</p>
-                                    <div className="w-1 h-1 rounded-full bg-slate-300" />
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{selectedRow?.Proveedor}</p>
-                                    <div className="w-1 h-1 rounded-full bg-slate-300" />
-                                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Fecha: {formatDate(receiptData?.header.FechaRecibo ?? null)}</p>
-                                    <div className="w-1 h-1 rounded-full bg-slate-300" />
-                                    <p className="text-[10px] font-black text-[#4050B4] uppercase tracking-widest">Recibe: {receiptData?.header.Usuario || 'N/A'}</p>
-                                    {receiptData?.header.UUID && (
-                                        <>
-                                            <div className="w-1 h-1 rounded-full bg-slate-300" />
-                                            <a href={`https://recursos.kykcloud.mx/${receiptData.header.UUID}`} target="_blank" rel="noopener noreferrer" className="text-[10px] font-black text-amber-600 uppercase tracking-widest hover:underline flex items-center gap-1">UUID <ExternalLink size={10} /></a>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                            <button onClick={() => setIsReceiptModalOpen(false)} className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
+            {/* Receipt Detail Modal */}
+            {isReceiptModalOpen && receiptData && (
+                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-6xl h-[85vh] shadow-2xl border border-slate-200 flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b">
+                            <h2 className="text-lg font-black text-slate-800 uppercase flex items-center gap-2">
+                                <Check className="text-emerald-600" size={20} /> Detalle de Recibo: {receiptData.header.folioRecibo}
+                            </h2>
+                            <button onClick={() => setIsReceiptModalOpen(false)} className="p-2 hover:bg-slate-100 text-slate-400"><X size={20} /></button>
                         </div>
-                        <div className="flex bg-slate-50 border-b border-slate-100 px-6">
-                            <button onClick={() => setActiveReceiptTab('recibo')} className={cn("px-6 py-3 text-[11px] font-black uppercase tracking-widest transition-all border-b-2", activeReceiptTab === 'recibo' ? "border-emerald-500 text-emerald-600 bg-white" : "border-transparent text-slate-400 hover:text-slate-600")}>
-                                Recibo ({receiptData?.receiptItems.length || 0})
-                            </button>
-                            {receiptData?.returnItems && receiptData.returnItems.length > 0 && (
-                                <button onClick={() => setActiveReceiptTab('devoluciones')} className={cn("px-6 py-3 text-[11px] font-black uppercase tracking-widest transition-all border-b-2", activeReceiptTab === 'devoluciones' ? "border-rose-500 text-rose-600 bg-white" : "border-transparent text-slate-400 hover:text-slate-600")}>
-                                    Devoluciones ({receiptData?.returnItems.length || 0})
-                                </button>
-                            )}
-                        </div>
-                        <div className="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-50/30">
-                            {loadingReceiptDetails ? (
-                                <div className="h-full flex flex-col items-center justify-center space-y-4">
-                                    <div className="w-10 h-10 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin" />
-                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest animate-pulse">Consultando recibo...</p>
-                                </div>
-                            ) : (
-                                <table className="w-full text-left border-collapse bg-white shadow-sm border border-slate-200">
-                                    <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-                                        <tr>
-                                            {activeReceiptTab === 'recibo' ? (<>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">Pedido</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">Rec</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 w-24">Medida Compra</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">Kgs</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 w-20">MedidaGranel</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 w-32">Codigo Barras</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Descripcion</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-24">Costo</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D1</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D2</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D3</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D4</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-12">D5</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">Volumen</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-28">Total</th>
-                                            </>) : (<>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">Dev</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 w-24">Medida</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 w-32">Codigo Barras</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Descripcion</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-24">Costo</th>
-                                                <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-28">Total</th>
-                                            </>)}
+                        <div className="flex-1 overflow-auto p-6 bg-slate-50">
+                            <table className="w-full text-left border-collapse bg-white shadow-sm">
+                                <thead className="bg-slate-50 border-b">
+                                    <tr>
+                                        <th className="p-2 text-[9px] font-black uppercase text-slate-400 text-right">Recibido</th>
+                                        <th className="p-2 text-[9px] font-black uppercase text-slate-400">Medida</th>
+                                        <th className="p-2 text-[9px] font-black uppercase text-slate-400">Cód. Barras</th>
+                                        <th className="p-2 text-[9px] font-black uppercase text-slate-400">Descripción</th>
+                                        <th className="p-2 text-[9px] font-black uppercase text-slate-400 text-right">Costo</th>
+                                        <th className="p-2 text-[9px] font-black uppercase text-slate-400 text-right">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-slate-700">
+                                    {receiptData.receiptItems.map((item, idx) => (
+                                        <tr key={idx} className="border-b hover:bg-slate-50">
+                                            <td className="p-2 text-[11px] text-right font-black text-emerald-600">{item.Rec}</td>
+                                            <td className="p-2 text-[10px] font-bold text-slate-500">{item.MedidaCompra}</td>
+                                            <td className="p-2 text-[10px] font-mono text-slate-500">{item.CodigoBarras}</td>
+                                            <td className="p-2 text-[11px] font-bold uppercase">{item.Descripcion}</td>
+                                            <td className="p-2 text-[11px] text-right">{formatCurrency(item.Costo)}</td>
+                                            <td className="p-2 text-[11px] text-right font-black">{formatCurrency(item.Total)}</td>
                                         </tr>
-                                    </thead>
-                                    <tbody className="text-slate-700">
-                                        {(activeReceiptTab === 'recibo' ? receiptData?.receiptItems : receiptData?.returnItems)?.map((item, idx) => (
-                                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                                                {activeReceiptTab === 'recibo' ? (<>
-                                                    <td className="p-2 text-[11px] text-right font-bold text-slate-400">{item.Pedido}</td>
-                                                    <td className="p-2 text-[11px] text-right font-black text-[#4050B4]">{item.Rec}</td>
-                                                    <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.MedidaCompra}</td>
-                                                    <td className="p-2 text-[11px] text-right font-bold text-emerald-600">{item.RecGranel.toFixed(3)}</td>
-                                                    <td className="p-2 text-[10px] font-black text-slate-400 uppercase italic">{item.MedidaGranel}</td>
-                                                    <td className="p-2 text-[10px] font-mono font-bold text-slate-500">{item.CodigoBarras}</td>
-                                                    <td className="p-2 text-[11px] font-bold uppercase tracking-tight truncate max-w-[150px]" title={item.Descripcion}>{item.Descripcion}</td>
-                                                    <td className="p-2 text-[11px] text-right font-bold text-slate-600">{formatCurrency(item.Costo)}</td>
-                                                    <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.Desc0}</td>
-                                                    <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.Desc1}</td>
-                                                    <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.Desc2}</td>
-                                                    <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.Desc3}</td>
-                                                    <td className="p-2 text-[10px] text-right font-bold text-slate-400">{item.Desc4}</td>
-                                                    <td className="p-2 text-[10px] text-right font-bold text-amber-600">{item.Factor}</td>
-                                                    <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Total)}</td>
-                                                </>) : (<>
-                                                    <td className="p-2 text-[11px] text-right font-black text-rose-600">{item.Rec}</td>
-                                                    <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.MedidaVenta}</td>
-                                                    <td className="p-2 text-[10px] font-mono font-bold text-slate-500">{item.CodigoBarras}</td>
-                                                    <td className="p-2 text-[11px] font-bold uppercase tracking-tight">{item.Descripcion}</td>
-                                                    <td className="p-2 text-[11px] text-right font-bold text-slate-600">{formatCurrency(item.Costo)}</td>
-                                                    <td className="p-2 text-[11px] text-right font-black text-rose-900">{formatCurrency(item.Total)}</td>
-                                                </>)}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                    <tfoot className="bg-slate-50 border-t-2 border-slate-200 sticky bottom-0">
-                                        <tr>
-                                            <td colSpan={activeReceiptTab === 'recibo' ? 14 : 5} className="p-4 text-right text-[11px] font-black uppercase text-slate-500 tracking-widest">Total {activeReceiptTab === 'recibo' ? 'Recibido' : 'Devolución'}</td>
-                                            <td className={cn("p-4 text-right text-base font-black", activeReceiptTab === 'recibo' ? "text-emerald-600" : "text-rose-600")}>
-                                                {formatCurrency((activeReceiptTab === 'recibo' ? receiptData?.receiptItems : receiptData?.returnItems)?.reduce((a, i) => a + i.Total, 0) || 0)}
-                                            </td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            )}
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
-                        <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end">
-                            <button onClick={() => setIsReceiptModalOpen(false)} className="px-8 py-2.5 bg-slate-800 text-white text-[11px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all shadow-lg">Cerrar</button>
+                        <div className="px-6 py-4 border-t flex justify-end gap-3">
+                            {receiptData.header.UUID && (
+                                <a href={`https://recursos.kykcloud.mx/${receiptData.header.UUID}`} target="_blank" rel="noopener noreferrer" className="px-6 py-2 bg-amber-500 text-white text-[11px] font-black uppercase tracking-widest flex items-center gap-2">Ver Factura <ExternalLink size={12} /></a>
+                            )}
+                            <button onClick={() => setIsReceiptModalOpen(false)} className="px-6 py-2 bg-slate-800 text-white text-[11px] font-black uppercase tracking-widest hover:bg-slate-700">Cerrar</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ===== Distribution Detail Modal ===== */}
+            {/* Distribution Detail Modal */}
             {isDistDetailModalOpen && (
-                <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-4xl h-[70vh] shadow-2xl border border-slate-200 flex flex-col animate-in slide-in-from-bottom-4 duration-300">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
-                            <div className="flex flex-col">
-                                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                                    <RotateCcw className="text-amber-500" size={20} />
-                                    Detalle de Distribución - {selectedDistHeader?.tienda}
-                                </h2>
-                                <div className="flex items-center gap-4 mt-1">
-                                    <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Folio Transferencia: {selectedDistHeader?.folio || 'PENDIENTE'}</p>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                                        <Clock size={10} />Fecha Salida: {selectedDistHeader?.fecha ? formatDateTime(selectedDistHeader.fecha) : '---'}
-                                    </p>
-                                </div>
-                            </div>
-                            <button onClick={() => setIsDistDetailModalOpen(false)} className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
+                <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-4xl h-[70vh] shadow-2xl border border-slate-200 flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b">
+                            <h2 className="text-lg font-black text-slate-800 uppercase flex items-center gap-2">
+                                <RotateCcw className="text-amber-500" size={20} /> Detalle de Distribución: {selectedDistHeader?.tienda}
+                            </h2>
+                            <button onClick={() => setIsDistDetailModalOpen(false)} className="p-2 hover:bg-slate-100 text-slate-400"><X size={20} /></button>
                         </div>
-                        <div className="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-50/50">
+                        <div className="flex-1 overflow-auto p-6 bg-slate-50">
                             {loadingDistDetails ? (
-                                <div className="h-full flex flex-col items-center justify-center space-y-4">
-                                    <div className="w-10 h-10 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
-                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest animate-pulse">Cargando partidas...</p>
+                                <div className="h-full flex flex-col items-center justify-center space-y-2">
+                                    <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
+                                    <p className="text-[10px] font-black uppercase text-slate-400">Cargando...</p>
                                 </div>
-                            ) : distDetailItems.length > 0 ? (
-                                <table className="w-full text-left border-collapse bg-white shadow-sm border border-slate-200">
-                                    <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-                                        {selectedDistHeader?.folio && selectedDistHeader.folio !== 'PENDIENTE' ? (
-                                            <tr>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right w-20">Cant. Salida</th>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400 w-20">Medida</th>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right w-20">Pzs Pedido</th>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right w-20">Pzs Recibo</th>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400 w-20">Medida Pzs</th>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400 w-28">Codigo Barras</th>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Descripcion</th>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right w-24">Costo</th>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right w-24">Total</th>
-                                            </tr>
-                                        ) : (
-                                            <tr>
-                                                <th className="p-3 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right w-24">Cantidad</th>
-                                                <th className="p-3 text-[10px] font-black uppercase tracking-widest text-slate-400 w-24">Medida Compra</th>
-                                                <th className="p-3 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right w-24">Piezas</th>
-                                                <th className="p-3 text-[10px] font-black uppercase tracking-widest text-slate-400 w-24">Medida Piezas</th>
-                                                <th className="p-3 text-[10px] font-black uppercase tracking-widest text-slate-400 w-32">Codigo Barras</th>
-                                                <th className="p-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Descripcion</th>
-                                            </tr>
-                                        )}
+                            ) : (
+                                <table className="w-full text-left border-collapse bg-white shadow-sm">
+                                    <thead className="bg-slate-50 border-b">
+                                        <tr>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400 text-right">Cant. Salida</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400">Medida</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400">Cód. Barras</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400">Descripción</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400 text-right">Costo</th>
+                                            <th className="p-2 text-[9px] font-black uppercase text-slate-400 text-right">Total</th>
+                                        </tr>
                                     </thead>
                                     <tbody className="text-slate-700">
                                         {distDetailItems.map((item, idx) => (
-                                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                                                {selectedDistHeader?.folio && selectedDistHeader.folio !== 'PENDIENTE' ? (<>
-                                                    <td className="p-2 text-[12px] text-right font-black text-amber-600">{item.CantidadSalida}</td>
-                                                    <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Medida}</td>
-                                                    <td className="p-2 text-[12px] text-right font-bold text-slate-600">{item.PiezasPedido}</td>
-                                                    <td className="p-2 text-[12px] text-right font-bold text-emerald-600">{item.PiezasRecibo}</td>
-                                                    <td className="p-2 text-[10px] font-black text-slate-400 uppercase italic">{item.MedidaPiezas}</td>
-                                                    <td className="p-2 text-[10px] font-mono font-bold text-slate-500">{item.CodigoBarras}</td>
-                                                    <td className="p-2 text-[11px] font-bold uppercase tracking-tight truncate max-w-[150px]" title={item.Descripcion}>{item.Descripcion}</td>
-                                                    <td className="p-2 text-[11px] text-right font-bold text-slate-600">{formatCurrency(item.Costo || 0)}</td>
-                                                    <td className="p-2 text-[12px] text-right font-black text-slate-900">{formatCurrency(item.Total || 0)}</td>
-                                                </>) : (<>
-                                                    <td className="p-3 text-[12px] text-right font-black text-amber-600">{item.Cantidad}</td>
-                                                    <td className="p-3 text-[10px] font-black text-slate-400 uppercase">{item.MedidaCompra}</td>
-                                                    <td className="p-3 text-[12px] text-right font-bold text-slate-600">{item.Piezas}</td>
-                                                    <td className="p-3 text-[10px] font-black text-slate-400 uppercase italic">{item.MedidaPiezas}</td>
-                                                    <td className="p-3 text-[10px] font-mono font-bold text-slate-500">{item.CodigoBarras}</td>
-                                                    <td className="p-3 text-[12px] font-bold uppercase tracking-tight">{item.Descripcion}</td>
-                                                </>)}
+                                            <tr key={idx} className="border-b hover:bg-slate-50">
+                                                <td className="p-2 text-[11px] text-right font-black text-amber-600">{item.CantidadSalida || item.Cantidad}</td>
+                                                <td className="p-2 text-[10px] font-bold text-slate-500">{item.Medida || item.MedidaCompra}</td>
+                                                <td className="p-2 text-[10px] font-mono text-slate-500">{item.CodigoBarras}</td>
+                                                <td className="p-2 text-[11px] font-bold uppercase">{item.Descripcion}</td>
+                                                <td className="p-2 text-[11px] text-right">{formatCurrency(item.Costo || 0)}</td>
+                                                <td className="p-2 text-[11px] text-right font-black">{formatCurrency(item.Total || 0)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-center p-12">
-                                    <div className="w-16 h-16 bg-slate-100 flex items-center justify-center rounded-full mb-4 text-slate-400"><Search size={32} /></div>
-                                    <p className="text-slate-500 text-[11px] font-bold uppercase tracking-widest italic">No se encontraron artículos distribuidos</p>
-                                </div>
                             )}
                         </div>
-                        <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end">
-                            <button onClick={() => setIsDistDetailModalOpen(false)} className="px-8 py-2.5 bg-amber-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg">Cerrar</button>
+                        <div className="px-6 py-4 border-t flex justify-end">
+                            <button onClick={() => setIsDistDetailModalOpen(false)} className="px-6 py-2 bg-amber-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-amber-600">Cerrar</button>
                         </div>
                     </div>
                 </div>
