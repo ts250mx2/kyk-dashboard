@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, memo, useMemo } from 'react';
+import { useState, useEffect, memo, useMemo, useCallback } from 'react';
 import {
     Calendar,
     Search,
@@ -277,8 +277,11 @@ export default function CedisDistributionsPage() {
     const [fechaFin, setFechaFin] = useState(initialRange.end);
     const [rows, setRows] = useState<CedisRow[]>([]);
     const [loading, setLoading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const [isMaximized, setIsMaximized] = useState(false);
-    const [minimizedCards, setMinimizedCards] = useState<Set<string>>(new Set());
+    // Stores only user-toggled overrides; dist-* and entry-* start minimized by default
+    const [cardOverrides, setCardOverrides] = useState<Map<string, boolean>>(new Map());
+    const [allExpanded, setAllExpanded] = useState(false);
     const [search, setSearch] = useState('');
     const [idComputadora, setIdComputadora] = useState<number | null>(null);
     const [kanbanFilter, setKanbanFilter] = useState<'TODOS' | 'PENDIENTE_RECIBO' | 'PENDIENTE_SALIDA' | 'PENDIENTE_ENTRADA'>('TODOS');
@@ -334,29 +337,47 @@ export default function CedisDistributionsPage() {
         },
     ];
 
-    const fetchData = async () => {
-        setLoading(true);
+    const fetchData = async (force = false) => {
+        const hasExistingData = rows.length > 0;
+        // If we have data, don't block UI — refresh silently in background
+        if (hasExistingData && !force) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+        // Reset overrides on new fetch so default minimized state applies
+        setCardOverrides(new Map());
+        setAllExpanded(false);
         try {
-            const res = await fetch(`/api/purchases/distributions?startDate=${fechaInicio}&endDate=${fechaFin}&status=${kanbanFilter}`);
+            const forceParam = force ? '&force=1' : '';
+            const res = await fetch(`/api/purchases/distributions?startDate=${fechaInicio}&endDate=${fechaFin}&status=${kanbanFilter}${forceParam}`);
             const data = await res.json();
-            if (Array.isArray(data)) {
-                setRows(data);
-                // Minimize ONLY distributions and entries by default
-                const initialMinimized = new Set<string>();
-                data.forEach((r: CedisRow) => {
-                    initialMinimized.add(`dist-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
-                    initialMinimized.add(`entry-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
-                });
-                setMinimizedCards(initialMinimized);
-            }
+            if (Array.isArray(data)) setRows(data);
             else setRows([]);
         } catch (e) {
             console.error(e);
             setRows([]);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
+
+    // Derive minimized state: dist-* and entry-* are minimized by default unless overridden
+    const minimizedCards = useMemo(() => {
+        const set = new Set<string>();
+        if (!allExpanded) {
+            rows.forEach(r => {
+                set.add(`dist-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
+                set.add(`entry-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
+            });
+        }
+        // Apply user overrides
+        cardOverrides.forEach((expanded, id) => {
+            if (expanded) set.delete(id); else set.add(id);
+        });
+        return set;
+    }, [rows, cardOverrides, allExpanded]);
 
     useEffect(() => {
         setVisibleCount(50);
@@ -476,19 +497,22 @@ export default function CedisDistributionsPage() {
         return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
     };
 
-    const toggleCardGlobal = () => {
-        const allInitialMinimized = new Set<string>();
-        rows.forEach(r => {
-            allInitialMinimized.add(`dist-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
-            allInitialMinimized.add(`entry-${r.IdOrdenCompra}-${r.IdTiendaDestino}`);
-        });
+    const toggleCardGlobal = useCallback(() => {
+        // Toggle global expand/collapse — clear overrides and flip the allExpanded flag
+        setCardOverrides(new Map());
+        setAllExpanded(prev => !prev);
+    }, []);
 
-        if (minimizedCards.size > 0) {
-            setMinimizedCards(new Set());
-        } else {
-            setMinimizedCards(allInitialMinimized);
-        }
-    };
+    const toggleCard = useCallback((cardId: string) => {
+        // Read current state from the computed minimizedCards set
+        // Override: true = user wants it EXPANDED, false = user wants it MINIMIZED
+        setCardOverrides(prev => {
+            const next = new Map(prev);
+            const isCurrentlyMinimized = minimizedCards.has(cardId);
+            next.set(cardId, isCurrentlyMinimized); // true = expanded (opposite of current)
+            return next;
+        });
+    }, [minimizedCards]);
 
     return (
         <div className={cn(
@@ -543,8 +567,8 @@ export default function CedisDistributionsPage() {
                             <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 outline-none" />
                         </div>
 
-                        <button onClick={fetchData} className="p-2 bg-white border border-slate-200 text-[#4050B4] hover:bg-slate-50">
-                            <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
+                        <button onClick={() => fetchData(true)} className="p-2 bg-white border border-slate-200 text-[#4050B4] hover:bg-slate-50" title="Actualizar datos">
+                            <RotateCcw size={14} className={(loading || refreshing) ? "animate-spin" : ""} />
                         </button>
                         <button onClick={() => setIsMaximized(!isMaximized)} className="p-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
                             {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -592,15 +616,6 @@ export default function CedisDistributionsPage() {
                             const firstRow = orderRows[0];
                             const isPendingRecibo = !firstRow.FolioReciboMovil;
                             const diffOrdenRecibo = getDaysDiff(firstRow.FechaOrdenCompra, firstRow.FechaRecibo);
-                            
-                            const toggleCard = (cardId: string) => {
-                                setMinimizedCards(prev => {
-                                    const next = new Set(prev);
-                                    if (next.has(cardId)) next.delete(cardId);
-                                    else next.add(cardId);
-                                    return next;
-                                });
-                            };
 
                             return (
                                 <div key={orderId} className="border-b border-slate-200 py-1 bg-white hover:bg-slate-50/50 transition-colors">
@@ -788,7 +803,7 @@ export default function CedisDistributionsPage() {
 
                 <div className="flex items-center gap-2">
                     <button onClick={toggleCardGlobal} className="px-3 py-1 bg-white border border-slate-300 text-[9px] font-black uppercase tracking-widest hover:bg-slate-50">
-                        {minimizedCards.size > 0 ? "Expandir todo" : "Minimizar todo"}
+                        {allExpanded ? "Minimizar todo" : "Expandir todo"}
                     </button>
 
                     <div className="flex bg-slate-200 p-0.5 rounded">

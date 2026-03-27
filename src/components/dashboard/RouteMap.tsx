@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
-import { GoogleMap, useJsApiLoader, Marker, DirectionsService, DirectionsRenderer } from "@react-google-maps/api";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { GoogleMap, useJsApiLoader, Marker, Polyline, TrafficLayer } from "@react-google-maps/api";
 
 const containerStyle = {
     width: "100%",
@@ -13,6 +13,9 @@ const center = {
     lng: -103.3496
 };
 
+// Define libraries array outside to prevent re-renders
+const LIBRARIES: ("geometry")[] = ["geometry"];
+
 interface Point {
     lat: number;
     lng: number;
@@ -23,38 +26,21 @@ interface RouteMapProps {
     origin: Point | null;
     destinations: Point[];
     optimizedRoute: Point[];
-    onRouteCalculated?: (distance: number, duration: number) => void;
+    encodedPolyline?: string | null;
 }
 
-export default function RouteMap({ origin, destinations, optimizedRoute, onRouteCalculated }: RouteMapProps) {
+export default function RouteMap({ origin, destinations, optimizedRoute, encodedPolyline }: RouteMapProps) {
     const { isLoaded } = useJsApiLoader({
         id: 'google-map-script',
-        googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
+        googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+        libraries: LIBRARIES
     });
 
-    const [response, setResponse] = useState<google.maps.DirectionsResult | null>(null);
     const [map, setMap] = useState<google.maps.Map | null>(null);
-
-    const directionsCallback = useCallback((res: google.maps.DirectionsResult | null, status: google.maps.DirectionsStatus) => {
-        if (res !== null && status === 'OK') {
-            setResponse(res);
-            if (onRouteCalculated) {
-                let totalDistance = 0;
-                let totalDuration = 0;
-                res.routes[0].legs.forEach(leg => {
-                    totalDistance += leg.distance?.value || 0;
-                    totalDuration += leg.duration?.value || 0;
-                });
-                onRouteCalculated(totalDistance, totalDuration);
-            }
-        } else {
-            console.error(`Directions request failed: ${status}`);
-        }
-    }, [onRouteCalculated]);
 
     useEffect(() => {
         if (map && optimizedRoute.length > 0) {
-            const bounds = new google.maps.LatLngBounds();
+            const bounds = new window.google.maps.LatLngBounds();
             optimizedRoute.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
             map.fitBounds(bounds);
         }
@@ -68,10 +54,20 @@ export default function RouteMap({ origin, destinations, optimizedRoute, onRoute
         setMap(null);
     }, []);
 
-    if (!isLoaded) return <div className="h-[500px] w-full bg-slate-100 animate-pulse rounded-xl" />;
+    const decodedPath = useMemo(() => {
+        if (!isLoaded || !encodedPolyline || !window.google?.maps?.geometry) return [];
+        try {
+            return window.google.maps.geometry.encoding.decodePath(encodedPolyline);
+        } catch (e) {
+            console.error("Failed to decode polyline", e);
+            return [];
+        }
+    }, [isLoaded, encodedPolyline]);
+
+    if (!isLoaded) return <div className="h-full w-full bg-slate-100 animate-pulse flex items-center justify-center text-slate-400">Cargando Mapa...</div>;
 
     return (
-        <div className="h-[500px] w-full rounded-xl overflow-hidden border border-slate-200 shadow-inner group">
+        <div className="h-full w-full rounded-xl overflow-hidden shadow-inner group relative">
             <GoogleMap
                 mapContainerStyle={containerStyle}
                 center={center}
@@ -83,31 +79,17 @@ export default function RouteMap({ origin, destinations, optimizedRoute, onRoute
                     zoomControl: true,
                 }}
             >
-                {optimizedRoute.length >= 2 && (
-                    <DirectionsService
-                        options={{
-                            origin: { lat: optimizedRoute[0].lat, lng: optimizedRoute[0].lng },
-                            destination: { lat: optimizedRoute[optimizedRoute.length - 1].lat, lng: optimizedRoute[optimizedRoute.length - 1].lng },
-                            waypoints: optimizedRoute.slice(1, -1).map(p => ({
-                                location: { lat: p.lat, lng: p.lng },
-                                stopover: true
-                            })),
-                            travelMode: google.maps.TravelMode.DRIVING,
-                        }}
-                        callback={directionsCallback}
-                    />
+                {decodedPath.length > 0 && (
+                    <TrafficLayer />
                 )}
 
-                {response !== null && (
-                    <DirectionsRenderer
+                {decodedPath.length > 0 && (
+                    <Polyline
+                        path={decodedPath}
                         options={{
-                            directions: response,
-                            suppressMarkers: true,
-                            polylineOptions: {
-                                strokeColor: "#4050B4",
-                                strokeOpacity: 0.8,
-                                strokeWeight: 6
-                            }
+                            strokeColor: "#4050B4",
+                            strokeOpacity: 0.8,
+                            strokeWeight: 6
                         }}
                     />
                 )}
@@ -120,14 +102,19 @@ export default function RouteMap({ origin, destinations, optimizedRoute, onRoute
                     />
                 )}
 
-                {destinations.map((dest, idx) => (
-                    <Marker
-                        key={idx}
-                        position={{ lat: dest.lat, lng: dest.lng }}
-                        label={{ text: (idx + 1).toString(), color: "white", fontWeight: "bold" }}
-                        title={`Parada ${idx + 1}: ${dest.name}`}
-                    />
-                ))}
+                {optimizedRoute.slice(1).map((point, idx) => {
+                    // Skip drawing another marker if the destination is a return trip to origin
+                    if (origin && point.lat === origin.lat && point.lng === origin.lng) return null;
+                    
+                    return (
+                        <Marker
+                            key={idx}
+                            position={{ lat: point.lat, lng: point.lng }}
+                            label={{ text: (idx + 1).toString(), color: "white", fontWeight: "bold" }}
+                            title={`Parada ${idx + 1}: ${point.name}`}
+                        />
+                    );
+                })}
             </GoogleMap>
         </div>
     );
