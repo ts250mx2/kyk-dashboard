@@ -27,6 +27,8 @@ const defaultCenter = {
     lng: -100.3161
 };
 
+const LIBRARIES: ("geometry")[] = ["geometry"];
+
 export default function LocateliaPage() {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [loading, setLoading] = useState(true);
@@ -47,7 +49,8 @@ export default function LocateliaPage() {
 
     const { isLoaded } = useJsApiLoader({
         id: 'google-map-script',
-        googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''
+        googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+        libraries: LIBRARIES
     });
 
     const fetchVehicles = async () => {

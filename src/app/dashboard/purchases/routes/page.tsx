@@ -10,6 +10,13 @@ const RouteMap = dynamic(() => import("@/components/dashboard/RouteMap"), {
     loading: () => <div className="h-full w-full bg-slate-100 animate-pulse flex items-center justify-center text-slate-400">Cargando Mapa...</div>
 });
 
+const formatDuration = (totalSeconds: number) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.round((totalSeconds % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+};
+
 interface Store {
     IdTienda: number;
     Tienda: string;
@@ -447,6 +454,10 @@ export default function RutasPage() {
                                         <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0" />
                                         <span title="Tiempo Total de Descargas" className="whitespace-nowrap">📦 {Math.round((route.metrics.totalCombinedDuration - route.metrics.duration) / 60)}m</span>
                                         <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0" />
+                                        <span title="Tiempo Total (Ruta + Descargas)" className="whitespace-nowrap text-slate-800 font-bold bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                                            ⏱️ Total: {formatDuration(route.metrics.totalCombinedDuration)}
+                                        </span>
+                                        <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0" />
                                         <span title="Distancia de Ruta" className="whitespace-nowrap">📏 {Math.max(0.1, route.metrics.distance / 1000).toFixed(1)} km</span>
                                     </div>
 
@@ -475,9 +486,17 @@ export default function RutasPage() {
                             <div>
                                 <h2 className="text-xl font-bold text-slate-800">Detalle de la Ruta</h2>
                                 {activeRouteData.metrics && (
-                                    <p className="text-sm text-slate-500 font-medium mt-1">
-                                        Total: <span className="text-slate-800 font-bold">{Math.round(activeRouteData.metrics.duration / 60)} min</span> ({Math.max(0.1, activeRouteData.metrics.distance / 1000).toFixed(1)} km)
-                                    </p>
+                                    <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 font-medium mt-1">
+                                        <span title="Tiempo de Manejo">🚗 En ruta: <strong className="text-slate-700">{Math.round(activeRouteData.metrics.duration / 60)}m</strong></span>
+                                        <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0" />
+                                        <span title="Tiempo de Descargas">📦 En descarga: <strong className="text-slate-700">{Math.round((activeRouteData.metrics.totalCombinedDuration - activeRouteData.metrics.duration) / 60)}m</strong></span>
+                                        <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0" />
+                                        <span title="Tiempo Total (Ruta + Descarga)" className="text-[#4050B4] font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                                            ⏱️ Total: {formatDuration(activeRouteData.metrics.totalCombinedDuration)}
+                                        </span>
+                                        <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0" />
+                                        <span title="Distancia de Ruta">📏 {Math.max(0.1, activeRouteData.metrics.distance / 1000).toFixed(1)} km</span>
+                                    </div>
                                 )}
                             </div>
                             <button
