@@ -374,3 +374,11 @@
 2026-04-12T08:42:54.807Z - [GET] Results count: 4
 2026-04-12T08:49:17.270Z - [GET] Relations called {"idProveedor":"1175"}
 2026-04-12T08:49:17.326Z - [GET] Results count: 4
+2026-04-12T19:54:51.625Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T19:54:51.689Z - [GET] Results count: 3
+2026-04-12T19:54:51.987Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T19:54:52.032Z - [GET] Results count: 3
+2026-04-12T19:55:02.206Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T19:55:02.226Z - [GET] Results count: 3
+2026-04-12T19:55:02.287Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T19:55:02.307Z - [GET] Results count: 3
