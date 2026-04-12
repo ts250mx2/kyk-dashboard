@@ -205,6 +205,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
     };
 
     const handlePrintPDF = () => {
+        if (!order) return;
         const doc = new jsPDF();
         const metadata = comparisonData.metadata;
         
@@ -278,6 +279,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
     };
 
     const handleFinishReconciliation = async () => {
+        if (!order) return;
         // Find UUID from invoiceItems or existing metadata
         const activeUUID = comparisonData.invoiceItems?.[0]?.UUID || order.UUID || comparisonData.metadata?.UUID;
         
@@ -583,7 +585,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
         return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
     };
 
-    const formatDate = (dateStr: string) => {
+    const formatDate = (dateStr: string | null | undefined) => {
         if (!dateStr) return "-";
         return new Date(dateStr).toLocaleDateString('es-MX', {
             day: '2-digit',
@@ -592,7 +594,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
         });
     };
 
-    const formatDateTime = (dateStr: string) => {
+    const formatDateTime = (dateStr: string | null | undefined) => {
         if (!dateStr) return "-";
         return new Date(dateStr).toLocaleString('es-MX', {
             day: '2-digit',
@@ -970,10 +972,10 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                                     <tbody className="text-slate-700">
                                         {detailItems.map((item, idx) => (
                                             <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                                <td className="p-2 text-[11px] text-right font-black text-[#4050B4]">{item.Cantidad}</td>
-                                                <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Unidad}</td>
+                                                <td className="p-2 text-[11px] text-right font-black text-[#4050B4]">{item.Pedido}</td>
+                                                <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Medida}</td>
                                                 <td className="p-2 text-[11px] font-bold uppercase tracking-tight truncate max-w-[400px]">{item.Descripcion}</td>
-                                                <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Importe)}</td>
+                                                <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Total)}</td>
                                             </tr>
                                         ))}
                                     </tbody>

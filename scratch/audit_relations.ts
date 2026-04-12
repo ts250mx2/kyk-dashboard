@@ -3,7 +3,7 @@ import { mysqlQuery } from '../src/lib/mysql.js';
 async function audit() {
     try {
         console.log("--- RELATIONS TABLE ---");
-        const relations = await mysqlQuery('SELECT * FROM tblRelacionArticulosFacturas LIMIT 10');
+        const relations = await mysqlQuery('SELECT * FROM tblRelacionArticulosFacturas LIMIT 10') as any[];
         console.log("Sample relations:", JSON.stringify(relations, null, 2));
 
         if (Array.isArray(relations) && relations.length > 0) {
