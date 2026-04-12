@@ -1016,10 +1016,10 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                                     <tbody className="text-slate-700">
                                         {distDetailItems.map((item, idx) => (
                                             <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                                <td className="p-2 text-[11px] text-right font-black text-amber-600">{item.Cantidad}</td>
-                                                <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Unidad}</td>
+                                                <td className="p-2 text-[11px] text-right font-black text-amber-600">{item.Cantidad || item.CantidadSalida}</td>
+                                                <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Medida || item.MedidaCompra}</td>
                                                 <td className="p-2 text-[11px] font-bold uppercase tracking-tight truncate max-w-[350px]">{item.Descripcion}</td>
-                                                <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Importe)}</td>
+                                                <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Total || 0)}</td>
                                             </tr>
                                         ))}
                                     </tbody>

@@ -369,7 +369,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
         return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
     };
 
-    const formatDate = (dateStr: string) => {
+    const formatDate = (dateStr: string | null | undefined) => {
         if (!dateStr) return "-";
         return new Date(dateStr).toLocaleDateString('es-MX', {
             day: '2-digit',
@@ -378,7 +378,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
         });
     };
 
-    const formatDateTime = (dateStr: string) => {
+    const formatDateTime = (dateStr: string | null | undefined) => {
         if (!dateStr) return "-";
         return new Date(dateStr).toLocaleString('es-MX', {
             day: '2-digit',
@@ -716,7 +716,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                                     <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                                         <tr>
                                             <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Cant</th>
-                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Unidad</th>
+                                            <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Medida</th>
                                             <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Descripción</th>
                                             <th className="p-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Importe</th>
                                         </tr>
@@ -724,10 +724,10 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                                     <tbody className="text-slate-700">
                                         {detailItems.map((item, idx) => (
                                             <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                                <td className="p-2 text-[11px] text-right font-black text-[#4050B4]">{item.Cantidad}</td>
-                                                <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Unidad}</td>
+                                                <td className="p-2 text-[11px] text-right font-black text-[#4050B4]">{item.Pedido}</td>
+                                                <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Medida}</td>
                                                 <td className="p-2 text-[11px] font-bold uppercase tracking-tight truncate max-w-[400px]">{item.Descripcion}</td>
-                                                <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Importe)}</td>
+                                                <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Total)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -768,10 +768,10 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                                     <tbody className="text-slate-700">
                                         {distDetailItems.map((item, idx) => (
                                             <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                                <td className="p-2 text-[11px] text-right font-black text-amber-600">{item.Cantidad}</td>
-                                                <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Unidad}</td>
+                                                <td className="p-2 text-[11px] text-right font-black text-amber-600">{item.Cantidad || item.CantidadSalida}</td>
+                                                <td className="p-2 text-[10px] font-black text-slate-400 uppercase">{item.Medida || item.MedidaCompra}</td>
                                                 <td className="p-2 text-[11px] font-bold uppercase tracking-tight truncate max-w-[350px]">{item.Descripcion}</td>
-                                                <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Importe)}</td>
+                                                <td className="p-2 text-[11px] text-right font-black text-slate-900">{formatCurrency(item.Total || 0)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -993,3 +993,23 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+// Simple Helper Component for Kanban Items
+function KanbanItem({ label, value, colSpan = 1, highlight = false, color = 'text-slate-800', textSize = 'text-[12px]' }: { label: string, value: any, colSpan?: number, highlight?: boolean, color?: string, textSize?: string }) {
+    return (
+        <div className={cn('flex flex-col gap-1', colSpan === 2 && 'col-span-2')}>
+            <span className='text-[9px] font-black uppercase text-slate-400 tracking-widest'>{label}</span>
+            <span className={cn(
+                'uppercase truncate', 
+                textSize,
+                highlight ? 'font-black text-sm' : 'font-bold',
+                color
+            )}>
+                {value || '-'}
+            </span>
+        </div>
+    );
+}
