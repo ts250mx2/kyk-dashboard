@@ -50,11 +50,13 @@ const menuSections: MenuSection[] = [
         items: [
             { name: "Dashboard de Compras", emoji: "🛒", href: "/dashboard/purchases/dashboard" },
             { name: "Ordenes de Compra", emoji: "📝", href: "/dashboard/purchases/orders" },
+            { name: "Recibos de Compra", emoji: "🧾", href: "/dashboard/purchases/receipts" },
             { name: "Distribuciones Cedis", emoji: "🏭", href: "/dashboard/purchases/distributions" },
             { name: "Precios", emoji: "🏷️", href: "/dashboard/purchases/prices" },
             { name: "Reportes de Compras", emoji: "📈", href: "/dashboard/purchases/reports" },
             { name: "Rutas", emoji: "🛣️", href: "/dashboard/purchases/routes" },
             { name: "Locatelia", emoji: "🧭", href: "/dashboard/purchases/locatelia" },
+            { name: "Consolidar Facturas Recibo", emoji: "🤝", href: "/dashboard/purchases/consolidate-receipts" },
         ]
     },
     {
@@ -199,7 +201,7 @@ export function Sidebar({
 
                                 <div className={cn(
                                     "space-y-1 overflow-hidden transition-all duration-300",
-                                    (isOpen && !isCollapsed) ? "max-h-96 opacity-100 mt-1" : "max-h-0 opacity-0"
+                                    ((isOpen || hasActiveChild) && !isCollapsed) ? "max-h-[500px] opacity-100 mt-1" : "max-h-0 opacity-0"
                                 )}>
                                     {section.items.map((item) => {
                                         const isActive = pathname === item.href

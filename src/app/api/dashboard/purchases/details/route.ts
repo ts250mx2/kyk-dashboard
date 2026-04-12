@@ -21,7 +21,7 @@ export async function GET(request: Request) {
         if (metric === 'compras' || metric === 'devoluciones') {
             const devFilter = metric === 'devoluciones' ? ' AND A.Devolucion = 1' : ' AND A.Devolucion = 0';
             sql = `
-                SELECT A.*, A.FolioReciboMovil as FolioRecibo, B.Proveedor, B.RFC, C.Tienda 
+                SELECT A.*, A.FolioReciboMovil as FolioRecibo, B.Proveedor, B.RFC AS RFCProveedor, C.Tienda 
                 FROM tblReciboMovil A 
                 INNER JOIN tblProveedores B ON A.IdProveedor = B.IdProveedor 
                 INNER JOIN tblTiendas C ON A.IdTienda = C.IdTienda 

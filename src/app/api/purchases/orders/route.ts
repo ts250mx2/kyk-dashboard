@@ -117,6 +117,7 @@ export async function GET(request: Request) {
             SELECT 
                 A.*, 
                 B.Proveedor, 
+                B.RFC as RFCProveedor,
                 C.Tienda, 
                 G.RazonSocial, 
                 CASE 
