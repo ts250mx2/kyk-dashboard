@@ -1,0 +1,376 @@
+2026-04-12T07:00:42.571Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:00:42.669Z - [GET] Results count: 
+2026-04-12T07:00:44.788Z - [POST] Saving relation {"CodigoInterno":"8432","IdProveedor":1053,"Descripcion":"TORTILLA DE TACO C/50 PIEZAS","NoIdentificacion":"TACO-2"}
+2026-04-12T07:00:44.825Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:00:44.836Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:00:44.854Z - [GET] Results count: 1
+2026-04-12T07:00:48.461Z - [POST] Saving relation {"CodigoInterno":"8433","IdProveedor":1053,"Descripcion":"TORTILLA DE MESA   C/20 PIEZAS","NoIdentificacion":"MESA-2"}
+2026-04-12T07:00:48.488Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:00:48.500Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:00:48.519Z - [GET] Results count: 2
+2026-04-12T07:00:50.561Z - [POST] Saving relation {"CodigoInterno":"8432","IdProveedor":1053,"Descripcion":"TORTILLA DE BURRITO 25 CMS C/10 PIEZAS","NoIdentificacion":"BURRITO-2"}
+2026-04-12T07:00:50.579Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:00:50.590Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:00:50.618Z - [GET] Results count: 2
+2026-04-12T07:00:53.038Z - [POST] Saving relation {"CodigoInterno":"8432","IdProveedor":1053,"Descripcion":"TORTILLA DE TACO C/50 PIEZAS","NoIdentificacion":"TACO-2"}
+2026-04-12T07:00:53.054Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:00:53.065Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:00:53.085Z - [GET] Results count: 2
+2026-04-12T07:00:55.679Z - [POST] Saving relation {"CodigoInterno":"8435","IdProveedor":1053,"Descripcion":"TORTILLA DE BURRITO 25 CMS C/10 PIEZAS","NoIdentificacion":"BURRITO-2"}
+2026-04-12T07:00:55.699Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:00:55.712Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:00:55.730Z - [GET] Results count: 3
+2026-04-12T07:01:03.509Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:01:03.540Z - [GET] Results count: 2
+2026-04-12T07:01:04.898Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:01:04.920Z - [GET] Results count: 1
+2026-04-12T07:01:05.624Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:01:05.643Z - [GET] Results count: 
+2026-04-12T07:01:07.451Z - [POST] Saving relation {"CodigoInterno":"8435","IdProveedor":1053,"Descripcion":"TORTILLA DE BURRITO 25 CMS C/10 PIEZAS","NoIdentificacion":"BURRITO-2"}
+2026-04-12T07:01:07.468Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:01:07.478Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:01:07.509Z - [GET] Results count: 1
+2026-04-12T07:01:09.200Z - [POST] Saving relation {"CodigoInterno":"8433","IdProveedor":1053,"Descripcion":"TORTILLA DE TACO C/50 PIEZAS","NoIdentificacion":"TACO-2"}
+2026-04-12T07:01:09.222Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:01:09.232Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:01:09.250Z - [GET] Results count: 2
+2026-04-12T07:01:10.563Z - [POST] Saving relation {"CodigoInterno":"8432","IdProveedor":1053,"Descripcion":"TORTILLA DE MESA   C/20 PIEZAS","NoIdentificacion":"MESA-2"}
+2026-04-12T07:01:10.593Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:01:10.603Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:01:10.654Z - [GET] Results count: 3
+2026-04-12T07:01:20.451Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:01:20.466Z - [GET] Results count: 2
+2026-04-12T07:01:32.128Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:01:32.145Z - [GET] Results count: 2
+2026-04-12T07:03:10.461Z - [POST] Saving relation {"CodigoInterno":"8433","IdProveedor":1053,"Descripcion":"TORTILLA DE TACO C/50 PIEZAS","NoIdentificacion":"TACO-2"}
+2026-04-12T07:03:10.495Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:03:10.505Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:03:10.567Z - [GET] Results count: 3
+2026-04-12T07:03:15.160Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:03:15.180Z - [GET] Results count: 2
+2026-04-12T07:03:17.692Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:03:17.711Z - [GET] Results count: 1
+2026-04-12T07:03:18.458Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:03:18.474Z - [GET] Results count: 
+2026-04-12T07:03:20.073Z - [POST] Saving relation {"CodigoInterno":"8435","IdProveedor":1053,"Descripcion":"TORTILLA DE BURRITO 25 CMS C/10 PIEZAS","NoIdentificacion":"BURRITO-2"}
+2026-04-12T07:03:20.090Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:03:20.103Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:03:20.120Z - [GET] Results count: 1
+2026-04-12T07:03:22.934Z - [POST] Saving relation {"CodigoInterno":"8432","IdProveedor":1053,"Descripcion":"TORTILLA DE TACO C/50 PIEZAS","NoIdentificacion":"TACO-2"}
+2026-04-12T07:03:22.953Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:03:22.965Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:03:22.993Z - [GET] Results count: 2
+2026-04-12T07:03:24.420Z - [POST] Saving relation {"CodigoInterno":"8433","IdProveedor":1053,"Descripcion":"TORTILLA DE MESA   C/20 PIEZAS","NoIdentificacion":"MESA-2"}
+2026-04-12T07:03:24.438Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:03:24.448Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:03:24.466Z - [GET] Results count: 3
+2026-04-12T07:03:48.729Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:03:48.751Z - [GET] Results count: 3
+2026-04-12T07:04:43.134Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:04:43.153Z - [GET] Results count: 3
+2026-04-12T07:04:50.112Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:04:50.132Z - [GET] Results count: 2
+2026-04-12T07:04:54.397Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:04:54.415Z - [GET] Results count: 1
+2026-04-12T07:04:55.318Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:04:55.342Z - [GET] Results count: 
+2026-04-12T07:05:10.471Z - [POST] Saving relation {"CodigoInterno":"8435","IdProveedor":1053,"Descripcion":"TORTILLA DE BURRITO 25 CMS C/10 PIEZAS","NoIdentificacion":"BURRITO-2"}
+2026-04-12T07:05:10.487Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:05:10.497Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:05:10.515Z - [GET] Results count: 1
+2026-04-12T07:05:12.294Z - [POST] Saving relation {"CodigoInterno":"8433","IdProveedor":1053,"Descripcion":"TORTILLA DE MESA   C/20 PIEZAS","NoIdentificacion":"MESA-2"}
+2026-04-12T07:05:12.310Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:05:12.320Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:05:12.337Z - [GET] Results count: 2
+2026-04-12T07:05:13.730Z - [POST] Saving relation {"CodigoInterno":"8432","IdProveedor":1053,"Descripcion":"TORTILLA DE TACO C/50 PIEZAS","NoIdentificacion":"TACO-2"}
+2026-04-12T07:05:13.747Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:05:13.758Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:05:13.775Z - [GET] Results count: 3
+2026-04-12T07:05:48.763Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:05:48.780Z - [GET] Results count: 3
+2026-04-12T07:05:56.236Z - [GET] Relations called {"idProveedor":"199"}
+2026-04-12T07:05:56.254Z - [GET] Results count: 
+2026-04-12T07:05:58.495Z - [POST] Saving relation {"CodigoInterno":"15771","IdProveedor":199,"Descripcion":"RISTRA DE CHORIZO 10 PZA","NoIdentificacion":"100-0001"}
+2026-04-12T07:05:58.514Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:05:58.525Z - [GET] Relations called {"idProveedor":"199"}
+2026-04-12T07:05:58.542Z - [GET] Results count: 1
+2026-04-12T07:06:08.311Z - [GET] Relations called {"idProveedor":"1802"}
+2026-04-12T07:06:08.330Z - [GET] Results count: 
+2026-04-12T07:07:09.170Z - [POST] Saving relation {"CodigoInterno":"17398","IdProveedor":1802,"Descripcion":"Cacahuate Mixto CJA/16 Piezas de 340 gms","NoIdentificacion":"CC34"}
+2026-04-12T07:07:09.187Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:07:09.198Z - [GET] Relations called {"idProveedor":"1802"}
+2026-04-12T07:07:09.218Z - [GET] Results count: 1
+2026-04-12T07:07:10.644Z - [POST] Saving relation {"CodigoInterno":"17391","IdProveedor":1802,"Descripcion":"Cacahuate Cantinero c/16Pieza de 340 gms","NoIdentificacion":"CC33"}
+2026-04-12T07:07:10.661Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:07:10.673Z - [GET] Relations called {"idProveedor":"1802"}
+2026-04-12T07:07:10.689Z - [GET] Results count: 2
+2026-04-12T07:07:51.691Z - [GET] Relations called {"idProveedor":"94"}
+2026-04-12T07:07:51.728Z - [GET] Results count: 
+2026-04-12T07:08:31.725Z - [POST] Saving relation {"CodigoInterno":"657","IdProveedor":94,"Descripcion":"P MORTADELA KIR 200G","NoIdentificacion":"X225"}
+2026-04-12T07:08:31.747Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:08:31.759Z - [GET] Relations called {"idProveedor":"94"}
+2026-04-12T07:08:31.778Z - [GET] Results count: 1
+2026-04-12T07:12:13.557Z - [GET] Relations called {"idProveedor":"199"}
+2026-04-12T07:12:13.584Z - [GET] Results count: 1
+2026-04-12T07:13:17.734Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:13:17.764Z - [GET] Results count: 
+2026-04-12T07:19:16.195Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:19:16.228Z - [GET] Results count: 
+2026-04-12T07:24:38.343Z - [GET] Relations called {"idProveedor":"94"}
+2026-04-12T07:24:38.368Z - [GET] Results count: 1
+2026-04-12T07:25:11.469Z - [GET] Relations called {"idProveedor":"199"}
+2026-04-12T07:25:11.485Z - [GET] Results count: 1
+2026-04-12T07:25:54.862Z - [GET] Relations called {"idProveedor":"551"}
+2026-04-12T07:25:54.880Z - [GET] Results count: 
+2026-04-12T07:33:17.648Z - [POST] Saving relation {"CodigoInterno":"5500","IdProveedor":821,"Descripcion":"MI PUEBLO KG 7503005933005","NoIdentificacion":"000001"}
+2026-04-12T07:33:17.665Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:33:17.676Z - [GET] Relations called {"idProveedor":"821"}
+2026-04-12T07:33:17.693Z - [GET] Results count: 1
+2026-04-12T07:33:22.535Z - [POST] Saving relation {"CodigoInterno":"5502","IdProveedor":821,"Descripcion":"LAS GÜERAS C/25 7503005933043","NoIdentificacion":"000003"}
+2026-04-12T07:33:22.553Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:33:22.563Z - [GET] Relations called {"idProveedor":"821"}
+2026-04-12T07:33:22.580Z - [GET] Results count: 2
+2026-04-12T07:33:26.676Z - [POST] Saving relation {"CodigoInterno":"13208","IdProveedor":821,"Descripcion":"SALSA REPUEBLO BRAVA 470ml 7503005933104","NoIdentificacion":"000014"}
+2026-04-12T07:33:26.735Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:33:26.748Z - [GET] Relations called {"idProveedor":"821"}
+2026-04-12T07:33:26.778Z - [GET] Results count: 3
+2026-04-12T07:33:28.903Z - [POST] Saving relation {"CodigoInterno":"13213","IdProveedor":821,"Descripcion":"GORDITA DE AZUCAR C/10 PIEZAS 7503005933364","NoIdentificacion":"000073"}
+2026-04-12T07:33:28.933Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:33:28.944Z - [GET] Relations called {"idProveedor":"821"}
+2026-04-12T07:33:28.962Z - [GET] Results count: 4
+2026-04-12T07:33:31.013Z - [POST] Saving relation {"CodigoInterno":"14505","IdProveedor":821,"Descripcion":"FRIJOLES MOLIDOS 500 GR 7503005933395","NoIdentificacion":"000092"}
+2026-04-12T07:33:31.033Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:33:31.043Z - [GET] Relations called {"idProveedor":"821"}
+2026-04-12T07:33:31.063Z - [GET] Results count: 5
+2026-04-12T07:33:33.295Z - [POST] Saving relation {"CodigoInterno":"14504","IdProveedor":821,"Descripcion":"FRIJOLES ENTEROS 500 GR  7503005933388","NoIdentificacion":"000094"}
+2026-04-12T07:33:33.316Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:33:33.325Z - [GET] Relations called {"idProveedor":"821"}
+2026-04-12T07:33:33.343Z - [GET] Results count: 6
+2026-04-12T07:35:24.855Z - [POST] Saving relation {"CodigoInterno":"17391","IdProveedor":1802,"Descripcion":"Cacahuate Cantinero c/16Pieza de 340 gms","NoIdentificacion":"CC33"}
+2026-04-12T07:35:24.873Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:35:24.883Z - [GET] Relations called {"idProveedor":"1802"}
+2026-04-12T07:35:24.901Z - [GET] Results count: 2
+2026-04-12T07:37:41.042Z - [POST] Saving relation {"CodigoInterno":"8435","IdProveedor":1053,"Descripcion":"TORTILLA DE BURRITO 25 CMS C/10 PIEZAS","NoIdentificacion":"BURRITO-2"}
+2026-04-12T07:37:41.066Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:37:41.077Z - [GET] Relations called {"idProveedor":"1053"}
+2026-04-12T07:37:41.095Z - [GET] Results count: 3
+2026-04-12T07:40:01.741Z - [POST] Saving relation {"CodigoInterno":"17391","IdProveedor":1802,"Descripcion":"Cacahuate Cantinero c/16Pieza de 340 gms","NoIdentificacion":"CC33"}
+2026-04-12T07:40:01.758Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:40:01.771Z - [GET] Relations called {"idProveedor":"1802"}
+2026-04-12T07:40:01.787Z - [GET] Results count: 2
+2026-04-12T07:42:49.101Z - [GET] Relations called {"idProveedor":"1802"}
+2026-04-12T07:42:49.130Z - [GET] Results count: 2
+2026-04-12T07:43:42.481Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:43:42.511Z - [GET] Results count: 
+2026-04-12T07:43:45.465Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T07:43:45.485Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:43:45.497Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:43:45.513Z - [GET] Results count: 1
+2026-04-12T07:43:52.698Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T07:43:52.713Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:43:52.722Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:43:52.737Z - [GET] Results count: 1
+2026-04-12T07:43:55.166Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T07:43:55.249Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:43:55.260Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:43:55.284Z - [GET] Results count: 1
+2026-04-12T07:44:22.090Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:44:22.118Z - [GET] Results count: 1
+2026-04-12T07:44:57.336Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:44:57.360Z - [GET] Results count: 1
+2026-04-12T07:50:36.004Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T07:50:36.028Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:50:36.038Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:50:36.069Z - [GET] Results count: 1
+2026-04-12T07:50:43.179Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T07:50:43.198Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:50:43.207Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:50:43.224Z - [GET] Results count: 1
+2026-04-12T07:56:50.647Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T07:56:50.664Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:56:50.675Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:56:50.691Z - [GET] Results count: 1
+2026-04-12T07:56:52.759Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T07:56:52.776Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:56:52.787Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:56:52.804Z - [GET] Results count: 1
+2026-04-12T07:56:59.541Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T07:56:59.561Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:56:59.571Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:56:59.593Z - [GET] Results count: 1
+2026-04-12T07:57:18.507Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T07:57:18.522Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:57:18.532Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:57:18.549Z - [GET] Results count: 1
+2026-04-12T07:58:13.107Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T07:58:13.206Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:58:13.221Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:58:13.255Z - [GET] Results count: 1
+2026-04-12T07:58:16.868Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T07:58:16.884Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:58:16.895Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:58:16.913Z - [GET] Results count: 1
+2026-04-12T07:58:19.766Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T07:58:19.781Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:58:19.791Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:58:19.808Z - [GET] Results count: 1
+2026-04-12T07:58:22.643Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T07:58:22.658Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:58:22.667Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:58:22.684Z - [GET] Results count: 1
+2026-04-12T07:58:26.453Z - [POST] Saving relation {"CodigoInterno":"17490","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA TAQUERA","NoIdentificacion":"null"}
+2026-04-12T07:58:26.469Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T07:58:26.480Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:58:26.501Z - [GET] Results count: 1
+2026-04-12T07:58:34.603Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T07:58:34.621Z - [GET] Results count: 
+2026-04-12T08:02:03.601Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:02:03.630Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:02:03.640Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:02:03.666Z - [GET] Results count: 1
+2026-04-12T08:02:05.725Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T08:02:05.745Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:02:05.754Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:02:05.774Z - [GET] Results count: 1
+2026-04-12T08:02:44.956Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T08:02:44.975Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:02:44.984Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:02:44.999Z - [GET] Results count: 1
+2026-04-12T08:02:47.543Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T08:02:47.563Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:02:47.573Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:02:47.594Z - [GET] Results count: 1
+2026-04-12T08:02:49.354Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T08:02:49.393Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:02:49.402Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:02:49.419Z - [GET] Results count: 1
+2026-04-12T08:03:03.273Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:03:03.292Z - [GET] Results count: 1
+2026-04-12T08:03:05.342Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T08:03:05.359Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:03:05.368Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:03:05.386Z - [GET] Results count: 1
+2026-04-12T08:03:11.502Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T08:03:11.516Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:03:11.526Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:03:11.544Z - [GET] Results count: 1
+2026-04-12T08:04:16.007Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:04:16.023Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:04:16.032Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:04:16.049Z - [GET] Results count: 1
+2026-04-12T08:04:21.070Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T08:04:21.087Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:04:21.099Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:04:21.116Z - [GET] Results count: 1
+2026-04-12T08:04:31.233Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:04:31.253Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:04:31.262Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:04:31.285Z - [GET] Results count: 1
+2026-04-12T08:06:31.882Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T08:06:31.897Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:06:31.907Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:06:31.934Z - [GET] Results count: 1
+2026-04-12T08:06:38.061Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:06:38.080Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:06:38.090Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:06:38.106Z - [GET] Results count: 1
+2026-04-12T08:06:41.730Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T08:06:41.752Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:06:41.764Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:06:41.802Z - [GET] Results count: 1
+2026-04-12T08:06:43.586Z - [POST] Saving relation {"CodigoInterno":"17490","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA TAQUERA","NoIdentificacion":"null"}
+2026-04-12T08:06:43.604Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:06:43.614Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:06:43.639Z - [GET] Results count: 1
+2026-04-12T08:09:27.279Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:09:27.297Z - [GET] Results count: 
+2026-04-12T08:09:30.114Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:09:30.135Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:09:30.147Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:09:30.165Z - [GET] Results count: 1
+2026-04-12T08:09:32.364Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T08:09:32.394Z - [POST] Result: {"fieldCount":0,"affectedRows":2,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:09:32.404Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:09:32.423Z - [GET] Results count: 1
+2026-04-12T08:19:39.878Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:19:40.007Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:19:40.019Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:19:40.058Z - [GET] Results count: 2
+2026-04-12T08:19:41.792Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T08:19:41.810Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:19:41.820Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:19:41.836Z - [GET] Results count: 3
+2026-04-12T08:19:43.340Z - [POST] Saving relation {"CodigoInterno":"17490","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA TAQUERA","NoIdentificacion":"null"}
+2026-04-12T08:19:43.357Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:19:43.368Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:19:43.384Z - [GET] Results count: 4
+2026-04-12T08:19:47.352Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:19:47.387Z - [GET] Results count: 3
+2026-04-12T08:21:26.904Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T08:21:26.923Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:21:26.936Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:21:26.954Z - [GET] Results count: 4
+2026-04-12T08:21:29.475Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:21:29.494Z - [GET] Results count: 3
+2026-04-12T08:21:31.036Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:21:31.113Z - [GET] Results count: 2
+2026-04-12T08:21:32.101Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:21:32.122Z - [GET] Results count: 1
+2026-04-12T08:21:32.928Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:21:32.956Z - [GET] Results count: 
+2026-04-12T08:21:35.660Z - [POST] Saving relation {"CodigoInterno":"17499","IdProveedor":1175,"Descripcion":"TOTOPO DE 250 GMS NATURAL","NoIdentificacion":"null"}
+2026-04-12T08:21:35.675Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:21:35.685Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:21:35.705Z - [GET] Results count: 1
+2026-04-12T08:21:37.225Z - [POST] Saving relation {"CodigoInterno":"17493","IdProveedor":1175,"Descripcion":"TORTILLA BLANCA DE MEDIO KILO","NoIdentificacion":"null"}
+2026-04-12T08:21:37.270Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:21:37.280Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:21:37.326Z - [GET] Results count: 2
+2026-04-12T08:21:38.565Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:21:38.582Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:21:38.593Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:21:38.609Z - [GET] Results count: 3
+2026-04-12T08:21:39.894Z - [POST] Saving relation {"CodigoInterno":"17490","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA TAQUERA","NoIdentificacion":"null"}
+2026-04-12T08:21:39.919Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:21:39.932Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:21:39.951Z - [GET] Results count: 4
+2026-04-12T08:22:02.051Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:22:02.071Z - [GET] Results count: 4
+2026-04-12T08:22:06.291Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:22:06.326Z - [GET] Results count: 4
+2026-04-12T08:23:56.757Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:23:56.776Z - [GET] Results count: 4
+2026-04-12T08:23:59.006Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:23:59.039Z - [GET] Results count: 3
+2026-04-12T08:24:20.080Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:24:20.105Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:24:20.115Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:24:20.159Z - [GET] Results count: 4
+2026-04-12T08:28:04.646Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:28:04.678Z - [GET] Results count: 4
+2026-04-12T08:28:10.960Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:28:10.985Z - [GET] Results count: 3
+2026-04-12T08:28:59.622Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:28:59.641Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:28:59.653Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:28:59.671Z - [GET] Results count: 4
+2026-04-12T08:29:09.083Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:29:09.110Z - [GET] Results count: 3
+2026-04-12T08:31:26.088Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:31:26.163Z - [GET] Results count: 3
+2026-04-12T08:32:48.099Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:32:48.125Z - [GET] Results count: 3
+2026-04-12T08:34:24.678Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:34:24.752Z - [GET] Results count: 3
+2026-04-12T08:41:54.511Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:41:54.533Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:41:54.542Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:41:54.574Z - [GET] Results count: 4
+2026-04-12T08:41:59.653Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:41:59.671Z - [GET] Results count: 3
+2026-04-12T08:42:54.765Z - [POST] Saving relation {"CodigoInterno":"17489","IdProveedor":1175,"Descripcion":"TORTILLA DE HARINA CON 20 PIEZAS","NoIdentificacion":"null"}
+2026-04-12T08:42:54.780Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-12T08:42:54.790Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:42:54.807Z - [GET] Results count: 4
+2026-04-12T08:49:17.270Z - [GET] Relations called {"idProveedor":"1175"}
+2026-04-12T08:49:17.326Z - [GET] Results count: 4

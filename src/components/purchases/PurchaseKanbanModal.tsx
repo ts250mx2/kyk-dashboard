@@ -61,7 +61,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
     // Comparison states
     const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
     const [isInvoiceDetailModalOpen, setIsInvoiceDetailModalOpen] = useState(false);
-    const [comparisonData, setComparisonData] = useState<{ orderItems: any[], receiptItems: any[], invoiceItems: any[] }>({ orderItems: [], receiptItems: [], invoiceItems: [] });
+    const [comparisonData, setComparisonData] = useState<{ orderItems: any[], receiptItems: any[], invoiceItems: any[], metadata?: any }>({ orderItems: [], receiptItems: [], invoiceItems: [] });
     const [relations, setRelations] = useState<any[]>([]);
     const [loadingComparison, setLoadingComparison] = useState(false);
     const [compareSearch, setCompareSearch] = useState('');
