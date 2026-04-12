@@ -6,7 +6,7 @@ async function audit() {
         const relations = await mysqlQuery('SELECT * FROM tblRelacionArticulosFacturas LIMIT 10');
         console.log("Sample relations:", JSON.stringify(relations, null, 2));
 
-        if (relations.length > 0) {
+        if (Array.isArray(relations) && relations.length > 0) {
             const rel = relations[0];
             console.log(`\nVerifying relation for CodigoInterno: ${rel.CodigoInterno}, IdProveedor: ${rel.IdProveedor}`);
             
