@@ -688,7 +688,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                             <div className="grid grid-cols-2 gap-y-4 gap-x-6">
                                 <KanbanItem 
                                     label="Nombre Proveedor" 
-                                    value={`${(freshMetadata?.RFCProveedor || order.RFCProveedor || order.RFC) ? `${freshMetadata?.RFCProveedor || order.RFCProveedor || order.RFC} - ` : ''}${freshMetadata?.Proveedor || order.Proveedor}`} 
+                                    value={`${(freshMetadata?.RFCProveedor || order.RFCProveedor) ? `${freshMetadata?.RFCProveedor || order.RFCProveedor} - ` : ''}${freshMetadata?.Proveedor || order.Proveedor}`} 
                                     colSpan={2} 
                                     highlight 
                                     color="text-slate-900" 
@@ -725,7 +725,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                                 <div className="grid grid-cols-2 gap-y-4 gap-x-6">
                                     <KanbanItem 
                                         label="Proveedor" 
-                                        value={`${(freshMetadata?.RFCProveedor || order.RFCProveedor || order.RFC) ? `${freshMetadata?.RFCProveedor || order.RFCProveedor || order.RFC} - ` : ''}${freshMetadata?.Proveedor || order.Proveedor}`} 
+                                        value={`${(freshMetadata?.RFCProveedor || order.RFCProveedor) ? `${freshMetadata?.RFCProveedor || order.RFCProveedor} - ` : ''}${freshMetadata?.Proveedor || order.Proveedor}`} 
                                         colSpan={2} 
                                         highlight 
                                         color="text-slate-900" 

@@ -31,6 +31,7 @@ interface Store {
 interface ReceiptItem {
     IdReciboMovil: number;
     IdTienda: number;
+    IdProveedor: number;
     FolioReciboMovil: string;
     FechaRecibo: string;
     IdReciboSAP: number;
@@ -226,6 +227,7 @@ export default function ReceiptsPage() {
     const handleOpenKanban = (receipt: ReceiptItem) => {
         const mappedOrder: PurchaseOrder = {
             IdOrdenCompra: receipt.IdOrdenCompra || 0,
+            IdProveedor: receipt.IdProveedor,
             FechaOrdenCompra: receipt.FechaRecibo,
             TipoOrdenCompra: "REPORTE",
             Tienda: receipt.Tienda,
@@ -240,6 +242,7 @@ export default function ReceiptsPage() {
             TotalPagar: receipt.Total - receipt.DescuentosDevoluciones,
             NumeroFactura: receipt.Numero,
             TotalFactura: receipt.Total,
+            RFCProveedor: receipt.RFC,
             Ordenados: 0,
             Recibidos: 1, 
             Devoluciones: receipt.DescuentosDevoluciones > 0 ? 1 : 0,
