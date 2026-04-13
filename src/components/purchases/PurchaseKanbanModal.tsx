@@ -32,6 +32,7 @@ import autoTable from 'jspdf-autotable';
 import { cn } from '@/lib/utils';
 import { ReceiptDetailModal } from '@/components/receipt-detail-modal';
 import { InvoiceConceptsModal } from '@/components/purchases/InvoiceConceptsModal';
+import { RelatedDocumentsModal } from '@/components/purchases/RelatedDocumentsModal';
 import { generateInvoicePDF } from '@/utils/cfdi-pdf-renderer';
 import { PurchaseOrder, DistributionItem, DistributionDetailItem, OrderDetail, InvoiceDetail } from '@/types/purchases';
 
@@ -54,6 +55,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
     const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
     
     const [isDistDetailModalOpen, setIsDistDetailModalOpen] = useState(false);
+    const [isRelatedDocsModalOpen, setIsRelatedDocsModalOpen] = useState(false);
     const [distDetailItems, setDistDetailItems] = useState<DistributionDetailItem[]>([]);
     const [loadingDistDetails, setLoadingDistDetails] = useState(false);
     const [selectedDistHeader, setSelectedDistHeader] = useState<{ tienda: string, folio: string | null, fecha: string | null } | null>(null);
@@ -72,6 +74,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
 
     // Invoice State
     const [invoiceData, setInvoiceData] = useState<InvoiceDetail | null>(null);
+    const [hasRelatedDocs, setHasRelatedDocs] = useState(false);
     const [loadingInvoice, setLoadingInvoice] = useState(false);
     const [loadingXml, setLoadingXml] = useState(false);
 
@@ -390,13 +393,19 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
             const data = await res.json();
             if (res.ok) {
                 setInvoiceData(data);
+                // Check if has related docs
+                const relRes = await fetch(`/api/purchases/invoices/related?uuid=${uuid}`);
+                const relData = await relRes.json();
+                setHasRelatedDocs(Array.isArray(relData) && relData.length > 0);
             } else {
                 console.error('Invoice fetch failed:', data.error);
                 setInvoiceData(null);
+                setHasRelatedDocs(false);
             }
         } catch (error) {
             console.error('Error fetching invoice data:', error);
             setInvoiceData(null);
+            setHasRelatedDocs(false);
         } finally {
             setLoadingInvoice(false);
         }
@@ -812,14 +821,28 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                             ) : invoiceData ? (
                                 <div className="grid grid-cols-2 gap-y-4 gap-x-6">
                                     <KanbanItem label="Emisor" value={`${invoiceData.RFCEmisor} ${invoiceData.Emisor}`} colSpan={2} highlight color="text-slate-900" />
-                                    <div className="col-span-2 flex items-center justify-between gap-3">
-                                        <KanbanItem label="UUID" value={invoiceData.UUID} textSize="text-[10px] font-mono" />
-                                        <div className={cn(
-                                            "px-2 py-1 text-[8px] font-black uppercase tracking-widest shadow-sm border whitespace-nowrap",
-                                            invoiceData.TipoComprobante === 'E' ? "bg-rose-100 text-rose-600 border-rose-200 animate-pulse" : "bg-purple-100 text-purple-600 border-purple-200"
-                                        )}>
-                                            {invoiceData.TipoComprobante === 'E' ? 'DEVOLUCIÓN / EGRESO' : 'INGRESO'}
+                                    <div className="col-span-2 flex flex-col gap-2">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <KanbanItem label="UUID" value={invoiceData.UUID} textSize="text-[10px] font-mono" />
+                                            <div className={cn(
+                                                "px-2 py-1 text-[8px] font-black uppercase tracking-widest shadow-sm border whitespace-nowrap",
+                                                invoiceData.TipoComprobante === 'E' ? "bg-rose-100 text-rose-600 border-rose-200 animate-pulse" : 
+                                                invoiceData.TipoComprobante === 'P' ? "bg-blue-100 text-blue-600 border-blue-200" :
+                                                "bg-purple-100 text-purple-600 border-purple-200"
+                                            )}>
+                                                {invoiceData.TipoComprobante === 'E' ? 'NOTA DE CRÉDITO' : 
+                                                 invoiceData.TipoComprobante === 'P' ? 'PAGO' : 'INGRESO'}
+                                            </div>
                                         </div>
+                                        {hasRelatedDocs && (
+                                            <button 
+                                                onClick={() => setIsRelatedDocsModalOpen(true)}
+                                                className="self-start px-2 py-1 bg-purple-50 hover:bg-purple-600 text-purple-600 hover:text-white text-[9px] font-black uppercase tracking-widest border border-purple-200 transition-all flex items-center gap-1.5"
+                                            >
+                                                <ArrowLeftRight size={12} />
+                                                Documentos Relacionados
+                                            </button>
+                                        )}
                                     </div>
                                     <KanbanItem label="Serie / Folio" value={`${invoiceData.Serie}${invoiceData.Folio}`} />
                                     <KanbanItem label="Fecha" value={formatDateTime(invoiceData.Fecha)} textSize="text-[11px]" />
@@ -1430,6 +1453,14 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                         </div>
                     </div>
                 </div>
+            )}
+
+            {isRelatedDocsModalOpen && (
+                <RelatedDocumentsModal 
+                    isOpen={isRelatedDocsModalOpen}
+                    onClose={() => setIsRelatedDocsModalOpen(false)}
+                    parentUuid={invoiceData?.UUID || null}
+                />
             )}
 
         </div>

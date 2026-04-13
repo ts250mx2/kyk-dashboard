@@ -382,3 +382,7 @@
 2026-04-12T19:55:02.226Z - [GET] Results count: 3
 2026-04-12T19:55:02.287Z - [GET] Relations called {"idProveedor":"1053"}
 2026-04-12T19:55:02.307Z - [GET] Results count: 3
+2026-04-13T01:49:52.706Z - [GET] Relations called {"idProveedor":"125"}
+2026-04-13T01:49:52.751Z - [GET] Results count: 
+2026-04-13T01:49:52.873Z - [GET] Relations called {"idProveedor":"125"}
+2026-04-13T01:49:52.911Z - [GET] Results count: 

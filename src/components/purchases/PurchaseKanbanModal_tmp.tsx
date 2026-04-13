@@ -24,6 +24,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ReceiptDetailModal } from '@/components/receipt-detail-modal';
 import { InvoiceConceptsModal } from '@/components/purchases/InvoiceConceptsModal';
+import { RelatedDocumentsModal } from '@/components/purchases/RelatedDocumentsModal';
 import { generateInvoicePDF } from '@/utils/cfdi-pdf-renderer';
 import { PurchaseOrder, DistributionItem, DistributionDetailItem, OrderDetail, InvoiceDetail } from '@/types/purchases';
 
@@ -46,6 +47,7 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
     const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
     
     const [isDistDetailModalOpen, setIsDistDetailModalOpen] = useState(false);
+    const [isRelatedDocsModalOpen, setIsRelatedDocsModalOpen] = useState(false);
     const [distDetailItems, setDistDetailItems] = useState<DistributionDetailItem[]>([]);
     const [loadingDistDetails, setLoadingDistDetails] = useState(false);
     const [selectedDistHeader, setSelectedDistHeader] = useState<{ tienda: string, folio: string | null, fecha: string | null } | null>(null);
@@ -990,7 +992,14 @@ export function PurchaseKanbanModal({ isOpen, onClose, order }: PurchaseKanbanMo
                                 Finalizar Comparativa
                             </button>
                         </div>
-                    </div>
+                        {isRelatedDocsModalOpen && (
+                <RelatedDocumentsModal 
+                    isOpen={isRelatedDocsModalOpen}
+                    onClose={() => setIsRelatedDocsModalOpen(false)}
+                    parentUuid={invoiceData?.UUID || null}
+                />
+            )}
+        </div>
                 </div>
             )}
         </div>
