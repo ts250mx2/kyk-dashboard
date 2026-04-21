@@ -63,6 +63,7 @@ export default function SalesTrendsPage() {
     const [fechaFin, setFechaFin] = useState(today);
     const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
     const [groupBy, setGroupBy] = useState<'dia' | 'semana' | 'mes'>('dia');
+    const [metric, setMetric] = useState<'venta' | 'operaciones' | 'ticket'>('venta');
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
     const [stores, setStores] = useState<any[]>([]);
@@ -368,6 +369,39 @@ export default function SalesTrendsPage() {
                                     <span style={{ color: storeColor }}>{currentStoreTitle}</span>
                                 </h2>
 
+                                 <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-none p-0.5 self-end md:self-auto">
+                                    <button
+                                        onClick={() => setMetric('venta')}
+                                        className={cn(
+                                            'flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all',
+                                            metric === 'venta' ? 'bg-[#4050B4] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-white'
+                                        )}
+                                        title="Por Venta"
+                                    >
+                                        <DollarSign size={12} /> Venta
+                                    </button>
+                                    <button
+                                        onClick={() => setMetric('operaciones')}
+                                        className={cn(
+                                            'flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all',
+                                            metric === 'operaciones' ? 'bg-[#4050B4] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-white'
+                                        )}
+                                        title="Por Operaciones"
+                                    >
+                                        <ShoppingCart size={12} /> Ops
+                                    </button>
+                                    <button
+                                        onClick={() => setMetric('ticket')}
+                                        className={cn(
+                                            'flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all',
+                                            metric === 'ticket' ? 'bg-[#4050B4] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-white'
+                                        )}
+                                        title="Por Ticket Promedio"
+                                    >
+                                        <Ticket size={12} /> Ticket
+                                    </button>
+                                </div>
+
                                 {/* Grouping Toggle */}
                                 <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-none p-0.5 self-end md:self-auto">
                                     <button
@@ -406,6 +440,7 @@ export default function SalesTrendsPage() {
                                     color={storeColor} 
                                     groupBy={groupBy} 
                                     isMulti={selectedStoreIds.length > 1} 
+                                    metric={metric}
                                 />
                             </div>
                          </div>

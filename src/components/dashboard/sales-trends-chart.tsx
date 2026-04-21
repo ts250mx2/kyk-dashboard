@@ -18,6 +18,7 @@ interface SalesTrendsChartProps {
   color?: string;
   groupBy?: 'dia' | 'semana' | 'mes';
   isMulti?: boolean;
+  metric?: 'venta' | 'operaciones' | 'ticket';
 }
 
 const STORE_COLOR_MAP: Record<string, string> = {
@@ -45,8 +46,16 @@ const getStoreColor = (name: string, index: number) => {
   return DEFAULT_COLORS[index % DEFAULT_COLORS.length];
 };
 
-export function SalesTrendsChart({ data, height = 300, color = "#4050B4", groupBy = 'dia', isMulti = false }: SalesTrendsChartProps) {
-  const formatCurrency = (val: number) => {
+export function SalesTrendsChart({ 
+  data, 
+  height = 300, 
+  color = "#4050B4", 
+  groupBy = 'dia', 
+  isMulti = false,
+  metric = 'venta'
+}: SalesTrendsChartProps) {
+  const formatValue = (val: number) => {
+    if (metric === 'operaciones') return new Intl.NumberFormat('es-MX').format(val);
     return new Intl.NumberFormat("es-MX", {
       style: "currency",
       currency: "MXN",
@@ -72,10 +81,8 @@ export function SalesTrendsChart({ data, height = 300, color = "#4050B4", groupB
     });
   };
 
-  // Transform data for multi-line: [{ Fecha, Store1: Total, Store2: Total }]
+  // Transform data for multi-line: [{ Fecha, Store1: Value, Store2: Value }]
   const transformedData = useMemo(() => {
-    if (!isMulti && !data.some(d => d.Tienda)) return data;
-
     const map = new Map<string, any>();
     data.forEach(item => {
       const date = new Date(item.Fecha).toISOString();
@@ -84,18 +91,30 @@ export function SalesTrendsChart({ data, height = 300, color = "#4050B4", groupB
       }
       const entry = map.get(date);
       const storeKey = item.Tienda || 'Total';
-      entry[storeKey] = item.Total;
+      
+      let val = item.Total;
+      if (metric === 'operaciones') val = item.Operaciones;
+      else if (metric === 'ticket') val = item.Operaciones > 0 ? item.Total / item.Operaciones : 0;
+      
+      entry[storeKey] = val;
+      entry[`${storeKey}_total`] = item.Total;
       entry[`${storeKey}_ops`] = item.Operaciones;
     });
 
     return Array.from(map.values()).sort((a, b) => new Date(a.Fecha).getTime() - new Date(b.Fecha).getTime());
-  }, [data, isMulti]);
+  }, [data, metric]);
 
   const activeStores = useMemo(() => {
     const stores = new Set<string>();
     data.forEach(item => { if (item.Tienda) stores.add(item.Tienda); });
     return Array.from(stores);
   }, [data]);
+
+  const metricLabel = useMemo(() => {
+    if (metric === 'venta') return 'Ventas';
+    if (metric === 'operaciones') return 'Operaciones';
+    return 'Ticket Promedio';
+  }, [metric]);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -128,7 +147,10 @@ export function SalesTrendsChart({ data, height = 300, color = "#4050B4", groupB
           dy={10}
         />
         <YAxis
-          tickFormatter={(value) => `$${value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value}`}
+          tickFormatter={(value) => {
+            if (metric === 'operaciones') return value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value;
+            return `$${value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value}`;
+          }}
           tick={{ fontSize: 10, fontWeight: "bold", fill: "#94A3B8" }}
           axisLine={false}
           tickLine={false}
@@ -138,24 +160,30 @@ export function SalesTrendsChart({ data, height = 300, color = "#4050B4", groupB
           content={({ active, payload, label }) => {
             if (active && payload && payload.length) {
               return (
-                <div className="bg-slate-900 text-white p-3 rounded-none shadow-2xl border border-white/10 min-w-[180px]">
+                <div className="bg-slate-900 text-white p-3 rounded-none shadow-2xl border border-white/10 min-w-[200px]">
                   <p className="text-[10px] font-bold text-white/50 uppercase mb-2 border-b border-white/10 pb-1">
                     {formatDate(label as string)}
                   </p>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {payload.map((p: any, i: number) => (
-                      <div key={i} className="flex flex-col gap-0.5">
+                      <div key={i} className="flex flex-col gap-1">
                         <div className="flex justify-between items-center gap-4">
-                          <span className="text-[9px] font-black uppercase truncate max-w-[100px]" style={{ color: p.color }}>
+                          <span className="text-[9px] font-black uppercase truncate max-w-[120px]" style={{ color: p.color }}>
                             {p.name}
                           </span>
-                          <span className="text-xs font-black text-white">{formatCurrency(p.value as number)}</span>
+                          <span className="text-xs font-black text-white">{formatValue(p.value as number)}</span>
                         </div>
-                        {p.payload[`${p.name}_ops`] && (
-                           <div className="flex justify-between items-center opacity-40">
-                              <span className="text-[8px] font-bold uppercase">Tickets</span>
-                              <span className="text-[9px] font-bold">{p.payload[`${p.name}_ops`]}</span>
-                           </div>
+                        {isMulti && (
+                          <div className="flex flex-col gap-0.5 opacity-40">
+                             <div className="flex justify-between items-center">
+                                <span className="text-[8px] font-bold uppercase">Ventas</span>
+                                <span className="text-[9px] font-bold">{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(p.payload[`${p.name}_total`])}</span>
+                             </div>
+                             <div className="flex justify-between items-center">
+                                <span className="text-[8px] font-bold uppercase">Tickets</span>
+                                <span className="text-[9px] font-bold">{p.payload[`${p.name}_ops`]}</span>
+                             </div>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -198,7 +226,7 @@ export function SalesTrendsChart({ data, height = 300, color = "#4050B4", groupB
           <Area
             type="monotone"
             dataKey="Total"
-            name="Ventas"
+            name={metricLabel}
             stroke={color}
             strokeWidth={4}
             fillOpacity={1}
