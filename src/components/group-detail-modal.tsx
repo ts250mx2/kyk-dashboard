@@ -311,7 +311,7 @@ function GroupDetailModalComponent({
                                                         cy="50%"
                                                         outerRadius={100}
                                                         stroke="none"
-                                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                                                        label={(props: any) => `${props.name} ${((props.percent || 0) * 100).toFixed(1)}%`}
                                                         labelLine={false}
                                                         onClick={(data) => {
                                                             if (data && data.payload && onDeptoClick) {

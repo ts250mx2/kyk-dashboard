@@ -1521,12 +1521,15 @@ export default function DashboardPage() {
                                                 stroke="none"
                                                 onClick={(data) => handleChartBarClick(data.payload)}
                                                 className="cursor-pointer outline-none"
-                                                label={({ cx, cy, midAngle, innerRadius, outerRadius, value, name }) => {
+                                                label={(props: any) => {
+                                                    const { cx, cy, midAngle, innerRadius, outerRadius, value, name } = props;
                                                     if (selectedVentasTab !== 'grupo-departamento') return name;
+                                                    if (cx === undefined || cy === undefined || midAngle === undefined) return null;
+                                                    
                                                     const totalSum = chartData.reduce((acc: number, curr: any) => acc + (curr[subMetric] || 0), 0);
                                                     const percentage = totalSum > 0 ? ((value / totalSum) * 100).toFixed(1) : 0;
                                                     const RADIAN = Math.PI / 180;
-                                                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                                    const radius = (innerRadius || 0) + ((outerRadius || 0) - (innerRadius || 0)) * 0.5;
                                                     const x = cx + radius * Math.cos(-midAngle * RADIAN);
                                                     const y = cy + radius * Math.sin(-midAngle * RADIAN);
                                                     return (
