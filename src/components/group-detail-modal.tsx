@@ -266,15 +266,7 @@ function GroupDetailModalComponent({
                                     <div className="flex-1">
                                         <ResponsiveContainer width="100%" height="100%">
                                             {chartType === 'bar' ? (
-                                                <BarChart 
-                                                    data={details}
-                                                    onClick={(data) => {
-                                                        if (data && data.activePayload && data.activePayload[0] && onDeptoClick) {
-                                                            const p = data.activePayload[0].payload;
-                                                            onDeptoClick(p.IdDepto, p.Departamento);
-                                                        }
-                                                    }}
-                                                >
+                                                <BarChart data={details}>
                                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                                     <XAxis dataKey="Departamento" hide />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(val) => `$${val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val}`} />
@@ -295,7 +287,17 @@ function GroupDetailModalComponent({
                                                             return null;
                                                         }}
                                                     />
-                                                    <Bar dataKey="Total" radius={[2, 2, 0, 0]} barSize={30} className="cursor-pointer">
+                                                    <Bar 
+                                                        dataKey="Total" 
+                                                        radius={[2, 2, 0, 0]} 
+                                                        barSize={30} 
+                                                        className="cursor-pointer"
+                                                        onClick={(data) => {
+                                                            if (data && data.payload && onDeptoClick) {
+                                                                onDeptoClick(data.payload.IdDepto, data.payload.Departamento);
+                                                            }
+                                                        }}
+                                                    >
                                                         {details.map((_, index) => (
                                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                         ))}
