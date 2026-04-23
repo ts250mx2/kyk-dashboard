@@ -11,6 +11,8 @@ export async function GET(req: Request) {
         const tipo = searchParams.get('tipo'); // 'departamento' | 'familia'
         const storeId = searchParams.get('storeId');
 
+        const idGrupoDepto = searchParams.get('idGrupoDepto');
+
         if (!fechaInicio || !fechaFin || !tipo) {
             return NextResponse.json({ error: 'Missing parameters (fechaInicio, fechaFin, tipo)' }, { status: 400 });
         }
@@ -26,6 +28,13 @@ export async function GET(req: Request) {
         let sql = '';
 
         if (tipo === 'departamento') {
+            let groupFilter = '';
+            let groupJoin = '';
+            if (idGrupoDepto && idGrupoDepto !== 'null' && idGrupoDepto !== 'undefined') {
+                groupJoin = `JOIN tblGruposDeptosDeptos gdd ON a.IdDepto = gdd.IdDepto`;
+                groupFilter = `AND gdd.IdGrupoDepto = ${idGrupoDepto}`;
+            }
+
             sql = `
                 SELECT TOP 20 a.IdDepto, d.Depto AS Departamento,
                     SUM(dv.PrecioVenta*dv.Cantidad) as Total,
@@ -35,7 +44,8 @@ export async function GET(req: Request) {
                 JOIN tblDetalleVentas dv ON v.IdVenta = dv.IdVenta AND v.IdTienda = dv.IdTienda AND v.IdComputadora = dv.IdComputadora
                 JOIN tblArticulos a ON dv.CodigoInterno = a.CodigoInterno
                 JOIN tblDeptos d ON a.IdDepto = d.IdDepto
-                WHERE v.FechaVenta >= ${startStr} AND v.FechaVenta <= ${endStr} ${storeFilter}
+                ${groupJoin}
+                WHERE v.FechaVenta >= ${startStr} AND v.FechaVenta <= ${endStr} ${storeFilter} ${groupFilter}
                 GROUP BY a.IdDepto, d.Depto
                 ORDER BY Total DESC
             `;
@@ -53,8 +63,23 @@ export async function GET(req: Request) {
                 GROUP BY a.Familia
                 ORDER BY Total DESC
             `;
+        } else if (tipo === 'grupo-departamento') {
+            sql = `
+                SELECT TOP 20 gd.IdGrupoDepto, gd.GrupoDepto,
+                    SUM(dv.PrecioVenta*dv.Cantidad) as Total,
+                    COUNT(*) as Operaciones,
+                    SUM(dv.PrecioVenta*dv.Cantidad)/NULLIF(COUNT(*), 0) as TicketPromedio
+                FROM tblVentas v
+                JOIN tblDetalleVentas dv ON v.IdVenta = dv.IdVenta AND v.IdTienda = dv.IdTienda AND v.IdComputadora = dv.IdComputadora
+                JOIN tblArticulos a ON dv.CodigoInterno = a.CodigoInterno
+                JOIN tblGruposDeptosDeptos gdd ON a.IdDepto = gdd.IdDepto
+                JOIN tblGruposDeptos gd ON gdd.IdGrupoDepto = gd.IdGrupoDepto
+                WHERE v.FechaVenta >= ${startStr} AND v.FechaVenta <= ${endStr} ${storeFilter}
+                GROUP BY gd.IdGrupoDepto, gd.GrupoDepto
+                ORDER BY Total DESC
+            `;
         } else {
-            return NextResponse.json({ error: 'Invalid tipo parameter. Use "departamento" or "familia".' }, { status: 400 });
+            return NextResponse.json({ error: 'Invalid tipo parameter. Use "departamento", "familia" or "grupo-departamento".' }, { status: 400 });
         }
 
         const result = await query(sql);

@@ -386,3 +386,15 @@
 2026-04-13T01:49:52.751Z - [GET] Results count: 
 2026-04-13T01:49:52.873Z - [GET] Relations called {"idProveedor":"125"}
 2026-04-13T01:49:52.911Z - [GET] Results count: 
+2026-04-13T02:27:54.518Z - [GET] Relations called {"idProveedor":"94"}
+2026-04-13T02:27:54.670Z - [GET] Results count: 4
+2026-04-13T02:27:55.420Z - [GET] Relations called {"idProveedor":"94"}
+2026-04-13T02:27:55.449Z - [GET] Results count: 4
+2026-04-13T21:29:16.040Z - [GET] Relations called {"idProveedor":"94"}
+2026-04-13T21:29:16.168Z - [GET] Results count: 4
+2026-04-13T21:29:16.732Z - [GET] Relations called {"idProveedor":"94"}
+2026-04-13T21:29:16.776Z - [GET] Results count: 4
+2026-04-13T21:30:17.121Z - [POST] Saving relation {"CodigoInterno":"9918","IdProveedor":94,"Descripcion":"S ASAR DUBY 1.60KG","NoIdentificacion":"X201"}
+2026-04-13T21:30:17.162Z - [POST] Result: {"fieldCount":0,"affectedRows":1,"insertId":0,"info":"","serverStatus":2,"warningStatus":0,"changedRows":0}
+2026-04-13T21:30:17.176Z - [GET] Relations called {"idProveedor":"94"}
+2026-04-13T21:30:17.201Z - [GET] Results count: 5

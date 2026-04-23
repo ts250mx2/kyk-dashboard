@@ -34,6 +34,7 @@ function DeptoDetailModalComponent({
 }: DeptoDetailModalProps) {
     const [details, setDetails] = useState<any[]>([]);
     const [loading, setLoading] = useState(isOpen);
+    const [viewType, setViewType] = useState<'articulo' | 'familia'>('articulo');
     const prevParams = useRef<string>('');
     const [isMaximized, setIsMaximized] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -95,7 +96,7 @@ function DeptoDetailModalComponent({
     };
 
     useEffect(() => {
-        const currentParams = JSON.stringify({ isOpen, idDepto, familia, idTienda, fechaInicio, fechaFin });
+        const currentParams = JSON.stringify({ isOpen, idDepto, familia, idTienda, fechaInicio, fechaFin, viewType });
 
         if (isOpen) {
             if (prevParams.current !== currentParams) {
@@ -110,12 +111,12 @@ function DeptoDetailModalComponent({
             setLoading(false);
             prevParams.current = '';
         }
-    }, [isOpen, idDepto, familia, idTienda, fechaInicio, fechaFin]);
+    }, [isOpen, idDepto, familia, idTienda, fechaInicio, fechaFin, viewType]);
 
     const fetchDetails = async () => {
         setLoading(true);
         try {
-            let url = `/api/dashboard/department-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
+            let url = `/api/dashboard/department-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&tipo=${viewType}`;
             if (idDepto) url += `&idDepto=${idDepto}`;
             if (familia) url += `&familia=${encodeURIComponent(familia)}`;
             if (idTienda && idTienda !== 'null') url += `&storeId=${idTienda}`;
@@ -245,7 +246,7 @@ function DeptoDetailModalComponent({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[12000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[13000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <div
                 className={cn(
                     "bg-white shadow-2xl overflow-hidden flex flex-col transition-[width,height,transform] duration-300 border border-slate-200 rounded-none",
@@ -280,6 +281,26 @@ function DeptoDetailModalComponent({
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <div className="hidden md:flex bg-slate-100 p-1 rounded-none border border-slate-200 mr-2">
+                            <button
+                                onClick={() => setViewType('articulo')}
+                                className={cn(
+                                    "px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all",
+                                    viewType === 'articulo' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                )}
+                            >
+                                Productos
+                            </button>
+                            <button
+                                onClick={() => setViewType('familia')}
+                                className={cn(
+                                    "px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all",
+                                    viewType === 'familia' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                )}
+                            >
+                                Familias
+                            </button>
+                        </div>
                         <div className="relative mr-4 hidden md:block">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                             <input
@@ -322,19 +343,23 @@ function DeptoDetailModalComponent({
                             <table className="min-w-full border-collapse">
                                 <thead className="sticky top-0 z-10">
                                     <tr className="bg-slate-50 border-b border-slate-200">
-                                        <th onClick={() => handleSort('CodigoBarras')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                            <div className="flex items-center">Código {renderSortIcon('CodigoBarras')}</div>
-                                        </th>
-                                        <th onClick={() => handleSort('Descripcion')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                            <div className="flex items-center">Descripción {renderSortIcon('Descripcion')}</div>
-                                        </th>
-                                        {(!idDepto) && (
+                                        {viewType === 'articulo' && (
+                                            <>
+                                                <th onClick={() => handleSort('CodigoBarras')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center">Código {renderSortIcon('CodigoBarras')}</div>
+                                                </th>
+                                                <th onClick={() => handleSort('Descripcion')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center">Descripción {renderSortIcon('Descripcion')}</div>
+                                                </th>
+                                            </>
+                                        )}
+                                        {(!idDepto && viewType === 'articulo') && (
                                             <th onClick={() => handleSort('Departamento')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
                                                 <div className="flex items-center">Depto {renderSortIcon('Departamento')}</div>
                                             </th>
                                         )}
                                         <th onClick={() => handleSort('Familia')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                            <div className="flex items-center">Familia {renderSortIcon('Familia')}</div>
+                                            <div className="flex items-center">{viewType === 'familia' ? 'Familia de Producto' : 'Familia'} {renderSortIcon('Familia')}</div>
                                         </th>
                                         <th onClick={() => handleSort('Total')} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
                                             <div className="flex items-center justify-end">Venta {renderSortIcon('Total')}</div>
@@ -357,13 +382,17 @@ function DeptoDetailModalComponent({
                                     {sortedDetails.length > 0 ? (
                                         sortedDetails.map((item, idx) => (
                                             <tr key={idx} className="hover:bg-[#4050B4]/5 transition-colors group/row">
-                                                <td className="px-4 py-3 whitespace-nowrap text-[11px] font-black text-[#4050B4]">{item.CodigoBarras}</td>
-                                                <td className="px-4 py-3">
-                                                    <span className="text-[11px] font-bold text-slate-700 leading-tight block truncate max-w-[300px]" title={item.Descripcion}>
-                                                        {item.Descripcion}
-                                                    </span>
-                                                </td>
-                                                {(!idDepto) && (
+                                                {viewType === 'articulo' && (
+                                                    <>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-[11px] font-black text-[#4050B4]">{item.CodigoBarras}</td>
+                                                        <td className="px-4 py-3">
+                                                            <span className="text-[11px] font-bold text-slate-700 leading-tight block truncate max-w-[300px]" title={item.Descripcion}>
+                                                                {item.Descripcion}
+                                                            </span>
+                                                        </td>
+                                                    </>
+                                                )}
+                                                {(!idDepto && viewType === 'articulo') && (
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <span className="px-2 py-0.5 bg-slate-50 text-slate-500 text-[10px] font-bold uppercase border border-slate-100">
                                                             {item.Departamento}

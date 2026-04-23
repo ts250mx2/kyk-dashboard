@@ -49,6 +49,7 @@ import { TrendsTicker } from '@/components/trends-ticker';
 import { TrendsDiscovery } from '@/components/trends-discovery';
 import { CancellationDetailModal } from '@/components/cancellation-detail-modal';
 import { DeptoDetailModal } from '@/components/depto-detail-modal';
+import { GroupDetailModal } from '@/components/group-detail-modal';
 import { ParetoAnalysisModal } from '@/components/pareto-analysis-modal';
 
 export default function DashboardPage() {
@@ -68,13 +69,14 @@ export default function DashboardPage() {
     const [selectedMetric, setSelectedMetric] = useState<'ventas' | 'aperturas' | 'cancelaciones' | 'retiros' | 'devoluciones'>('ventas');
     const [chartType, setChartType] = useState<'bar' | 'pie'>('bar');
     const [subMetric, setSubMetric] = useState<string>('Total');
-    const [selectedVentasTab, setSelectedVentasTab] = useState<'sucursal' | 'departamento' | 'familia'>('sucursal');
+    const [selectedVentasTab, setSelectedVentasTab] = useState<'sucursal' | 'departamento' | 'familia' | 'grupo-departamento'>('sucursal');
     const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
     const [selectedStoreName, setSelectedStoreName] = useState<string | null>(null);
 
     // On-demand chart data for Deptos / Familias
     const [ventasDepto, setVentasDepto] = useState<any[]>([]);
     const [ventasFamilia, setVentasFamilia] = useState<any[]>([]);
+    const [ventasGrupoDepto, setVentasGrupoDepto] = useState<any[]>([]);
     const [loadingDesglose, setLoadingDesglose] = useState(false);
 
     // Modal state
@@ -117,9 +119,14 @@ export default function DashboardPage() {
     const [selectedFamilia, setSelectedFamilia] = useState<string | undefined>();
     const [isParetoModalOpen, setIsParetoModalOpen] = useState(false);
 
+    // Group Detail Modal
+    const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+    const [selectedGroupId, setSelectedGroupId] = useState<number | undefined>();
+    const [selectedGroupName, setSelectedGroupName] = useState<string | undefined>();
+
     // Lock body scroll when any modal is open to prevent background flash/repaint on scroll
     const anyModalOpen = isModalOpen || isItemsModalOpen || isOpeningModalOpen || isCancellationModalOpen ||
-        isWithdrawalModalOpen || isReturnModalOpen || isDeptoModalOpen || isParetoModalOpen;
+        isWithdrawalModalOpen || isReturnModalOpen || isDeptoModalOpen || isParetoModalOpen || isGroupModalOpen;
 
     useEffect(() => {
         if (anyModalOpen) {
@@ -280,6 +287,7 @@ export default function DashboardPage() {
             // If we were on a desglose tab, refresh immediately
             if (selectedVentasTab === 'departamento') fetchVentasDesglose('departamento');
             else if (selectedVentasTab === 'familia') fetchVentasDesglose('familia');
+            else if (selectedVentasTab === 'grupo-departamento') fetchVentasDesglose('grupo-departamento');
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
         } finally {
@@ -288,7 +296,7 @@ export default function DashboardPage() {
     };
 
     // Fetch desglose data on-demand when user switches to Deptos or Familias tab
-    const fetchVentasDesglose = async (tipo: 'departamento' | 'familia') => {
+    const fetchVentasDesglose = async (tipo: 'departamento' | 'familia' | 'grupo-departamento') => {
         setLoadingDesglose(true);
         try {
             let url = `/api/dashboard/ventas-desglose?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&tipo=${tipo}`;
@@ -296,7 +304,8 @@ export default function DashboardPage() {
             const res = await fetch(url);
             const json = await res.json();
             if (tipo === 'departamento') setVentasDepto(json.data || []);
-            else setVentasFamilia(json.data || []);
+            else if (tipo === 'familia') setVentasFamilia(json.data || []);
+            else if (tipo === 'grupo-departamento') setVentasGrupoDepto(json.data || []);
         } catch (err) {
             console.error('Error fetching ventas desglose:', err);
         } finally {
@@ -735,9 +744,13 @@ export default function DashboardPage() {
 
     const handleChartBarClick = (data: any) => {
         // Block detail if too many operations (would be too slow to load)
+        // EXCEPTION: Always allow group-department drill-down as it only shows TOP 20 depto summary
         const ops = data?.Operaciones ?? data?.Cantidad ?? data?.Total ?? 0;
-        if (selectedMetric === 'ventas' && ops > 2000) return;
-        if (selectedMetric !== 'ventas' && (data?.Cantidad ?? 0) > 2000) return;
+        
+        if (selectedVentasTab !== 'grupo-departamento') {
+            if (selectedMetric === 'ventas' && ops > 2000) return;
+            if (selectedMetric !== 'ventas' && (data?.Cantidad ?? 0) > 2000) return;
+        }
 
         if (selectedVentasTab === 'sucursal') {
             handleStoreClick(data);
@@ -750,6 +763,10 @@ export default function DashboardPage() {
             setSelectedDeptoName(undefined);
             setSelectedFamilia(data.Familia);
             setIsDeptoModalOpen(true);
+        } else if (selectedVentasTab === 'grupo-departamento') {
+            setSelectedGroupId(data.IdGrupoDepto);
+            setSelectedGroupName(data.GrupoDepto);
+            setIsGroupModalOpen(true);
         } else {
             handleStoreClick(data);
         }
@@ -802,19 +819,19 @@ export default function DashboardPage() {
     };
 
     const chartData = selectedMetric === 'ventas'
-        ? (selectedVentasTab === 'departamento' ? ventasDepto : (selectedVentasTab === 'familia' ? ventasFamilia : data?.data?.ventas)) || []
+        ? (selectedVentasTab === 'departamento' ? ventasDepto : (selectedVentasTab === 'familia' ? ventasFamilia : (selectedVentasTab === 'grupo-departamento' ? ventasGrupoDepto : data?.data?.ventas))) || []
         : data?.data?.[selectedMetric] || [];
 
     const listData = data?.data?.[selectedMetric] || [];
 
     const getMetricConfig = () => {
-        const storeTitle = selectedStoreName ? ` de ${selectedStoreName}` : (selectedVentasTab === 'sucursal' ? ' por Sucursal' : (selectedVentasTab === 'departamento' ? ' por Departamento' : ' por Familia'));
-        const mainTitle = selectedStoreName ? `Ventas${storeTitle}` : (selectedMetric === 'ventas' ? (selectedVentasTab === 'sucursal' ? 'Ventas por Sucursal' : (selectedVentasTab === 'departamento' ? 'Ventas por Departamento' : 'Ventas por Familia')) : '');
+        const storeTitle = selectedStoreName ? ` de ${selectedStoreName}` : (selectedVentasTab === 'sucursal' ? ' por Sucursal' : (selectedVentasTab === 'departamento' ? ' por Departamento' : (selectedVentasTab === 'familia' ? ' por Familia' : ' por Grupo')));
+        const mainTitle = selectedStoreName ? `Ventas${storeTitle}` : (selectedMetric === 'ventas' ? (selectedVentasTab === 'sucursal' ? 'Ventas por Sucursal' : (selectedVentasTab === 'departamento' ? 'Ventas por Departamento' : (selectedVentasTab === 'familia' ? 'Ventas por Familia' : 'Ventas por Grupo'))) : '');
 
         switch (selectedMetric) {
             case 'ventas': return {
                 title: mainTitle,
-                sub: selectedStoreName ? `Detalle de ${selectedStoreName}` : (selectedVentasTab === 'familia' ? 'Distribución del ingreso por familias de artículos' : 'Distribución del ingreso por tienda'),
+                sub: selectedStoreName ? `Detalle de ${selectedStoreName}` : (selectedVentasTab === 'familia' ? 'Distribución del ingreso por familias de artículos' : (selectedVentasTab === 'grupo-departamento' ? 'Distribución del ingreso por grupos de departamento' : 'Distribución del ingreso por tienda')),
                 color: '#10b981'
             };
             case 'aperturas': return { title: 'Aperturas por Sucursal', sub: 'Cantidad de aperturas por tienda', color: '#3b82f6' };
@@ -839,6 +856,12 @@ export default function DashboardPage() {
         'SOLIDARIDAD': '#566965',
         'MERKADON': '#fcea42',
         'MERKDON': '#fcea42',
+        // Group specific colors
+        'REFRIGERADOS': '#2563EB', // Blue
+        'ABARROTES': '#DC2626',      // Red
+        'OTROS': '#EF4444',          // Red
+        'ABARROTES Y OTROS': '#DC2626', // Red
+        'CIEL': '#0EA5E9',           // Sky Blue
     };
 
     // Varied and professional color palette fallback
@@ -1250,6 +1273,19 @@ export default function DashboardPage() {
                                         >
                                             Familias
                                         </button>
+                                        <button
+                                            onClick={() => {
+                                                setSelectedVentasTab('grupo-departamento');
+                                                fetchVentasDesglose('grupo-departamento');
+                                                setChartType('pie');
+                                            }}
+                                            className={cn(
+                                                "px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-all",
+                                                selectedVentasTab === 'grupo-departamento' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                            )}
+                                        >
+                                            Grupos
+                                        </button>
                                     </div>
                                 )}
                             </div>
@@ -1370,14 +1406,14 @@ export default function DashboardPage() {
                                         <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                                             <XAxis
-                                                dataKey={selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? "Departamento" : (selectedVentasTab === 'familia' ? "Familia" : "Tienda")) : "Tienda"}
+                                                dataKey={selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? "Departamento" : (selectedVentasTab === 'familia' ? "Familia" : (selectedVentasTab === 'grupo-departamento' ? "GrupoDepto" : "Tienda"))) : "Tienda"}
                                                 axisLine={false}
                                                 tickLine={false}
                                                 interval={0}
                                                 height={100}
                                                 tick={(props: any) => {
                                                     const { x, y, payload } = props;
-                                                    const key = selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? 'Departamento' : (selectedVentasTab === 'familia' ? 'Familia' : 'Tienda')) : 'Tienda';
+                                                    const key = selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? 'Departamento' : (selectedVentasTab === 'familia' ? 'Familia' : (selectedVentasTab === 'grupo-departamento' ? 'GrupoDepto' : 'Tienda'))) : 'Tienda';
                                                     const item = chartData.find((d: any) => d[key] === payload.value);
                                                     const total = item ? ((subMetric === 'Operaciones' || subMetric === 'Cantidad' || selectedMetric === 'aperturas')
                                                         ? item[subMetric]
@@ -1421,7 +1457,7 @@ export default function DashboardPage() {
                                                         return (
                                                             <div className="bg-slate-900 text-white p-3 rounded-none shadow-2xl border border-white/10">
                                                                 <p className="text-[10px] font-bold text-white/50 uppercase mb-1">
-                                                                    {selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? payload[0].payload.Departamento : (selectedVentasTab === 'familia' ? payload[0].payload.Familia : payload[0].payload.Tienda)) : payload[0].payload.Tienda}
+                                                                    {selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? payload[0].payload.Departamento : (selectedVentasTab === 'familia' ? payload[0].payload.Familia : (selectedVentasTab === 'grupo-departamento' ? payload[0].payload.GrupoDepto : payload[0].payload.Tienda))) : payload[0].payload.Tienda}
                                                                 </p>
                                                                 <div className="flex flex-col gap-1">
                                                                     <div className="flex justify-between gap-4 items-baseline">
@@ -1456,9 +1492,19 @@ export default function DashboardPage() {
                                                 onClick={(data) => handleChartBarClick(data.payload)}
                                                 className="cursor-pointer shadow-lg outline-none"
                                             >
-                                                {chartData.map((entry: any, index: number) => (
-                                                    <Cell key={`cell-${index}`} fill={getStoreColor(selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? entry.Departamento : (selectedVentasTab === 'familia' ? entry.Familia : entry.Tienda)) : entry.Tienda)} fillOpacity={0.9} />
-                                                ))}
+                                                {chartData.map((entry: any, index: number) => {
+                                                    const groupName = entry.GrupoDepto?.trim().toUpperCase();
+                                                    const groupId = Number(entry.IdGrupoDepto);
+                                                    let specificColor = (groupId === 2 || groupName === 'ABARROTES Y OTROS') ? '#DC2626' : STORE_COLOR_MAP[groupName];
+                                                    if (groupId === 3) specificColor = '#0EA5E9'; // Ciel
+
+                                                    const color = selectedVentasTab === 'grupo-departamento' 
+                                                        ? (specificColor || STORE_COLORS[index % STORE_COLORS.length])
+                                                        : getStoreColor(selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? entry.Departamento : (selectedVentasTab === 'familia' ? entry.Familia : entry.Tienda)) : entry.Tienda);
+                                                    return (
+                                                        <Cell key={`cell-${index}`} fill={color} fillOpacity={0.9} />
+                                                    );
+                                                })}
                                             </Bar>
                                         </BarChart>
                                     ) : (
@@ -1471,14 +1517,38 @@ export default function DashboardPage() {
                                                 outerRadius={140}
                                                 paddingAngle={2}
                                                 dataKey={subMetric}
-                                                nameKey={selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? "Departamento" : (selectedVentasTab === 'familia' ? "Familia" : "Tienda")) : "Tienda"}
+                                                nameKey={selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? "Departamento" : (selectedVentasTab === 'familia' ? "Familia" : (selectedVentasTab === 'grupo-departamento' ? "GrupoDepto" : "Tienda"))) : "Tienda"}
                                                 stroke="none"
                                                 onClick={(data) => handleChartBarClick(data.payload)}
                                                 className="cursor-pointer outline-none"
+                                                label={({ cx, cy, midAngle, innerRadius, outerRadius, value, name }) => {
+                                                    if (selectedVentasTab !== 'grupo-departamento') return name;
+                                                    const totalSum = chartData.reduce((acc: number, curr: any) => acc + (curr[subMetric] || 0), 0);
+                                                    const percentage = totalSum > 0 ? ((value / totalSum) * 100).toFixed(1) : 0;
+                                                    const RADIAN = Math.PI / 180;
+                                                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                                    return (
+                                                        <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-[10px] font-black pointer-events-none">
+                                                            {percentage}%
+                                                        </text>
+                                                    );
+                                                }}
                                             >
-                                                {chartData.map((entry: any, index: number) => (
-                                                    <Cell key={`cell-${index}`} fill={getStoreColor(selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? entry.Departamento : (selectedVentasTab === 'familia' ? entry.Familia : entry.Tienda)) : entry.Tienda)} />
-                                                ))}
+                                                {chartData.map((entry: any, index: number) => {
+                                                    const groupName = entry.GrupoDepto?.trim().toUpperCase();
+                                                    const groupId = Number(entry.IdGrupoDepto);
+                                                    let specificColor = (groupId === 2 || groupName === 'ABARROTES Y OTROS') ? '#DC2626' : STORE_COLOR_MAP[groupName];
+                                                    if (groupId === 3) specificColor = '#0EA5E9'; // Ciel
+
+                                                    const color = selectedVentasTab === 'grupo-departamento' 
+                                                        ? (specificColor || STORE_COLORS[index % STORE_COLORS.length])
+                                                        : getStoreColor(selectedMetric === 'ventas' ? (selectedVentasTab === 'departamento' ? entry.Departamento : (selectedVentasTab === 'familia' ? entry.Familia : entry.Tienda)) : entry.Tienda);
+                                                    return (
+                                                        <Cell key={`cell-${index}`} fill={color} />
+                                                    );
+                                                })}
                                             </Pie>
                                             <Tooltip
                                                 content={({ active, payload }) => {
@@ -1524,9 +1594,15 @@ export default function DashboardPage() {
                                                     const total = (subMetric === 'Operaciones' || subMetric === 'Cantidad' || selectedMetric === 'aperturas')
                                                         ? item[subMetric]
                                                         : formatCurrency(item[subMetric]);
+                                                    
+                                                    const totalSum = chartData.reduce((acc: number, curr: any) => acc + (curr[subMetric] || 0), 0);
+                                                    const percentage = totalSum > 0 ? ((item[subMetric] / totalSum) * 100).toFixed(1) : 0;
+
                                                     return (
                                                         <span className="inline-flex flex-col items-start leading-tight translate-y-2">
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{value}</span>
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                                                {value} {selectedVentasTab === 'grupo-departamento' && <span className="text-emerald-500 ml-1">({percentage}%)</span>}
+                                                            </span>
                                                             <span className="text-[11px] font-black text-slate-900">{total}</span>
                                                         </span>
                                                     );
@@ -2305,6 +2381,23 @@ export default function DashboardPage() {
                 fechaFin={fechaFin}
                 idTienda={selectedStoreId || undefined}
                 storeName={selectedStoreName || undefined}
+            />
+
+            {/* Group Detail Modal */}
+            <GroupDetailModal
+                isOpen={isGroupModalOpen}
+                onClose={() => setIsGroupModalOpen(false)}
+                idGrupoDepto={selectedGroupId}
+                grupoName={selectedGroupName}
+                fechaInicio={fechaInicio}
+                fechaFin={fechaFin}
+                idTienda={selectedStoreId}
+                storeName={selectedStoreName}
+                onDeptoClick={(id, name) => {
+                    setSelectedDeptoId(id);
+                    setSelectedDeptoName(name);
+                    setIsDeptoModalOpen(true);
+                }}
             />
 
             {/* Global Pareto Analysis Modal */}
