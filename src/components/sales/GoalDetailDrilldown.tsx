@@ -114,7 +114,7 @@ export function GoalDetailDrilldown({ isOpen, onClose, idMeta, metaName }: GoalD
                                             dataKey="Tienda" 
                                             axisLine={false} 
                                             tickLine={false} 
-                                            tick={{ fontSize: 9, fontAttributes: 'bold', fill: '#64748b' }} 
+                                            tick={{ fontSize: 9, fontWeight: 'bold', fill: '#64748b' }} 
                                         />
                                         <YAxis 
                                             axisLine={false} 
