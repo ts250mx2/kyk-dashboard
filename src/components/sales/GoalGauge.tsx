@@ -6,9 +6,10 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 interface GoalGaugeProps {
     idMeta: number;
     onClick?: () => void;
+    isAlDia?: boolean;
 }
 
-export function GoalGauge({ idMeta, onClick }: GoalGaugeProps) {
+export function GoalGauge({ idMeta, onClick, isAlDia }: GoalGaugeProps) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -32,7 +33,31 @@ export function GoalGauge({ idMeta, onClick }: GoalGaugeProps) {
     if (!data) return null;
 
     const totalPercent = data?.totalPercent || 0;
-    const percent = Math.min(totalPercent, 100);
+    
+    let displayPercent = totalPercent;
+    let label = 'CUMPLIMIENTO';
+
+    if (isAlDia && data.fechaInicio && data.fechaFin) {
+        const start = new Date(data.fechaInicio);
+        const end = new Date(data.fechaFin);
+        const now = new Date();
+        
+        // Normalize dates to midnight for calculation
+        const dStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const dEnd = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+        const dNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const totalDays = Math.ceil((dEnd.getTime() - dStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const elapsedDays = Math.min(Math.max(Math.ceil((dNow.getTime() - dStart.getTime()) / (1000 * 60 * 60 * 24)) + 1, 0), totalDays);
+
+        if (totalDays > 0) {
+            const proRatedTarget = (data.totalTarget || 0) * (elapsedDays / totalDays);
+            displayPercent = proRatedTarget > 0 ? ((data.totalActual || 0) / proRatedTarget * 100) : 0;
+            label = 'CUMP. AL DÍA';
+        }
+    }
+
+    const percent = Math.min(displayPercent, 100);
     const chartData = [
         { value: percent },
         { value: 100 - percent }
@@ -72,10 +97,10 @@ export function GoalGauge({ idMeta, onClick }: GoalGaugeProps) {
             
             <div className="absolute inset-0 flex flex-col items-center justify-end pb-1 translate-y-1">
                 <span className="text-xl font-black text-slate-900 leading-none">
-                    {totalPercent.toFixed(1)}%
+                    {displayPercent.toFixed(1)}%
                 </span>
                 <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">
-                    CUMPLIMIENTO
+                    {label}
                 </span>
             </div>
 

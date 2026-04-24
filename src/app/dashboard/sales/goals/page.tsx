@@ -14,6 +14,7 @@ export default function GoalsPage() {
     const [loading, setLoading] = useState(true);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
+    const [isAlDia, setIsAlDia] = useState(false);
 
     // Drilldown State
     const [isDrilldownOpen, setIsDrilldownOpen] = useState(false);
@@ -72,6 +73,18 @@ export default function GoalsPage() {
                     >
                         <Plus size={16} />
                         Nueva Meta
+                    </button>
+                    <button 
+                        onClick={() => setIsAlDia(!isAlDia)}
+                        className={cn(
+                            "flex items-center gap-2 px-6 py-3 font-black text-xs uppercase tracking-[0.2em] transition-all border",
+                            isAlDia 
+                                ? "bg-emerald-600 text-white border-emerald-700 shadow-xl shadow-emerald-600/20" 
+                                : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
+                        )}
+                    >
+                        <Award size={16} />
+                        Al Día
                     </button>
                 </div>
             </div>
@@ -137,6 +150,7 @@ export default function GoalsPage() {
                                 <div className="py-2 border-t border-slate-50">
                                     <GoalGauge 
                                         idMeta={goal.IdMeta} 
+                                        isAlDia={isAlDia}
                                         onClick={() => handleGaugeClick(goal.IdMeta, goal.Meta)}
                                     />
                                 </div>

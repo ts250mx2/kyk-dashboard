@@ -86,6 +86,8 @@ export async function GET(request: Request) {
             totalActual,
             totalTarget,
             totalPercent,
+            fechaInicio: meta.FechaInicio,
+            fechaFin: meta.FechaFin,
             details: result
         });
     } catch (error) {
