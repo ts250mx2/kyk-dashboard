@@ -69,6 +69,7 @@ const menuSections: MenuSection[] = [
             { name: "Mapa de Calor", emoji: "🔥", href: "/dashboard/sales/heatmap" },
             { name: "Reportes de Ventas", emoji: "📊", href: "/dashboard/sales/reports" },
             { name: "Tendencias de Venta", emoji: "📈", href: "/dashboard/sales/reports/trends" },
+            { name: "Metas", emoji: "🎯", href: "/dashboard/sales/goals" },
         ]
     },
     {
