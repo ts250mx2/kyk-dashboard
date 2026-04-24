@@ -8,6 +8,7 @@ import { GoalEditModal } from "@/components/sales/GoalEditModal";
 import { GoalGauge } from "@/components/sales/GoalGauge";
 import { GoalDetailDrilldown } from "@/components/sales/GoalDetailDrilldown";
 import { LoadingScreen } from "@/components/ui/loading-screen";
+import { cn } from "@/lib/utils";
 
 export default function GoalsPage() {
     const [goals, setGoals] = useState<any[]>([]);

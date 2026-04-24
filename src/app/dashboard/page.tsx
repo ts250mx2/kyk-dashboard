@@ -62,8 +62,9 @@ export default function DashboardPage() {
         }).format(new Date());
     };
 
-    const [fechaInicio, setFechaInicio] = useState(getMonterreyDate());
-    const [fechaFin, setFechaFin] = useState(getMonterreyDate());
+    const [fechaInicio, setFechaInicio] = useState('2024-01-01'); // Placeholder
+    const [fechaFin, setFechaFin] = useState('2024-01-01'); // Placeholder
+    const [mounted, setMounted] = useState(false);
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
     const [selectedMetric, setSelectedMetric] = useState<'ventas' | 'aperturas' | 'cancelaciones' | 'retiros' | 'devoluciones'>('ventas');
@@ -170,20 +171,22 @@ export default function DashboardPage() {
     const itemsModalDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
 
     // UI State for Minimize/Maximize and Positioning
-    const [isChartMinimized, setIsChartMinimized] = useState(() => {
-        if (typeof window === 'undefined') return false;
-        return localStorage.getItem('kyk_dashboard_chart_minimized') === 'true';
-    });
-    const [isDetailsMinimized, setIsDetailsMinimized] = useState(() => {
-        if (typeof window === 'undefined') return false;
-        return localStorage.getItem('kyk_dashboard_details_minimized') === 'true';
-    });
-    const [layoutPosition, setLayoutPosition] = useState<'top' | 'bottom' | 'left' | 'right'>(() => {
-        if (typeof window === 'undefined') return 'bottom';
-        return (localStorage.getItem('kyk_dashboard_layout_position') as any) || 'bottom';
-    });
-    const [isLayoutLoaded, setIsLayoutLoaded] = useState(true);
+    const [isChartMinimized, setIsChartMinimized] = useState(false);
+    const [isDetailsMinimized, setIsDetailsMinimized] = useState(false);
+    const [layoutPosition, setLayoutPosition] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
+    const [isLayoutLoaded, setIsLayoutLoaded] = useState(false);
     const [isDashboardMaximized, setIsDashboardMaximized] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        setFechaInicio(getMonterreyDate());
+        setFechaFin(getMonterreyDate());
+        
+        setIsChartMinimized(localStorage.getItem('kyk_dashboard_chart_minimized') === 'true');
+        setIsDetailsMinimized(localStorage.getItem('kyk_dashboard_details_minimized') === 'true');
+        setLayoutPosition((localStorage.getItem('kyk_dashboard_layout_position') as any) || 'bottom');
+        setIsLayoutLoaded(true);
+    }, []);
 
     // Load saved modal positions (not safe for lazy init due to SSR)
     useEffect(() => {
@@ -912,7 +915,9 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Fecha de Emisión</p>
-                    <p className="text-sm font-bold text-slate-800">{new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                    <p className="text-sm font-bold text-slate-800">
+                        {mounted ? new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }) : ''}
+                    </p>
                 </div>
             </div>
 
