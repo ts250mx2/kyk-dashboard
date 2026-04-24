@@ -128,7 +128,7 @@ export default function GoalsPage() {
                                     <div className="flex items-center gap-2 text-slate-400">
                                         <Calendar size={12} />
                                         <span className="text-[10px] font-black uppercase tracking-wider">
-                                            {format(new Date(goal.FechaInicio), "dd MMM yyyy", { locale: es })} - {format(new Date(goal.FechaFin), "dd MMM yyyy", { locale: es })}
+                                            {format(new Date(goal.FechaInicio.split('T')[0] + 'T00:00:00'), "dd MMM yyyy", { locale: es })} - {format(new Date(goal.FechaFin.split('T')[0] + 'T00:00:00'), "dd MMM yyyy", { locale: es })}
                                         </span>
                                     </div>
                                 </div>

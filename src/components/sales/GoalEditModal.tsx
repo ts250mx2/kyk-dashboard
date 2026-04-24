@@ -107,10 +107,10 @@ export function GoalEditModal({ isOpen, onClose, idMeta, onSaved }: GoalEditModa
             if (data.header) {
                 setMetaName(data.header.Meta || '');
                 if (data.header.FechaInicio) {
-                    setFechaInicio(new Date(data.header.FechaInicio).toISOString().split('T')[0]);
+                    setFechaInicio(data.header.FechaInicio.split('T')[0]);
                 }
                 if (data.header.FechaFin) {
-                    setFechaFin(new Date(data.header.FechaFin).toISOString().split('T')[0]);
+                    setFechaFin(data.header.FechaFin.split('T')[0]);
                 }
             }
         } catch (error) {
