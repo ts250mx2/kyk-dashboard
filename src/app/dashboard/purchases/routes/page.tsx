@@ -70,9 +70,15 @@ export default function RutasPage() {
             try {
                 const response = await fetch("/api/stores");
                 const data = await response.json();
-                setStores(data);
+                if (Array.isArray(data)) {
+                    setStores(data);
+                } else {
+                    console.error("API Error: Expected array of stores but received:", data);
+                    setStores([]);
+                }
             } catch (error) {
                 console.error("Error fetching stores:", error);
+                setStores([]);
             } finally {
                 setLoading(false);
             }
@@ -146,9 +152,9 @@ export default function RutasPage() {
         updateRoute(routeId, { isProcessing: true, metrics: null, optimizedRoute: [], encodedPolyline: null });
 
         try {
-            const originStore = stores.find(s => s.IdTienda === targetRoute.origin)!;
+            const originStore = (stores || []).find(s => s.IdTienda === targetRoute.origin)!;
             const shouldReturn = true; // Always return to origin
-            const destStores = stores.filter(s => targetRoute.destinations.includes(s.IdTienda) && s.IdTienda !== originStore.IdTienda);
+            const destStores = (stores || []).filter(s => targetRoute.destinations.includes(s.IdTienda) && s.IdTienda !== originStore.IdTienda);
 
             // Create initial points array starting with origin
             const startPoint: Point = { lat: originStore.Lat, lng: originStore.Lng, name: originStore.Tienda };
@@ -302,7 +308,7 @@ export default function RutasPage() {
 
             <div className="space-y-4">
                 {routes.map((route, index) => {
-                    const selectedOriginStore = stores.find(s => s.IdTienda === route.origin);
+                    const selectedOriginStore = Array.isArray(stores) ? stores.find(s => s.IdTienda === route.origin) : null;
                     const canCalculate = route.origin !== "" && route.destinations.length > 0;
 
                     return (
@@ -336,7 +342,7 @@ export default function RutasPage() {
                                     </button>
                                     {route.isOriginOpen && (
                                         <div className="absolute top-full left-0 z-50 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
-                                            {stores.map((store) => (
+                                            {Array.isArray(stores) && stores.map((store) => (
                                                 <button
                                                     key={store.IdTienda}
                                                     onClick={() => updateRoute(route.id, { origin: store.IdTienda, isOriginOpen: false, optimizedRoute: [], metrics: null, encodedPolyline: null })}
@@ -369,7 +375,7 @@ export default function RutasPage() {
                                     </button>
                                     {route.isDestOpen && (
                                         <div className="absolute top-full left-0 z-50 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
-                                            {stores.map((store) => (
+                                            {Array.isArray(stores) && stores.map((store) => (
                                                 <button
                                                     key={store.IdTienda}
                                                     onClick={() => toggleDestination(route.id, store.IdTienda)}
@@ -628,12 +634,12 @@ export default function RutasPage() {
                                     origin={
                                         activeRouteData.origin 
                                         ? (() => {
-                                            const store = stores.find(s => s.IdTienda === activeRouteData.origin);
+                                            const store = Array.isArray(stores) ? stores.find(s => s.IdTienda === activeRouteData.origin) : null;
                                             return store ? { lat: store.Lat, lng: store.Lng, name: store.Tienda } : null;
                                         })() 
                                         : null
                                     }
-                                    destinations={stores.filter(s => activeRouteData.destinations.includes(s.IdTienda)).map(s => ({ lat: s.Lat, lng: s.Lng, name: s.Tienda }))}
+                                    destinations={(Array.isArray(stores) ? stores : []).filter(s => activeRouteData.destinations.includes(s.IdTienda)).map(s => ({ lat: s.Lat, lng: s.Lng, name: s.Tienda }))}
                                     optimizedRoute={activeRouteData.optimizedRoute}
                                     encodedPolyline={activeRouteData.encodedPolyline}
                                 />

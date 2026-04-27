@@ -22,12 +22,14 @@ export async function GET(request: Request) {
 
         if (concepts.length === 0) {
             // Total Sales
-            salesData = await query(`
+            const sql = `
                 SELECT v.IdTienda, SUM(v.Total) as Sales
                 FROM tblVentas v
                 WHERE v.FechaVenta >= ${startStr} AND v.FechaVenta <= ${endStr} 
                 GROUP BY v.IdTienda
-            `) as any[];
+            `;
+            console.log('QUERY SUGERIR METAS (TOTAL):', sql);
+            salesData = await query(sql) as any[];
         } else {
             // Filtered Sales by Concepts
             const deptoIds = concepts.filter(c => c.IdDepto > 0).map(c => c.IdDepto);
@@ -41,7 +43,7 @@ export async function GET(request: Request) {
 
             const filterQuery = filters.length > 0 ? `AND (${filters.join(' OR ')})` : '';
 
-            salesData = await query(`
+            const sql = `
                 SELECT v.IdTienda, SUM(dv.PrecioVenta * dv.Cantidad) as Sales
                 FROM tblVentas v
                 JOIN tblDetalleVentas dv ON v.IdVenta = dv.IdVenta AND v.IdTienda = dv.IdTienda AND v.IdComputadora = dv.IdComputadora
@@ -49,7 +51,9 @@ export async function GET(request: Request) {
                 WHERE v.FechaVenta >= ${startStr} AND v.FechaVenta <= ${endStr}
                 ${filterQuery}
                 GROUP BY v.IdTienda
-            `) as any[];
+            `;
+            console.log('QUERY SUGERIR METAS (CONCEPTOS):', sql);
+            salesData = await query(sql) as any[];
         }
 
         // Get all stores to ensure we return 0 for those without sales

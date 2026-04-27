@@ -32,6 +32,8 @@ const menuSections: MenuSection[] = [
         emoji: "📊",
         items: [
             { name: "Dashboard de Ventas", emoji: "📈", href: "/dashboard" },
+            { name: "Dashboard de Compras", emoji: "🛒", href: "/dashboard/purchases/dashboard" },
+            { name: "Precios", emoji: "🏷️", href: "/dashboard/purchases/prices" },
             { name: "Analista Digital", emoji: "🤖", href: "/dashboard/chat" },
         ]
     },
@@ -48,28 +50,32 @@ const menuSections: MenuSection[] = [
         title: "Compras",
         emoji: "🛒",
         items: [
-            { name: "Dashboard de Compras", emoji: "🛒", href: "/dashboard/purchases/dashboard" },
             { name: "Ordenes de Compra", emoji: "📝", href: "/dashboard/purchases/orders" },
             { name: "Recibos de Compra", emoji: "🧾", href: "/dashboard/purchases/receipts" },
             { name: "Distribuciones Cedis", emoji: "🏭", href: "/dashboard/purchases/distributions" },
-            { name: "Precios", emoji: "🏷️", href: "/dashboard/purchases/prices" },
-            { name: "Reportes de Compras", emoji: "📈", href: "/dashboard/purchases/reports" },
             { name: "Rutas", emoji: "🛣️", href: "/dashboard/purchases/routes" },
             { name: "Locatelia", emoji: "🧭", href: "/dashboard/purchases/locatelia" },
             { name: "Consolidar Facturas Recibo", emoji: "🤝", href: "/dashboard/purchases/consolidate-receipts" },
+            { name: "Dispersión de Pagos", emoji: "💳", href: "/dashboard/purchases/dispersion" },
         ]
     },
     {
         title: "Ventas",
         emoji: "💰",
         items: [
-            { name: "Facturas", emoji: "🧾", href: "/dashboard/sales/invoices" },
             { name: "Cortes de Caja", emoji: "💸", href: "/dashboard/sales/cash-closure" },
             { name: "Operaciones", emoji: "🏢", href: "/dashboard/sales/operations" },
             { name: "Mapa de Calor", emoji: "🔥", href: "/dashboard/sales/heatmap" },
-            { name: "Reportes de Ventas", emoji: "📊", href: "/dashboard/sales/reports" },
             { name: "Tendencias de Venta", emoji: "📈", href: "/dashboard/sales/reports/trends" },
             { name: "Metas", emoji: "🎯", href: "/dashboard/sales/goals" },
+        ]
+    },
+    {
+        title: "Facturas",
+        emoji: "🧾",
+        items: [
+            { name: "Facturas de Venta", emoji: "💰", href: "/dashboard/sales/invoices" },
+            { name: "Facturas de Compra", emoji: "🛒", href: "/dashboard/invoices/purchases" },
         ]
     },
     {
