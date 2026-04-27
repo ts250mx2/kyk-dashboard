@@ -18,15 +18,15 @@ export async function GET(request: Request) {
             T10.E_MailL as Mail, (CASE WHEN T0.BANKCODE = '0072' THEN SUBSTRING(Convert(nvarchar,T3.DocDate,112),7,2)+SUBSTRING(Convert(nvarchar,T3.DocDate,112),5,2)+SUBSTRING(Convert(nvarchar,T3.DocDate,112),1,4) ELSE '' END) as Fecha_Aplicacion, 
             (CASE WHEN T0.iNSTRUCKEY IS NULL THEN 'QUESOS Y CARNES FRIAS' ELSE T0.INSTRUCKEY END) as Instruccion_de_Pago 
             FROM   
-            VPM2 T2 
-            INNER JOIN OVPM T3 ON T2.DocNum = T3.DocEntry
-            INNER JOIN OCRD T0 ON T0.CArdCode = T3.CardCode
-            LEFT JOIN VPM1 T5 ON T3.DocEntry = T5.DocNum
-            LEFT JOIN OACT T6 ON T3.CashAcct = T6.AcctCode
-            LEFT JOIN OACT T7 ON T5.CheckAct = T7.AcctCode
-            LEFT JOIN OACT T8 ON T3.TrsfrAcct = T8.AcctCode
-            LEFT JOIN OPCH T9 ON T9.DocEntry = T2.DocEntry
-            LEFT JOIN OCPR T10 ON T10.CardCode = T0.CardCode
+            dbo.VPM2 T2 
+            INNER JOIN dbo.OVPM T3 ON T2.DocNum = T3.DocEntry
+            INNER JOIN dbo.OCRD T0 ON T0.CArdCode = T3.CardCode
+            LEFT JOIN dbo.VPM1 T5 ON T3.DocEntry = T5.DocNum
+            LEFT JOIN dbo.OACT T6 ON T3.CashAcct = T6.AcctCode
+            LEFT JOIN dbo.OACT T7 ON T5.CheckAct = T7.AcctCode
+            LEFT JOIN dbo.OACT T8 ON T3.TrsfrAcct = T8.AcctCode
+            LEFT JOIN dbo.OPCH T9 ON T9.DocEntry = T2.DocEntry
+            LEFT JOIN dbo.OCPR T10 ON T10.CardCode = T0.CardCode
             WHERE
             T3.Canceled = 'N' 
             AND (T3.U_Cobrado = 'Y' OR T3.U_Cobrado is null) 
