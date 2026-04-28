@@ -31,7 +31,7 @@ let pool: sql.ConnectionPool | null = null;
 export async function getPool() {
     if (pool) return pool;
     try {
-        pool = await sql.connect(sqlConfig);
+        pool = await new sql.ConnectionPool(sqlConfig).connect();
         return pool;
     } catch (err) {
         console.error('Database Connection Failed! Bad Config: ', err);

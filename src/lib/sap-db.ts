@@ -31,7 +31,7 @@ let pool: sql.ConnectionPool | null = null;
 export async function getSapPool() {
     if (pool) return pool;
     try {
-        pool = await sql.connect(sqlConfig);
+        pool = await new sql.ConnectionPool(sqlConfig).connect();
         return pool;
     } catch (err) {
         console.error('SAP B1 Database Connection Failed! ', err);

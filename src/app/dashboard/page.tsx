@@ -62,8 +62,8 @@ export default function DashboardPage() {
         }).format(new Date());
     };
 
-    const [fechaInicio, setFechaInicio] = useState('2024-01-01'); // Placeholder
-    const [fechaFin, setFechaFin] = useState('2024-01-01'); // Placeholder
+    const [fechaInicio, setFechaInicio] = useState(''); // Initialized empty to prevent stale fetch
+    const [fechaFin, setFechaFin] = useState('');     // Initialized empty to prevent stale fetch
     const [mounted, setMounted] = useState(false);
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
@@ -275,6 +275,7 @@ export default function DashboardPage() {
     const [returnItemsSortConfig, setReturnItemsSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
 
     const fetchData = async () => {
+        if (!fechaInicio || !fechaFin) return; // Don't fetch until dates are set
         setLoading(true);
         try {
             let url = `/api/dashboard/stats?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
