@@ -310,7 +310,10 @@ export default function SalesTrendsPage() {
                 />
 
                 <MultiSelect 
-                    options={filterOptions.articulos.map((a: any) => ({ label: a.Descripcion, value: a.CodigoInterno.toString() }))}
+                    options={filterOptions.articulos.map((a: any) => ({ 
+                        label: `${a.Descripcion} ${a.CodigoBarras ? `(${a.CodigoBarras})` : `[${a.CodigoInterno}]`}`, 
+                        value: a.CodigoInterno.toString() 
+                    }))}
                     selectedValues={selectedArticulos}
                     onChange={setSelectedArticulos}
                     placeholder="ARTICULOS"
