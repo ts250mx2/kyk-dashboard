@@ -67,7 +67,16 @@ const menuSections: MenuSection[] = [
             { name: "Operaciones", emoji: "🏢", href: "/dashboard/sales/operations" },
             { name: "Mapa de Calor", emoji: "🔥", href: "/dashboard/sales/heatmap" },
             { name: "Tendencias de Venta", emoji: "📈", href: "/dashboard/sales/reports/trends" },
+            { name: "Comparativas de Ventas", emoji: "⚖️", href: "/dashboard/sales/reports/comparison" },
             { name: "Metas", emoji: "🎯", href: "/dashboard/sales/goals" },
+        ]
+    },
+    {
+        title: "Cancelaciones",
+        emoji: "🚫",
+        items: [
+            { name: "Tendencias de Cancelaciones", emoji: "📉", href: "/dashboard/cancellations/reports/trends" },
+            { name: "Alertas de Cancelaciones", emoji: "🚨", href: "/dashboard/cancellations/alerts" },
         ]
     },
     {
