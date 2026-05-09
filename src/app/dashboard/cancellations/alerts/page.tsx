@@ -4,6 +4,7 @@ import { Calendar, RefreshCcw, LayoutGrid, ShoppingCart, Trash2, AlertTriangle, 
 import { cn } from '@/lib/utils';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
+import { CancellationDetailModal } from '@/components/cancellation-detail-modal';
 
 type Metric = 'venta' | 'operaciones' | 'ticket' | 'cantidadDia';
 
@@ -33,11 +34,16 @@ export default function CancellationAlertsPage() {
     const [metric, setMetric] = useState<Metric>('operaciones');
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
-    const [detailData, setDetailData] = useState<any[]|null>(null);
-    const [detailLoading, setDetailLoading] = useState(false);
-    const [detailTitle, setDetailTitle] = useState('');
     const [aiSummary, setAiSummary] = useState<string|null>(null);
     const [aiLoading, setAiLoading] = useState(false);
+    const [detailModal, setDetailModal] = useState<{
+        isOpen: boolean;
+        idTienda?: string;
+        storeName?: string;
+        idUsuario?: string;
+        userName?: string;
+        role?: 'cajeros' | 'supervisores';
+    }>({ isOpen: false });
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -50,15 +56,22 @@ export default function CancellationAlertsPage() {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    const openDetail = async (idUsuario: number, role: string, name: string, tienda: string) => {
-        setDetailTitle(`${name} — ${tienda}`);
-        setDetailLoading(true);
-        setDetailData([]);
-        try {
-            const res = await fetch(`/api/dashboard/cancellation-details?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&idUsuario=${idUsuario}&role=${role}`);
-            setDetailData(await res.json());
-        } catch (e) { console.error(e); }
-        finally { setDetailLoading(false); }
+    const openDetail = (idUsuario: number, role: 'cajeros' | 'supervisores', name: string, tienda: string) => {
+        setDetailModal({
+            isOpen: true,
+            idUsuario: idUsuario.toString(),
+            userName: name,
+            role: role,
+            storeName: tienda
+        });
+    };
+
+    const openStoreDetail = (idTienda: string, storeName: string) => {
+        setDetailModal({
+            isOpen: true,
+            idTienda: idTienda,
+            storeName: storeName
+        });
     };
 
     const generateAISummary = async () => {
@@ -340,7 +353,14 @@ export default function CancellationAlertsPage() {
                         const level = getLevel(val);
                         const col = colors[level];
                         return (
-                            <div key={st.IdTienda} className={cn("p-4 hover:bg-slate-50 transition-colors border-l-4", above ? 'border-l-rose-400' : 'border-l-emerald-400')}>
+                            <div 
+                                key={st.IdTienda} 
+                                onClick={() => openStoreDetail(st.IdTienda.toString(), st.Tienda)}
+                                className={cn(
+                                    "p-4 hover:bg-slate-50 transition-colors border-l-4 cursor-pointer hover:shadow-md", 
+                                    above ? 'border-l-rose-400' : 'border-l-emerald-400'
+                                )}
+                            >
                                 <div className="flex items-center justify-between mb-2">
                                     <span className="text-[11px] font-black text-slate-800 uppercase truncate">{st.Tienda}</span>
                                     <div className="flex items-center gap-1">
@@ -360,53 +380,17 @@ export default function CancellationAlertsPage() {
             </div>
 
             {/* Detail Modal */}
-            {detailData !== null && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={()=>setDetailData(null)}>
-                    <div className="bg-white w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}>
-                        <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
-                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{detailTitle}</h3>
-                            <button onClick={()=>setDetailData(null)} className="p-1 hover:bg-slate-200 transition-colors"><X size={18} /></button>
-                        </div>
-                        <div className="flex-1 overflow-auto p-0">
-                            {detailLoading ? (
-                                <div className="p-12 text-center text-slate-400"><RefreshCcw size={24} className="animate-spin mx-auto mb-2" />Cargando...</div>
-                            ) : detailData.length === 0 ? (
-                                <div className="p-12 text-center text-slate-400 text-sm">Sin registros en este periodo</div>
-                            ) : (
-                                <table className="w-full text-xs">
-                                    <thead className="bg-slate-50 sticky top-0">
-                                        <tr>
-                                            {['Tienda','Z','Folio','Fecha','Cant','Código','Descripción','Precio','Total','Cajero','Supervisor'].map(h => (
-                                                <th key={h} className="px-3 py-2 text-left text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                        {detailData.map((r: any, i: number) => (
-                                            <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-3 py-2 font-bold text-slate-700 uppercase">{r.Tienda}</td>
-                                                <td className="px-3 py-2 text-slate-500">{r.Z}</td>
-                                                <td className="px-3 py-2 text-slate-500">{r['Folio Cancelacion']}</td>
-                                                <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{new Date(r.FechaCancelacion).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})}</td>
-                                                <td className="px-3 py-2 font-bold text-slate-700">{r.Cantidad}</td>
-                                                <td className="px-3 py-2 text-slate-500">{r['Codigo Barras']}</td>
-                                                <td className="px-3 py-2 text-slate-700 max-w-[200px] truncate">{r.Descripcion}</td>
-                                                <td className="px-3 py-2 text-slate-500">{fmt(r['Precio Venta'])}</td>
-                                                <td className="px-3 py-2 font-bold text-rose-600">{fmt(r.Total)}</td>
-                                                <td className="px-3 py-2 text-slate-500">{r.Cajero}</td>
-                                                <td className="px-3 py-2 text-slate-500">{r.Supervisor}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
-                        <div className="p-3 bg-slate-50 border-t border-slate-100 text-[10px] font-bold text-slate-400 uppercase shrink-0">
-                            {detailData.length} registros · {fechaInicio} a {fechaFin}
-                        </div>
-                    </div>
-                </div>
-            )}
+            <CancellationDetailModal
+                isOpen={detailModal.isOpen}
+                onClose={() => setDetailModal({ ...detailModal, isOpen: false })}
+                idTienda={detailModal.idTienda}
+                storeName={detailModal.storeName}
+                idUsuario={detailModal.idUsuario}
+                userName={detailModal.userName}
+                role={detailModal.role}
+                fechaInicio={fechaInicio}
+                fechaFin={fechaFin}
+            />
 
             {/* AI Summary Modal */}
             {aiSummary !== null && (

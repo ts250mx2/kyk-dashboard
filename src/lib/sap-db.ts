@@ -21,7 +21,8 @@ const sqlConfig: sql.config = {
     },
     options: {
         encrypt: false,
-        trustServerCertificate: true
+        trustServerCertificate: true,
+        useUTC: false
     },
     requestTimeout: 90000 // 90 seconds for larger SAP queries
 };

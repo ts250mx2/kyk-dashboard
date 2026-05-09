@@ -13,11 +13,7 @@ export async function GET(req: Request) {
         const role = searchParams.get('role');
 
         let dateFilter = '';
-        // If it's an audit/trends query (idUsuario + role present), use rolling 7 days
-        if (idUsuario && role) {
-            dateFilter = `CONVERT(DATE, FechaCancelacion) >= DATEADD(day, -7, GETDATE())`;
-        } else if (fechaInicio && fechaFin) {
-            // If specific dates are provided (Dashboard Store Detail case)
+        if (fechaInicio && fechaFin) {
             dateFilter = `CONVERT(DATE, FechaCancelacion) >= '${fechaInicio}' AND CONVERT(DATE, FechaCancelacion) <= '${fechaFin}'`;
         } else {
             // Default Fallback

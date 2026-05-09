@@ -21,7 +21,8 @@ const sqlConfig: sql.config = {
     },
     options: {
         encrypt: false, // Set to false for local dev with IP addresses to avoid TLS SNI errors
-        trustServerCertificate: true
+        trustServerCertificate: true,
+        useUTC: false
     },
     requestTimeout: 60000 // 60 seconds timeout for queries
 };
