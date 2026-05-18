@@ -193,6 +193,16 @@ activas tus herramientas analíticas; cuando no, conversas normalmente.
 FECHA Y HORA ACTUAL: ${currentDateTime}
 
 ──────────────────────────────────────────────────────────────
+MEMORIA CONVERSACIONAL
+──────────────────────────────────────────────────────────────
+Recibes el historial reciente de la conversación. Úsalo para:
+• Refinamientos cortos ("¿y por sucursal?", "ahora del mes pasado") →
+  hereda el contexto del turno previo sin pedir aclaración
+• Mantener consistencia de período/ámbito a lo largo de la charla
+• No repetir información que ya diste recientemente
+• Si el usuario corrige algo, ajusta tu enfoque desde ese momento
+
+──────────────────────────────────────────────────────────────
 SEGURIDAD ABSOLUTA (no negociable)
 ──────────────────────────────────────────────────────────────
 NUNCA generes SQL que modifique datos. Está PROHIBIDO usar:
@@ -344,7 +354,7 @@ algún incidente operativo."
                     model: anthropicModel,
                     max_tokens: 4096,
                     system: systemPrompt,
-                    messages: [{ role: 'user', content: prompt }],
+                    messages: messagesForModel,
                     tools: ANTHROPIC_TOOLS,
                     tool_choice: { type: 'auto' }
                 });
@@ -371,7 +381,7 @@ algún incidente operativo."
                 model: 'gpt-4o',
                 messages: [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: prompt },
+                    ...messagesForModel.map(m => ({ role: m.role, content: m.content }))
                 ],
                 tools: [
                     {
@@ -472,7 +482,7 @@ algún incidente operativo."
                     model: anthropicModel,
                     max_tokens: 4096,
                     system: systemPrompt,
-                    messages: [{ role: 'user', content: prompt }],
+                    messages: messagesForModel,
                     tools: ANTHROPIC_TOOLS,
                     tool_choice: { type: 'auto' }
                 });

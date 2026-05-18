@@ -357,11 +357,18 @@ export function ChatAgent() {
         };
 
         try {
+            // Construir historial: los últimos N turnos previos al actual
+            // (excluyendo el user que acabamos de agregar y el assistant vacío)
+            const history = messages
+                .filter(m => m.content && m.content.trim())
+                .slice(-12)
+                .map(m => ({ role: m.role, content: m.content }));
+
             const endpoint = useStreaming ? '/api/query?stream=true' : '/api/query';
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: finalPrompt, model: selectedModel }),
+                body: JSON.stringify({ prompt: finalPrompt, model: selectedModel, history }),
                 signal: controller.signal
             });
 
