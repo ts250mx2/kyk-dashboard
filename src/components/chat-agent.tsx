@@ -44,7 +44,8 @@ interface Message {
     }>;
     // Streaming state
     streaming?: boolean;
-    streamPhase?: 'thinking' | 'querying' | 'correcting-sql' | 'analyzing' | 'finalizing';
+    streamPhase?: 'thinking' | 'querying' | 'correcting-sql' | 'investigating' | 'analyzing' | 'finalizing';
+    streamPhaseDetail?: string;
     awaitingMetadata?: boolean;
 }
 
@@ -52,6 +53,7 @@ const STREAM_PHASE_LABELS: Record<NonNullable<Message['streamPhase']>, string> =
     'thinking': 'Pensando...',
     'querying': 'Consultando datos...',
     'correcting-sql': 'Ajustando consulta...',
+    'investigating': 'Investigando causa...',
     'analyzing': 'Analizando resultados...',
     'finalizing': 'Preparando análisis...'
 };
@@ -403,7 +405,8 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                     switch (evt.event) {
                         case 'status': {
                             const phase = evt.data?.phase as Message['streamPhase'];
-                            if (phase) updateAssistant({ streamPhase: phase });
+                            const detail = evt.data?.detail as string | undefined;
+                            if (phase) updateAssistant({ streamPhase: phase, streamPhaseDetail: detail });
                             break;
                         }
                         case 'text-delta': {
@@ -711,15 +714,34 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                             <div className="px-6 py-5">
                                                 {/* Indicador de fase streaming (antes de que llegue texto) */}
                                                 {message.streaming && message.streamPhase && !message.content && (
-                                                    <div className="flex items-center gap-2 text-slate-500 animate-in fade-in duration-200">
-                                                        <div className="flex space-x-1">
-                                                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                                                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                                                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
+                                                    <div className="flex flex-col gap-1 animate-in fade-in duration-200">
+                                                        <div className="flex items-center gap-2 text-slate-500">
+                                                            <div className="flex space-x-1">
+                                                                <div className={cn(
+                                                                    "w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:-0.3s]",
+                                                                    message.streamPhase === 'investigating' ? 'bg-amber-500' : 'bg-indigo-500'
+                                                                )} />
+                                                                <div className={cn(
+                                                                    "w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:-0.15s]",
+                                                                    message.streamPhase === 'investigating' ? 'bg-amber-500' : 'bg-indigo-500'
+                                                                )} />
+                                                                <div className={cn(
+                                                                    "w-1.5 h-1.5 rounded-full animate-bounce",
+                                                                    message.streamPhase === 'investigating' ? 'bg-amber-500' : 'bg-indigo-500'
+                                                                )} />
+                                                            </div>
+                                                            <span className={cn(
+                                                                "text-[11px] font-bold uppercase tracking-[0.15em]",
+                                                                message.streamPhase === 'investigating' ? 'text-amber-600' : 'text-slate-400'
+                                                            )}>
+                                                                {STREAM_PHASE_LABELS[message.streamPhase]}
+                                                            </span>
                                                         </div>
-                                                        <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
-                                                            {STREAM_PHASE_LABELS[message.streamPhase]}
-                                                        </span>
+                                                        {message.streamPhaseDetail && (
+                                                            <p className="text-[12px] text-slate-500 italic pl-5 mt-1 leading-snug">
+                                                                {message.streamPhaseDetail}
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 )}
 

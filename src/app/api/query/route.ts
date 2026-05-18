@@ -5,6 +5,7 @@ import { query } from '@/lib/db';
 import { findRelevantReports } from '@/lib/available-reports';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import { createSseStream, SSE_HEADERS } from '@/lib/sse';
+import { proposeFollowUp, FollowUpProposal } from '@/lib/investigator';
 import fs from 'fs';
 import path from 'path';
 import { cookies } from 'next/headers';
@@ -577,10 +578,58 @@ algún incidente operativo."
                         results = await query(safeCorrected);
                     }
 
+                    // MODO INVESTIGADOR: si detectamos algo anómalo, encadena UNA query
+                    // de follow-up automática para entender la causa raíz
+                    let followUp: FollowUpProposal | null = null;
+                    let followUpResults: any[] = [];
+                    let followUpSql: string | null = null;
+
+                    if (results.length > 0) {
+                        try {
+                            followUp = await proposeFollowUp({
+                                userPrompt: prompt,
+                                firstSql: lastSql || '',
+                                firstResults: results,
+                                schemaContext: schemaString,
+                                model: anthropicModel
+                            });
+                        } catch (e) {
+                            console.error('Investigator failed:', e);
+                        }
+
+                        if (followUp) {
+                            emit({
+                                event: 'status',
+                                data: {
+                                    phase: 'investigating',
+                                    detail: followUp.question,
+                                    rationale: followUp.rationale
+                                }
+                            });
+                            try {
+                                const safeFollowUpSql = assertReadOnly(followUp.sql);
+                                followUpSql = safeFollowUpSql;
+                                followUpResults = await query(safeFollowUpSql);
+                            } catch (e) {
+                                console.error('Follow-up query failed:', e);
+                                followUp = null; // descartar si falla
+                                followUpSql = null;
+                                followUpResults = [];
+                            }
+                        }
+                    }
+
                     // Stream del análisis
                     emit({ event: 'status', data: { phase: 'analyzing' } });
 
-                    const metaPrompt = buildMetaPrompt(prompt, lastSql, results);
+                    const metaPrompt = buildMetaPrompt(
+                        prompt,
+                        lastSql,
+                        results,
+                        followUp && followUpResults.length > 0
+                            ? { question: followUp.question, sql: followUpSql, results: followUpResults }
+                            : null
+                    );
 
                     const streamResp = anthropic.messages.stream({
                         model: anthropicModel,
@@ -842,16 +891,41 @@ algún incidente operativo."
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-function buildMetaPrompt(prompt: string, sql: string | null, results: any[]): string {
+interface FollowUpContext {
+    question: string;
+    sql: string | null;
+    results: any[];
+}
+
+function buildMetaPrompt(
+    prompt: string,
+    sql: string | null,
+    results: any[],
+    followUp?: FollowUpContext | null
+): string {
+    const followUpSection = followUp && followUp.results.length > 0 ? `
+
+INVESTIGACIÓN AUTOMÁTICA EJECUTADA:
+Detectaste algo anómalo en la primera consulta y ejecutaste una segunda
+para profundizar. Integra AMBAS en tu análisis — no las trates como
+separadas. Tu respuesta debe contar la historia completa: el dato inicial
++ lo que descubriste al investigar.
+
+Pregunta de la investigación: ${followUp.question}
+SQL de la investigación: ${followUp.sql}
+Resultados de la investigación (primeros 10): ${JSON.stringify(followUp.results.slice(0, 10))}
+` : '';
+
     return `Eres Kesito, consultor senior conversacional. Acabas de ejecutar una consulta
 y tienes los resultados. Vas a responder en DOS partes separadas por un marcador.
 
 PARTE 1 — Texto en prosa fluida (lo primero que verá el usuario):
-• 2-4 oraciones máximo
+• 2-4 oraciones máximo (puede ser 4-6 si hubo investigación adicional)
 • Cifras INLINE con **negritas Markdown** (ej: "**$1.4M**", "**+12%**")
 • Tono: consultor amigable, no robótico
 • NO bullets, NO encabezados, NO repitas la pregunta
 • NO digas "¿quieres profundizar?" — los botones ya aparecen en la UI
+${followUp ? '• Menciona el hallazgo principal Y lo que reveló la investigación, como una sola narrativa fluida' : ''}
 
 DESPUÉS DEL TEXTO, en una nueva línea, escribe EXACTAMENTE este marcador:
 ${META_MARKER}
@@ -873,7 +947,7 @@ REGLAS DE VISUALIZACIÓN:
 ──────────────────────────────────────────────
 Pregunta del usuario: ${prompt}
 SQL ejecutado: ${sql}
-Resultados (primeros 10): ${JSON.stringify(results.slice(0, 10))}
+Resultados (primeros 10): ${JSON.stringify(results.slice(0, 10))}${followUpSection}
 ──────────────────────────────────────────────
 
 Empieza la respuesta directamente, sin preámbulos.`;
