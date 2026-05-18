@@ -7,7 +7,12 @@ import { cn } from '@/lib/utils';
 import {
     X,
     Maximize2,
-    Trash2
+    Trash2,
+    Lightbulb,
+    Target,
+    ChevronDown,
+    ChevronUp,
+    ExternalLink
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -21,10 +26,13 @@ interface Message {
     timestamp?: number;
     error?: string;
     ai_model?: string;
+    key_insights?: string[];
+    recommendations?: string[];
     suggested_reports?: Array<{
         report_name: string;
         reason: string;
         expected_action?: string;
+        path?: string;
     }>;
 }
 
@@ -110,7 +118,24 @@ export function ChatAgent() {
     const [defaultSuggestions, setDefaultSuggestions] = useState<string[]>([]);
     const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [expandedInsights, setExpandedInsights] = useState<Record<number, boolean>>({});
+    const [expandedRecommendations, setExpandedRecommendations] = useState<Record<number, boolean>>({});
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const toggleInsights = (index: number) => {
+        setExpandedInsights(prev => ({ ...prev, [index]: !prev[index] }));
+    };
+
+    const toggleRecommendations = (index: number) => {
+        setExpandedRecommendations(prev => ({ ...prev, [index]: !prev[index] }));
+    };
+
+    const navigateToReport = (path?: string) => {
+        if (path) {
+            router.push(path);
+            setIsOpen(false);
+        }
+    };
 
     const loadDefaultSuggestions = useCallback(async () => {
         if (pathname === '/dashboard/chat') {
@@ -218,6 +243,8 @@ export function ChatAgent() {
                     suggestedQuestions: data.suggested_questions,
                     timestamp: Date.now(),
                     ai_model: data.ai_model,
+                    key_insights: data.key_insights,
+                    recommendations: data.recommendations,
                     suggested_reports: data.suggested_reports,
                 };
                 setMessages((prev) => [...prev, assistantMsg]);
@@ -355,14 +382,14 @@ export function ChatAgent() {
                                                 </div>
                                             </div>
 
-                                            {/* Analysis Content */}
+                                            {/* Analysis Content - Respuesta Corta */}
                                             <div className="px-6 py-6 group">
-                                                <p className="text-[16px] leading-relaxed text-slate-700 font-medium whitespace-pre-wrap mb-6">
+                                                <p className="text-[15px] leading-relaxed text-slate-700 font-medium whitespace-pre-wrap mb-5">
                                                     {message.content}
                                                 </p>
 
                                                 {message.results && message.results.length > 0 && !(message.results.length === 1 && Object.keys(message.results[0]).length === 1) && (
-                                                    <div className="mt-2 animate-in zoom-in-95 duration-700 delay-200">
+                                                    <div className="mt-2 mb-2 animate-in zoom-in-95 duration-700 delay-200">
                                                         <ResultsDisplay
                                                             data={message.results}
                                                             sql={message.sql || ''}
@@ -372,16 +399,92 @@ export function ChatAgent() {
                                                     </div>
                                                 )}
 
-                                                {/* Suggested Reports - Aparece al final, después del análisis */}
+                                                {/* Botones para profundizar: Hallazgos clave + Recomendaciones */}
+                                                {((message.key_insights && message.key_insights.length > 0) || (message.recommendations && message.recommendations.length > 0)) && (
+                                                    <div className="mt-6 flex flex-wrap gap-2">
+                                                        {message.key_insights && message.key_insights.length > 0 && (
+                                                            <button
+                                                                onClick={() => toggleInsights(index)}
+                                                                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-full transition-all border bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 active:scale-95"
+                                                            >
+                                                                <Lightbulb className="w-3.5 h-3.5" />
+                                                                <span>Hallazgos clave</span>
+                                                                {expandedInsights[index] ? (
+                                                                    <ChevronUp className="w-3.5 h-3.5" />
+                                                                ) : (
+                                                                    <ChevronDown className="w-3.5 h-3.5" />
+                                                                )}
+                                                            </button>
+                                                        )}
+                                                        {message.recommendations && message.recommendations.length > 0 && (
+                                                            <button
+                                                                onClick={() => toggleRecommendations(index)}
+                                                                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-full transition-all border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 active:scale-95"
+                                                            >
+                                                                <Target className="w-3.5 h-3.5" />
+                                                                <span>Recomendaciones</span>
+                                                                {expandedRecommendations[index] ? (
+                                                                    <ChevronUp className="w-3.5 h-3.5" />
+                                                                ) : (
+                                                                    <ChevronDown className="w-3.5 h-3.5" />
+                                                                )}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Hallazgos clave - Desplegable */}
+                                                {expandedInsights[index] && message.key_insights && message.key_insights.length > 0 && (
+                                                    <div className="mt-4 bg-indigo-50 border border-indigo-100 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+                                                        <ul className="space-y-2">
+                                                            {message.key_insights.map((insight, idx) => (
+                                                                <li key={idx} className="text-[13px] text-slate-700 leading-snug flex items-start">
+                                                                    <span className="inline-block w-1.5 h-1.5 bg-indigo-600 rounded-full mr-3 mt-1.5 flex-shrink-0" />
+                                                                    <span>{insight}</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+
+                                                {/* Recomendaciones - Desplegable */}
+                                                {expandedRecommendations[index] && message.recommendations && message.recommendations.length > 0 && (
+                                                    <div className="mt-4 bg-emerald-50 border border-emerald-100 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+                                                        <ul className="space-y-2">
+                                                            {message.recommendations.map((rec, idx) => (
+                                                                <li key={idx} className="text-[13px] text-slate-700 leading-snug flex items-start">
+                                                                    <span className="inline-block w-1.5 h-1.5 bg-emerald-600 rounded-full mr-3 mt-1.5 flex-shrink-0" />
+                                                                    <span>{rec}</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+
+                                                {/* Reportes sugeridos - Clickeables que navegan */}
                                                 {message.suggested_reports && message.suggested_reports.length > 0 && (
                                                     <div className="mt-8 pt-6 border-t border-slate-100 animate-in fade-in duration-700 delay-400">
                                                         <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 block mb-4">Reportes para profundizar</span>
                                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                             {message.suggested_reports.map((report, idx) => (
-                                                                <div key={idx} className="bg-slate-50 hover:bg-slate-100 p-3 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all cursor-default">
-                                                                    <p className="text-xs font-bold text-slate-800 mb-1">📊 {report.report_name}</p>
-                                                                    <p className="text-[11px] text-slate-500 leading-snug">{report.reason}</p>
-                                                                </div>
+                                                                <button
+                                                                    key={idx}
+                                                                    onClick={() => navigateToReport(report.path)}
+                                                                    disabled={!report.path}
+                                                                    className="group/report text-left bg-slate-50 hover:bg-indigo-50 disabled:hover:bg-slate-50 disabled:cursor-not-allowed p-3 rounded-2xl border border-slate-100 hover:border-indigo-200 transition-all active:scale-95"
+                                                                >
+                                                                    <div className="flex items-start justify-between gap-2">
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <p className="text-xs font-bold text-slate-800 group-hover/report:text-indigo-700 mb-1 flex items-center gap-1.5">
+                                                                                📊 {report.report_name}
+                                                                            </p>
+                                                                            <p className="text-[11px] text-slate-500 leading-snug">{report.reason}</p>
+                                                                        </div>
+                                                                        {report.path && (
+                                                                            <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover/report:text-indigo-600 flex-shrink-0 mt-0.5" />
+                                                                        )}
+                                                                    </div>
+                                                                </button>
                                                             ))}
                                                         </div>
                                                     </div>

@@ -187,43 +187,33 @@ PROTOCOLOS OPERACIONALES:
    - Reportar error al usuario solo si autocorrección falla
 
 ════════════════════════════════════════════════════════════════════
-ESTRUCTURA DE RESPUESTA (IMPORTANTE):
+ESTRUCTURA DE RESPUESTA - MUY RESUMIDA:
 ════════════════════════════════════════════════════════════════════
 
-La respuesta debe ser FLUIDA y CONVERSACIONAL, NO con secciones rígidas.
+La respuesta debe ser BREVE y DIRECTA. MÁXIMO 2-3 LÍNEAS.
 
 ESTRUCTURA CORRECTA:
+- 1-2 oraciones con el dato principal y métrica clave
+- Incluye período y ámbito (sucursal/consolidado)
+- NO incluyas hallazgos clave, recomendaciones ni análisis extenso
+- Esos detalles los entregarás SI el usuario pide profundizar
 
-[Párrafo 1 - 2-3 líneas]
-Resumen del hallazgo principal con métricas concretas, período y ámbito.
-Ejemplo: "Las ventas de mayo alcanzaron $2.8M en las 5 sucursales,
-12% por encima del mes anterior, impulsadas por la sucursal Centro
-con un crecimiento del 18%."
+EJEMPLO CORRECTO:
+"Las ventas de mayo alcanzaron $2.8M en las 5 sucursales, 12% por
+encima del mes anterior. Centro lidera con $720K."
 
-[Párrafo 2 - Análisis profundo]
-Explica los patrones, factores explicativos, anomalías detectadas y
-contexto de negocio. Cruza dimensiones cuando sea relevante.
-
-[Párrafo final - SUGERENCIAS INTEGRADAS]
-Al FINAL de tu análisis, de forma CONVERSACIONAL y NATURAL, sugiere
-de manera fluida:
-- 1-2 oportunidades o focos de atención que detectaste
-- 1-2 acciones que podrían explorarse
-- Pregunta abierta o invitación a profundizar
-
-Ejemplo de párrafo final:
-"Si te interesa profundizar, podrías analizar qué productos específicos
-están impulsando el crecimiento en Centro, o evaluar si esta tendencia
-es replicable en sucursales rezagadas como Sur. ¿Quieres que revise
-algún ángulo en particular?"
+EJEMPLO INCORRECTO (demasiado largo):
+"Las ventas de mayo alcanzaron $2.8M consolidadas en las 5 sucursales,
+representando un crecimiento del 12% vs abril. La sucursal Centro destacó
+con $720K (26% del total), seguida por Norte con $560K... [BLOQUEADO]"
 
 REGLAS CRÍTICAS:
-✗ NO uses encabezados tipo "Hallazgos Clave:" o "Recomendaciones:"
-✗ NO uses listas con bullets para hallazgos o recomendaciones
-✗ NO separes en secciones formales el análisis
-✓ SÍ integra las sugerencias en prosa fluida al final
-✓ SÍ haz que el cierre invite a continuar el análisis
-✓ SÍ usa un tono profesional pero conversacional
+✗ PROHIBIDO respuestas largas (más de 3 líneas)
+✗ PROHIBIDO encabezados "Hallazgos Clave:", "Recomendaciones:"
+✗ PROHIBIDO listas con bullets dentro del mensaje
+✗ PROHIBIDO frases de cierre tipo "¿quieres que profundice?"
+✓ SÍ respuesta corta, dato puro con contexto mínimo
+✓ SÍ el usuario podrá pedir profundizar con botones aparte
 
 ════════════════════════════════════════════════════════════════════
 PROTOCOLO DE SUGERENCIA DE REPORTES:
@@ -472,39 +462,41 @@ Usuario: "¿Cómo va el negocio?"
                     results = await query(correctedSql);
                 }
 
-                // ANALYTICAL METADATA & CONVERSATIONAL PROFESSIONAL ANALYSIS
+                // ANALYTICAL METADATA - SHORT RESPONSE + ON-DEMAND DEEP DIVE
                 const metaSystem = `Eres un Analista de Datos Senior especializado en retail BI.
 
-Genera un análisis PROFESIONAL pero CONVERSACIONAL en prosa fluida.
+Genera una RESPUESTA CORTA Y DIRECTA (máximo 2-3 líneas) y prepara contenido
+opcional para que el usuario pueda profundizar bajo demanda.
 
-ESTRUCTURA DE 'analysis' (texto plano, sin encabezados ni bullets):
+REGLAS DEL CAMPO 'summary' (respuesta principal):
+- MÁXIMO 2-3 líneas de prosa directa
+- Incluye dato principal con cifras concretas + período + ámbito
+- NO incluyas hallazgos, recomendaciones o análisis extenso aquí
+- NO uses frases de cierre tipo "¿quieres profundizar?"
+- Ejemplo: "Las ventas de mayo alcanzaron $2.8M en las 5 sucursales,
+  12% por encima del mes anterior. Centro lidera con $720K."
 
-Párrafo 1 (2-3 líneas):
-Hallazgo principal con métricas concretas. Incluye SIEMPRE período y ámbito
-(sucursal/consolidado). Ejemplo: "Las ventas del 15 al 17 de mayo alcanzaron
-$485K consolidados en las 5 sucursales, con Centro liderando con $142K (29%)."
+REGLAS DEL CAMPO 'key_insights' (3-4 hallazgos):
+- Cada hallazgo es 1 oración corta y específica
+- Incluye datos concretos (cifras, porcentajes)
+- Identifica patrones, anomalías, oportunidades
 
-Párrafo 2 (3-5 líneas):
-Análisis profundo: patrones detectados, factores explicativos, anomalías,
-contexto comparativo. Cruza dimensiones cuando sea relevante.
-
-Párrafo final (2-3 líneas) - INTEGRADO COMO PROSA:
-Sugerencias CONVERSACIONALES sobre qué profundizar, focos de atención
-detectados, y una invitación abierta a continuar el análisis.
-Ejemplo: "Si te interesa, podríamos revisar qué productos están impulsando
-el crecimiento en Centro o evaluar por qué Sur está rezagada. ¿Quieres
-que profundice en algún ángulo específico?"
-
-REGLAS:
-✗ PROHIBIDO usar "Hallazgos Clave:", "Recomendaciones:", bullets, listas
-✗ PROHIBIDO secciones formales o estructuras rígidas
-✓ Prosa fluida, profesional pero accesible
-✓ Métricas concretas con cifras y porcentajes
-✓ Cierre con invitación natural a profundizar
+REGLAS DEL CAMPO 'recommendations' (2-3 recomendaciones):
+- Cada recomendación es una acción concreta y priorizada
+- Indica el impacto esperado cuando sea posible
 
 RETORNA JSON:
 {
-  "analysis": "Texto completo en 3 párrafos fluidos como se describió arriba",
+  "summary": "Respuesta corta de 2-3 líneas con el dato principal",
+  "key_insights": [
+    "Hallazgo 1 con dato concreto",
+    "Hallazgo 2 con dato concreto",
+    "Hallazgo 3 con dato concreto"
+  ],
+  "recommendations": [
+    "Acción específica 1 con impacto esperado",
+    "Acción específica 2 con impacto esperado"
+  ],
   "visualization": "table|bar|line|pie|area",
   "suggested_questions": ["Pregunta concisa 1", "Pregunta 2", "Pregunta 3"]
 }`;
@@ -534,7 +526,7 @@ RETORNA JSON:
                     meta = JSON.parse(metaCompletion.choices[0].message.content || '{}');
                 }
 
-                const fullAnalysis = meta.analysis || "Análisis completado.";
+                const shortSummary = meta.summary || meta.analysis || "Análisis completado.";
 
                 // Generar recomendaciones de reportes basado en la pregunta
                 let suggestedReports: any[] = [];
@@ -543,7 +535,8 @@ RETORNA JSON:
                     suggestedReports = relevantReports.slice(0, 3).map(item => ({
                         report_name: item.report.name,
                         reason: item.report.description,
-                        expected_action: item.report.useCases[0]
+                        expected_action: item.report.useCases[0],
+                        path: item.report.path
                     }));
                 }
 
@@ -551,9 +544,11 @@ RETORNA JSON:
                     data: results,
                     sql: lastSql,
                     ai_model: selectedModel,
-                    message: fullAnalysis,
+                    message: shortSummary,
                     visualization: meta.visualization || 'table',
                     suggested_questions: meta.suggested_questions || [],
+                    key_insights: meta.key_insights || [],
+                    recommendations: meta.recommendations || [],
                     suggested_reports: suggestedReports.length > 0 ? suggestedReports : undefined
                 };
             } else if (toolCall.name === 'suggest_reports') {
