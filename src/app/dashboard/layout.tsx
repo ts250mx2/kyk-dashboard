@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
+import { usePathname } from "next/navigation"
 import { Sidebar } from "@/components/dashboard/Sidebar"
 import { Header } from "@/components/dashboard/Header"
 import { ChatAgent } from "@/components/chat-agent"
@@ -12,6 +13,9 @@ export default function DashboardLayout({
     children: React.ReactNode
 }) {
     const [isCollapsed, setIsCollapsed] = useState(false)
+    const pathname = usePathname()
+    // Ocultar el widget flotante cuando estamos en la página dedicada del chat
+    const isChatPage = pathname === '/dashboard/chat'
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -30,14 +34,18 @@ export default function DashboardLayout({
                     "flex-1 transition-all duration-300 min-w-0",
                     isCollapsed ? "lg:pl-[80px]" : "lg:pl-72"
                 )}>
-                    <div className="p-4 sm:p-8 md:p-10 max-w-[1600px] mx-auto">
+                    <div className={cn(
+                        isChatPage
+                            ? "h-[calc(100vh-64px)]"
+                            : "p-4 sm:p-8 md:p-10 max-w-[1600px] mx-auto"
+                    )}>
                         {children}
                     </div>
                 </main>
             </div>
 
-            {/* Floating AI Agent */}
-            <ChatAgent />
+            {/* Floating AI Agent (oculto en página dedicada del chat) */}
+            {!isChatPage && <ChatAgent />}
         </div>
     )
 }

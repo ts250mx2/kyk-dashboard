@@ -144,10 +144,19 @@ const DEFAULT_FALLBACK = [
     'Oportunidades de optimización identificadas'
 ];
 
-export function ChatAgent() {
+interface ChatAgentProps {
+    /**
+     * - 'floating': widget flotante (botón en esquina inferior derecha)
+     * - 'embedded': ocupa todo el contenedor padre, sin botón ni overlay
+     */
+    mode?: 'floating' | 'embedded';
+}
+
+export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
     const pathname = usePathname();
     const router = useRouter();
-    const [isOpen, setIsOpen] = useState(false);
+    const isEmbedded = mode === 'embedded';
+    const [isOpen, setIsOpen] = useState(isEmbedded);
     const [messages, setMessages] = useState<Message[]>([]);
     const [defaultSuggestions, setDefaultSuggestions] = useState<string[]>([]);
     const [dailyInsights, setDailyInsights] = useState<DailyInsight[]>([]);
@@ -500,15 +509,19 @@ export function ChatAgent() {
 
     return (
         <div
-            className="fixed z-[9999] flex flex-col items-end"
-            style={{
+            className={cn(
+                isEmbedded
+                    ? "relative w-full h-full flex flex-col"
+                    : "fixed z-[9999] flex flex-col items-end"
+            )}
+            style={isEmbedded ? undefined : {
                 bottom: `calc(1.5rem + ${-position.y}px)`,
                 right: `calc(1.5rem + ${-position.x}px)`,
                 touchAction: 'none'
             }}
         >
-            {/* Chat Trigger */}
-            {!isOpen && (
+            {/* Chat Trigger - solo en modo floating */}
+            {!isEmbedded && !isOpen && (
                 <button
                     onClick={() => setIsOpen(true)}
                     className="group relative flex items-center justify-center w-16 h-16 bg-white border border-slate-200 text-indigo-600 rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 animate-in zoom-in"
@@ -521,7 +534,12 @@ export function ChatAgent() {
 
             {/* Chat Window */}
             {isOpen && (
-                <div className="bg-slate-50 border border-slate-200 shadow-2xl flex flex-col mb-4 overflow-hidden transition-all duration-300 ease-in-out w-[380px] md:w-[850px] h-[500px] md:h-[85vh] rounded-[32px]">
+                <div className={cn(
+                    "bg-slate-50 flex flex-col overflow-hidden",
+                    isEmbedded
+                        ? "w-full h-full"
+                        : "border border-slate-200 shadow-2xl mb-4 transition-all duration-300 ease-in-out w-[380px] md:w-[850px] h-[500px] md:h-[85vh] rounded-[32px]"
+                )}>
                     {/* Header */}
                     <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between">
                         <div className="flex items-center space-x-4">
@@ -540,16 +558,20 @@ export function ChatAgent() {
                             <button onClick={handleClear} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title="Limpiar chat">
                                 <Trash2 className="w-5 h-5" />
                             </button>
-                            <button
-                                onClick={() => router.push('/chat')}
-                                className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400"
-                                title="Abrir en página completa"
-                            >
-                                <Maximize2 className="w-5 h-5" />
-                            </button>
-                            <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400">
-                                <X className="w-6 h-6" />
-                            </button>
+                            {!isEmbedded && (
+                                <>
+                                    <button
+                                        onClick={() => router.push('/dashboard/chat')}
+                                        className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400"
+                                        title="Abrir en página completa"
+                                    >
+                                        <Maximize2 className="w-5 h-5" />
+                                    </button>
+                                    <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400">
+                                        <X className="w-6 h-6" />
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
 
