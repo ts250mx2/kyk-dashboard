@@ -8,7 +8,8 @@
       "Bash(git commit -m 'Respuestas concisas + profundizar bajo demanda + reportes clickeables *)",
       "Bash(git commit -m 'Agente conversacional + UX rediseñada + briefing narrativo + sandbox SQL *)",
       "Bash(git rm *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(npx tsx *)"
     ]
   }
 }

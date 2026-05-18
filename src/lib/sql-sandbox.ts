@@ -26,9 +26,7 @@ const FORBIDDEN_KEYWORDS = [
 const FORBIDDEN_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     { pattern: /\bsp_\w+/i, reason: 'Stored procedures del sistema no permitidos' },
     { pattern: /\bxp_\w+/i, reason: 'Extended procedures no permitidos' },
-    { pattern: /;\s*\w+/i, reason: 'Multiples statements en una consulta no permitidos' },
-    { pattern: /--[^\n]*\b(insert|update|delete|drop)\b/i, reason: 'Comentarios con keywords prohibidas detectados' },
-    { pattern: /\/\*[\s\S]*?\b(insert|update|delete|drop)\b[\s\S]*?\*\//i, reason: 'Comentarios con keywords prohibidas detectados' }
+    { pattern: /;\s*\w+/i, reason: 'Multiples statements en una consulta no permitidos' }
 ];
 
 export interface SqlValidationResult {

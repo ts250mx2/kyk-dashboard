@@ -6,6 +6,9 @@ import { findRelevantReports } from '@/lib/available-reports';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import { createSseStream, SSE_HEADERS } from '@/lib/sse';
 import { proposeFollowUp, FollowUpProposal } from '@/lib/investigator';
+import { queryLimiter } from '@/lib/rate-limit';
+import { getUserId } from '@/lib/conversations';
+import { recordMetric } from '@/lib/metrics';
 import fs from 'fs';
 import path from 'path';
 import { cookies } from 'next/headers';
@@ -85,8 +88,35 @@ export async function POST(req: Request) {
     let prompt = 'Unknown Prompt';
     let lastSql: string | null = null;
     let selectedModel = 'gpt-4o';
+    const startTime = Date.now();
+    const requestId = `req_${startTime.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
     try {
+        // Rate limit: 30 req/min por usuario para evitar abuso/runaway costs
+        const userIdForLimit = await getUserId().catch(() => 'anonymous');
+        const limit = queryLimiter.check(`query:${userIdForLimit}`);
+        if (!limit.allowed) {
+            void recordMetric({
+                userId: userIdForLimit,
+                endpoint: '/api/query',
+                status: 'rate_limited',
+                latencyMs: Date.now() - startTime,
+                errorMsg: `Bloqueado por rate limit (${Math.ceil(limit.retryAfterMs / 1000)}s)`,
+                extra: { requestId }
+            });
+            console.warn(`[${requestId}] rate-limited user=${userIdForLimit}`);
+            return NextResponse.json({
+                error: `Demasiadas consultas. Intenta de nuevo en ${Math.ceil(limit.retryAfterMs / 1000)}s.`,
+                retry_after_ms: limit.retryAfterMs
+            }, {
+                status: 429,
+                headers: {
+                    'Retry-After': String(Math.ceil(limit.retryAfterMs / 1000)),
+                    'X-RateLimit-Remaining': '0'
+                }
+            });
+        }
+
         const body = await req.json();
         prompt = body.prompt;
         selectedModel = body.model || 'gpt-4o';
@@ -475,11 +505,14 @@ algún incidente operativo."
         // BRANCH STREAMING (solo Claude por ahora)
         // ─────────────────────────────────────────────────────────────────
         if (useStreaming) {
+            let streamOutcome: 'ok' | 'error' = 'ok';
+            let streamError: string | undefined;
             const stream = createSseStream(async (emit) => {
-                emit({ event: 'status', data: { phase: 'thinking' } });
+                try {
+                    emit({ event: 'status', data: { phase: 'thinking' } });
 
-                // 1) Decisión de tool (no streamed, es rápido)
-                const decision = await anthropic.messages.create({
+                    // 1) Decisión de tool (no streamed, es rápido)
+                    const decision = await anthropic.messages.create({
                     model: anthropicModel,
                     max_tokens: 4096,
                     system: systemPrompt,
@@ -724,8 +757,26 @@ algún incidente operativo."
                     return;
                 }
 
-                emit({ event: 'error', data: { message: 'Tool desconocido' } });
-                emit({ event: 'done', data: {} });
+                    emit({ event: 'error', data: { message: 'Tool desconocido' } });
+                    emit({ event: 'done', data: {} });
+                } catch (err: any) {
+                    streamOutcome = 'error';
+                    streamError = err?.message || String(err);
+                    console.error(`[${requestId}] stream handler error:`, err);
+                    emit({ event: 'error', data: { message: streamError } });
+                    emit({ event: 'done', data: {} });
+                } finally {
+                    void recordMetric({
+                        userId: userIdForLimit,
+                        endpoint: '/api/query',
+                        model: selectedModel,
+                        streaming: true,
+                        latencyMs: Date.now() - startTime,
+                        status: streamOutcome,
+                        errorMsg: streamError,
+                        extra: { requestId }
+                    });
+                }
             });
 
             return new Response(stream, { headers: SSE_HEADERS });
@@ -876,10 +927,27 @@ algún incidente operativo."
         }
 
         await logRequest(prompt, finalResponse, lastSql);
+        void recordMetric({
+            userId: userIdForLimit,
+            endpoint: '/api/query',
+            model: selectedModel,
+            streaming: false,
+            latencyMs: Date.now() - startTime,
+            status: 'ok',
+            extra: { requestId, hasResults: !!finalResponse.data?.length }
+        });
         return NextResponse.json(finalResponse);
 
     } catch (error: any) {
-        console.error('API Error:', error);
+        console.error(`[${requestId}] API Error:`, error);
+        void recordMetric({
+            endpoint: '/api/query',
+            model: selectedModel,
+            latencyMs: Date.now() - startTime,
+            status: 'error',
+            errorMsg: error?.message || String(error),
+            extra: { requestId }
+        });
         return NextResponse.json({
             error: error.message || 'Error al procesar la consulta detallada.',
             sql: lastSql
