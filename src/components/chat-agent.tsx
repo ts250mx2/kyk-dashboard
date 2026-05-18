@@ -5,6 +5,7 @@ import { ChatInput } from '@/components/chat-input';
 import { AgentDataView } from '@/components/agent-data-view';
 import { InlineMarkdown } from '@/components/inline-markdown';
 import { ConversationsDropdown } from '@/components/conversations-dropdown';
+import { AlertsPanel, CreateAlertDraft } from '@/components/alerts-panel';
 import { readSseStream } from '@/lib/sse-client';
 import { cn } from '@/lib/utils';
 import {
@@ -630,6 +631,22 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                             </div>
                         </div>
                         <div className="flex items-center space-x-1">
+                            <AlertsPanel
+                                onCreateFromChat={() => {
+                                    // Si el último mensaje del asistente tiene SQL, lo proponemos como base
+                                    const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.sql);
+                                    if (!lastAssistant?.sql) return null;
+                                    const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                                    const draft: CreateAlertDraft = {
+                                        name: lastUser?.content?.slice(0, 80) || 'Alerta desde chat',
+                                        sql: lastAssistant.sql,
+                                        conditionType: 'gt',
+                                        conditionValue: 0,
+                                        frequency: 'hourly'
+                                    };
+                                    return draft;
+                                }}
+                            />
                             <ConversationsDropdown
                                 activeId={activeConversationId}
                                 onSelect={loadConversation}
