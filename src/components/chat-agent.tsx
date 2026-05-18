@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatInput } from '@/components/chat-input';
 import { ResultsDisplay } from '@/components/results-display';
 import { InlineMarkdown } from '@/components/inline-markdown';
+import { readSseStream } from '@/lib/sse-client';
 import { cn } from '@/lib/utils';
 import {
     X,
@@ -41,7 +42,19 @@ interface Message {
         expected_action?: string;
         path?: string;
     }>;
+    // Streaming state
+    streaming?: boolean;
+    streamPhase?: 'thinking' | 'querying' | 'correcting-sql' | 'analyzing' | 'finalizing';
+    awaitingMetadata?: boolean;
 }
+
+const STREAM_PHASE_LABELS: Record<NonNullable<Message['streamPhase']>, string> = {
+    'thinking': 'Pensando...',
+    'querying': 'Consultando datos...',
+    'correcting-sql': 'Ajustando consulta...',
+    'analyzing': 'Analizando resultados...',
+    'finalizing': 'Preparando análisis...'
+};
 
 interface DailyInsight {
     id: string;
@@ -146,6 +159,7 @@ export function ChatAgent() {
     const [expandedRecommendations, setExpandedRecommendations] = useState<Record<number, boolean>>({});
     const [expandedData, setExpandedData] = useState<Record<number, boolean>>({});
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const streamControllerRef = useRef<AbortController | null>(null);
 
     const fetchDailyInsights = useCallback(async (forceRefresh = false) => {
         const todayKey = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
@@ -306,54 +320,170 @@ export function ChatAgent() {
         setMessages((prev) => [...prev, userMsg]);
         setLoading(true);
 
+        const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'gpt-4o' : 'gpt-4o';
+        const useStreaming = selectedModel.includes('claude');
+
+        // Aborta cualquier stream previo
+        if (streamControllerRef.current) {
+            streamControllerRef.current.abort();
+        }
+        const controller = new AbortController();
+        streamControllerRef.current = controller;
+
+        // Crea el mensaje del asistente vacío que iremos llenando
+        const assistantTimestamp = Date.now();
+        let assistantIndex = -1;
+        setMessages((prev) => {
+            assistantIndex = prev.length;
+            return [...prev, {
+                role: 'assistant',
+                content: '',
+                timestamp: assistantTimestamp,
+                streaming: useStreaming,
+                streamPhase: useStreaming ? 'thinking' : undefined,
+                ai_model: selectedModel
+            }];
+        });
+
+        const updateAssistant = (patch: Partial<Message> | ((msg: Message) => Partial<Message>)) => {
+            setMessages((prev) => {
+                if (assistantIndex < 0 || assistantIndex >= prev.length) return prev;
+                const copy = [...prev];
+                const current = copy[assistantIndex];
+                const updates = typeof patch === 'function' ? patch(current) : patch;
+                copy[assistantIndex] = { ...current, ...updates };
+                return copy;
+            });
+        };
+
         try {
-            const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'gpt-4o' : 'gpt-4o';
-            const response = await fetch('/api/query', {
+            const endpoint = useStreaming ? '/api/query?stream=true' : '/api/query';
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt: finalPrompt, model: selectedModel }),
+                signal: controller.signal
             });
-            const data = await response.json();
 
-            if (response.ok) {
-                const assistantMsg: Message = {
-                    role: 'assistant',
+            if (!response.ok && !useStreaming) {
+                const data = await response.json().catch(() => ({}));
+                let errorContent = `Error: ${data.error || 'No se pudo procesar la solicitud'}`;
+                if (data.sql) errorContent += `\n\nConsulta SQL fallida:\n${data.sql}`;
+                updateAssistant({
+                    content: errorContent,
+                    streaming: false,
+                    streamPhase: undefined
+                });
+                return;
+            }
+
+            if (useStreaming) {
+                let accumulatedText = '';
+                let firstChunkReceived = false;
+
+                for await (const evt of readSseStream(response, controller.signal)) {
+                    switch (evt.event) {
+                        case 'status': {
+                            const phase = evt.data?.phase as Message['streamPhase'];
+                            if (phase) updateAssistant({ streamPhase: phase });
+                            break;
+                        }
+                        case 'text-delta': {
+                            const chunk = evt.data?.text || '';
+                            if (!firstChunkReceived) {
+                                firstChunkReceived = true;
+                                updateAssistant({ streamPhase: undefined });
+                            }
+                            accumulatedText += chunk;
+                            updateAssistant({ content: accumulatedText });
+                            break;
+                        }
+                        case 'clarification': {
+                            updateAssistant({
+                                content: evt.data?.message || '',
+                                suggestedQuestions: evt.data?.suggested_questions || [],
+                                ai_model: evt.data?.ai_model,
+                                streaming: false,
+                                streamPhase: undefined
+                            });
+                            break;
+                        }
+                        case 'metadata': {
+                            updateAssistant({
+                                sql: evt.data?.sql,
+                                results: evt.data?.data,
+                                visualization: evt.data?.visualization,
+                                suggestedQuestions: evt.data?.suggested_questions || [],
+                                key_insights: evt.data?.key_insights || [],
+                                recommendations: evt.data?.recommendations || [],
+                                suggested_reports: evt.data?.suggested_reports,
+                                conversational: evt.data?.conversational === true,
+                                ai_model: evt.data?.ai_model,
+                                awaitingMetadata: false
+                            });
+                            break;
+                        }
+                        case 'error': {
+                            updateAssistant({
+                                content: accumulatedText
+                                    ? `${accumulatedText}\n\n*(Error: ${evt.data?.message || 'fallo en el análisis'})*`
+                                    : `Error: ${evt.data?.message || 'No se pudo procesar la solicitud'}`,
+                                streaming: false,
+                                streamPhase: undefined
+                            });
+                            break;
+                        }
+                        case 'done': {
+                            updateAssistant({
+                                streaming: false,
+                                streamPhase: undefined,
+                                awaitingMetadata: false
+                            });
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Branch non-streaming (OpenAI o fallback)
+                const data = await response.json();
+                updateAssistant({
                     content: data.message || 'He procesado tu consulta.',
                     sql: data.sql,
                     visualization: data.visualization,
                     results: data.data,
                     suggestedQuestions: data.suggested_questions,
-                    timestamp: Date.now(),
                     ai_model: data.ai_model,
                     conversational: data.conversational === true,
                     key_insights: data.key_insights,
                     recommendations: data.recommendations,
                     suggested_reports: data.suggested_reports,
-                };
-                setMessages((prev) => [...prev, assistantMsg]);
-            } else {
-                let errorContent = `Error: ${data.error || 'No se pudo procesar la solicitud'}`;
-                if (data.sql) {
-                    errorContent += `\n\nConsulta SQL fallida:\n${data.sql}`;
-                }
-                setMessages((prev) => [...prev, {
-                    role: 'assistant',
-                    content: errorContent,
-                    timestamp: Date.now(),
-                }]);
+                    streaming: false,
+                    streamPhase: undefined
+                });
             }
-        } catch (err) {
-            setMessages((prev) => [...prev, {
-                role: 'assistant',
-                content: `Error de conexión: ${(err as Error).message}`,
-                timestamp: Date.now(),
-            }]);
+        } catch (err: any) {
+            if (err?.name === 'AbortError') {
+                updateAssistant({ streaming: false, streamPhase: undefined });
+            } else {
+                updateAssistant({
+                    content: `Error de conexión: ${err?.message || 'desconocido'}`,
+                    streaming: false,
+                    streamPhase: undefined
+                });
+            }
         } finally {
             setLoading(false);
+            if (streamControllerRef.current === controller) {
+                streamControllerRef.current = null;
+            }
         }
     };
 
     const handleClear = () => {
+        if (streamControllerRef.current) {
+            streamControllerRef.current.abort();
+            streamControllerRef.current = null;
+        }
         setMessages([]);
         localStorage.removeItem('kyk_integrated_chat_history');
         loadDefaultSuggestions();
@@ -548,11 +678,32 @@ export function ChatAgent() {
                                         <div className="flex flex-col">
                                             {/* Contenido principal del mensaje */}
                                             <div className="px-6 py-5">
+                                                {/* Indicador de fase streaming (antes de que llegue texto) */}
+                                                {message.streaming && message.streamPhase && !message.content && (
+                                                    <div className="flex items-center gap-2 text-slate-500 animate-in fade-in duration-200">
+                                                        <div className="flex space-x-1">
+                                                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                                                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                                                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
+                                                        </div>
+                                                        <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
+                                                            {STREAM_PHASE_LABELS[message.streamPhase]}
+                                                        </span>
+                                                    </div>
+                                                )}
+
                                                 {/* Respuesta conversacional con métricas inline */}
-                                                <InlineMarkdown
-                                                    text={message.content}
-                                                    className="text-[15px] leading-relaxed text-slate-700"
-                                                />
+                                                {message.content && (
+                                                    <div className="relative">
+                                                        <InlineMarkdown
+                                                            text={message.content}
+                                                            className="text-[15px] leading-relaxed text-slate-700"
+                                                        />
+                                                        {message.streaming && (
+                                                            <span className="inline-block w-1.5 h-4 ml-0.5 bg-indigo-500 align-middle animate-pulse" />
+                                                        )}
+                                                    </div>
+                                                )}
 
                                                 {/* Chips de acción contextuales — solo si NO es respuesta conversacional pura */}
                                                 {!message.conversational && (
@@ -700,7 +851,8 @@ export function ChatAgent() {
                             </div>
                         ))}
 
-                        {loading && (
+                        {/* Loader global: solo si NO hay un mensaje en streaming (que ya muestra el suyo) */}
+                        {loading && !messages.some(m => m.streaming) && (
                             <div className="flex items-start space-x-3 animate-in fade-in duration-300">
                                 <div className="p-4 bg-white border border-slate-200 rounded-[24px] rounded-tl-none shadow-xl flex items-center space-x-4">
                                     <div className="flex space-x-1">

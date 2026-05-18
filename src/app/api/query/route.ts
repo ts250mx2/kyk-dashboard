@@ -4,6 +4,7 @@ import { anthropic } from '@/lib/anthropic';
 import { query } from '@/lib/db';
 import { findRelevantReports } from '@/lib/available-reports';
 import { assertReadOnly } from '@/lib/sql-sandbox';
+import { createSseStream, SSE_HEADERS } from '@/lib/sse';
 import fs from 'fs';
 import path from 'path';
 import { cookies } from 'next/headers';
@@ -12,6 +13,65 @@ import { jwtVerify } from 'jose';
 const SECRET_KEY = new TextEncoder().encode(
     process.env.JWT_SECRET || 'your-secret-key-change-this-in-prod'
 );
+
+const META_MARKER = '---KESITO_META---';
+
+const ANTHROPIC_TOOLS: any[] = [
+    {
+        name: 'query_database',
+        description: 'Ejecuta análisis estratégico de datos en SQL Server para responder preguntas de negocio.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                sql: {
+                    type: 'string',
+                    description: 'Consulta T-SQL optimizada para análisis de negocio. Incluye agregaciones, comparativas y KPIs.'
+                }
+            },
+            required: ['sql']
+        }
+    },
+    {
+        name: 'suggest_reports',
+        description: 'Recomienda reportes específicos del sistema para profundizar en el análisis.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                main_insight: { type: 'string', description: 'El hallazgo principal que motivó las recomendaciones' },
+                recommended_reports: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            report_name: { type: 'string', description: 'Nombre exacto del reporte' },
+                            reason: { type: 'string', description: 'Por qué este reporte ayuda' },
+                            expected_action: { type: 'string', description: 'Qué esperar del análisis' }
+                        },
+                        required: ['report_name', 'reason']
+                    },
+                    description: '2-3 reportes recomendados'
+                }
+            },
+            required: ['main_insight', 'recommended_reports']
+        }
+    },
+    {
+        name: 'request_clarification',
+        description: 'Solicita aclaración cuando hay ambigüedad temporal o de contexto.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Pregunta clara y profesional para el usuario' },
+                suggested_questions: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: '3 opciones contextuales que reflejan la pregunta original'
+                }
+            },
+            required: ['message', 'suggested_questions']
+        }
+    }
+];
 
 export async function POST(req: Request) {
     let prompt = 'Unknown Prompt';
@@ -255,65 +315,7 @@ algún incidente operativo."
                 max_tokens: 4096,
                 system: systemPrompt,
                 messages: [{ role: 'user', content: prompt }],
-                tools: [
-                    {
-                        name: 'query_database',
-                        description: 'Ejecuta análisis estratégico de datos en SQL Server para responder preguntas de negocio.',
-                        input_schema: {
-                            type: 'object',
-                            properties: {
-                                sql: {
-                                    type: 'string',
-                                    description: 'Consulta T-SQL optimizada para análisis de negocio. Incluye agregaciones, comparativas y KPIs.'
-                                }
-                            },
-                            required: ['sql']
-                        }
-                    },
-                    {
-                        name: 'suggest_reports',
-                        description: 'Recomienda reportes específicos del sistema para profundizar en el análisis.',
-                        input_schema: {
-                            type: 'object',
-                            properties: {
-                                main_insight: {
-                                    type: 'string',
-                                    description: 'El hallazgo principal que motivó las recomendaciones'
-                                },
-                                recommended_reports: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'object',
-                                        properties: {
-                                            report_name: { type: 'string', description: 'Nombre exacto del reporte' },
-                                            reason: { type: 'string', description: 'Por qué este reporte ayuda' },
-                                            expected_action: { type: 'string', description: 'Qué esperar del análisis' }
-                                        },
-                                        required: ['report_name', 'reason']
-                                    },
-                                    description: '2-3 reportes recomendados'
-                                }
-                            },
-                            required: ['main_insight', 'recommended_reports']
-                        }
-                    },
-                    {
-                        name: 'request_clarification',
-                        description: 'Solicita aclaración cuando hay ambigüedad temporal o de contexto.',
-                        input_schema: {
-                            type: 'object',
-                            properties: {
-                                message: { type: 'string', description: 'Pregunta clara y profesional para el usuario' },
-                                suggested_questions: {
-                                    type: 'array',
-                                    items: { type: 'string' },
-                                    description: '3 opciones contextuales que reflejan la pregunta original'
-                                }
-                            },
-                            required: ['message', 'suggested_questions']
-                        }
-                    }
-                ],
+                tools: ANTHROPIC_TOOLS,
                 tool_choice: { type: 'auto' }
             });
 
@@ -412,6 +414,227 @@ algún incidente operativo."
             }));
         }
 
+        // Detectamos si es modo streaming. El cliente puede pedir streaming
+        // pasando ?stream=true. Si no, devolvemos el JSON tradicional (backwards-compat).
+        const url = new URL(req.url);
+        const useStreaming = url.searchParams.get('stream') === 'true' && isAnthropic;
+
+        // ─────────────────────────────────────────────────────────────────
+        // BRANCH STREAMING (solo Claude por ahora)
+        // ─────────────────────────────────────────────────────────────────
+        if (useStreaming) {
+            const stream = createSseStream(async (emit) => {
+                emit({ event: 'status', data: { phase: 'thinking' } });
+
+                // 1) Decisión de tool (no streamed, es rápido)
+                const decision = await anthropic.messages.create({
+                    model: anthropicModel,
+                    max_tokens: 4096,
+                    system: systemPrompt,
+                    messages: [{ role: 'user', content: prompt }],
+                    tools: ANTHROPIC_TOOLS,
+                    tool_choice: { type: 'auto' }
+                });
+
+                const textBlock = decision.content.find((c: any) => c.type === 'text') as any;
+                const initialText = textBlock?.text || '';
+                const toolUses = decision.content.filter((c: any) => c.type === 'tool_use') as any[];
+
+                // CASO A: sin tool → respuesta conversacional directa
+                if (toolUses.length === 0) {
+                    const text = initialText.trim() ||
+                        "Estoy aquí. Cuéntame qué necesitas — puedo darte el pulso del negocio o ayudarte con cualquier otra pregunta.";
+                    emit({ event: 'text-delta', data: { text } });
+                    emit({
+                        event: 'metadata',
+                        data: { conversational: true, ai_model: selectedModel }
+                    });
+                    await logRequest(prompt, { message: text, conversational: true }, null);
+                    emit({ event: 'done', data: {} });
+                    return;
+                }
+
+                const toolCall = toolUses[0];
+                const args = toolCall.input;
+
+                // CASO B: request_clarification
+                if (toolCall.name === 'request_clarification') {
+                    emit({
+                        event: 'clarification',
+                        data: {
+                            message: args.message,
+                            suggested_questions: args.suggested_questions,
+                            ai_model: selectedModel
+                        }
+                    });
+                    await logRequest(prompt, { message: args.message, clarification: true }, null);
+                    emit({ event: 'done', data: {} });
+                    return;
+                }
+
+                // CASO C: suggest_reports
+                if (toolCall.name === 'suggest_reports') {
+                    const msg = `${args.main_insight}\n\nReportes que pueden ayudarte:`;
+                    emit({ event: 'text-delta', data: { text: msg } });
+                    emit({
+                        event: 'metadata',
+                        data: {
+                            ai_model: selectedModel,
+                            suggested_reports: args.recommended_reports,
+                            suggested_questions: args.recommended_reports.map((r: any) => r.report_name)
+                        }
+                    });
+                    await logRequest(prompt, { message: msg, suggested_reports: args.recommended_reports }, null);
+                    emit({ event: 'done', data: {} });
+                    return;
+                }
+
+                // CASO D: query_database (con sandbox + posible auto-corrección)
+                if (toolCall.name === 'query_database') {
+                    let safeSql: string;
+                    try {
+                        safeSql = assertReadOnly(args.sql);
+                    } catch (sandboxError: any) {
+                        emit({
+                            event: 'error',
+                            data: {
+                                message: 'Este agente solo puede consultar datos, nunca modificarlos. La consulta fue bloqueada por el sandbox de seguridad.',
+                                details: sandboxError.message
+                            }
+                        });
+                        emit({ event: 'done', data: {} });
+                        return;
+                    }
+
+                    lastSql = safeSql;
+                    emit({ event: 'status', data: { phase: 'querying' } });
+
+                    let results: any[] = [];
+                    try {
+                        results = await query(safeSql);
+                    } catch (sqlError: any) {
+                        emit({ event: 'status', data: { phase: 'correcting-sql' } });
+                        const correctionPrompt = `Error SQL: ${sqlError.message}. Corrige el T-SQL. Retorna solo el código SQL sin explicaciones. SOLO SELECT permitido.`;
+                        const correction = await anthropic.messages.create({
+                            model: anthropicModel,
+                            max_tokens: 1024,
+                            messages: [{ role: 'user', content: `${correctionPrompt}\n\nSQL Original: ${safeSql}` }]
+                        });
+                        const correctedSql = (correction.content[0] as any).text.replace(/```sql|```/g, '').trim();
+                        const safeCorrected = assertReadOnly(correctedSql);
+                        lastSql = safeCorrected;
+                        results = await query(safeCorrected);
+                    }
+
+                    // Stream del análisis
+                    emit({ event: 'status', data: { phase: 'analyzing' } });
+
+                    const metaPrompt = buildMetaPrompt(prompt, lastSql, results);
+
+                    const streamResp = anthropic.messages.stream({
+                        model: anthropicModel,
+                        max_tokens: 2048,
+                        messages: [{ role: 'user', content: metaPrompt }]
+                    });
+
+                    let fullText = '';
+                    let inMetadata = false;
+                    let metadataBuffer = '';
+
+                    for await (const event of streamResp) {
+                        if (event.type === 'content_block_delta' &&
+                            (event.delta as any).type === 'text_delta') {
+                            const chunk = (event.delta as any).text as string;
+                            fullText += chunk;
+
+                            if (!inMetadata) {
+                                const markerIdx = fullText.indexOf(META_MARKER);
+                                if (markerIdx >= 0) {
+                                    // Encontramos el marcador en este chunk: emitir solo lo previo
+                                    const preMarker = fullText.substring(0, markerIdx);
+                                    const alreadyEmittedLen = fullText.length - chunk.length;
+                                    if (markerIdx > alreadyEmittedLen) {
+                                        const remainingPre = preMarker.substring(alreadyEmittedLen);
+                                        if (remainingPre) {
+                                            emit({ event: 'text-delta', data: { text: remainingPre } });
+                                        }
+                                    }
+                                    inMetadata = true;
+                                    metadataBuffer = fullText.substring(markerIdx + META_MARKER.length);
+                                } else {
+                                    emit({ event: 'text-delta', data: { text: chunk } });
+                                }
+                            } else {
+                                metadataBuffer += chunk;
+                            }
+                        }
+                    }
+
+                    // Parsear metadata
+                    let meta: any = {};
+                    if (metadataBuffer) {
+                        try {
+                            const start = metadataBuffer.indexOf('{');
+                            const end = metadataBuffer.lastIndexOf('}');
+                            if (start >= 0 && end > start) {
+                                meta = JSON.parse(metadataBuffer.substring(start, end + 1));
+                            }
+                        } catch (e) {
+                            console.error('Error parseando metadata stream:', e);
+                        }
+                    }
+
+                    // Reportes sugeridos basados en la pregunta
+                    let suggestedReports: any[] = [];
+                    const relevantReports = findRelevantReports(prompt);
+                    if (relevantReports.length > 0) {
+                        suggestedReports = relevantReports.slice(0, 3).map(item => ({
+                            report_name: item.report.name,
+                            reason: item.report.description,
+                            expected_action: item.report.useCases[0],
+                            path: item.report.path
+                        }));
+                    }
+
+                    const fullSummary = inMetadata
+                        ? fullText.substring(0, fullText.indexOf(META_MARKER))
+                        : fullText;
+
+                    emit({
+                        event: 'metadata',
+                        data: {
+                            ai_model: selectedModel,
+                            sql: lastSql,
+                            data: results,
+                            visualization: meta.visualization || 'table',
+                            key_insights: meta.key_insights || [],
+                            recommendations: meta.recommendations || [],
+                            suggested_questions: meta.suggested_questions || [],
+                            suggested_reports: suggestedReports.length > 0 ? suggestedReports : undefined
+                        }
+                    });
+
+                    await logRequest(prompt, {
+                        message: fullSummary,
+                        data: results,
+                        ...meta
+                    }, lastSql);
+
+                    emit({ event: 'done', data: {} });
+                    return;
+                }
+
+                emit({ event: 'error', data: { message: 'Tool desconocido' } });
+                emit({ event: 'done', data: {} });
+            });
+
+            return new Response(stream, { headers: SSE_HEADERS });
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // BRANCH NON-STREAMING (legacy/OpenAI) — comportamiento previo
+        // ─────────────────────────────────────────────────────────────────
+
         let finalResponse: any = null;
 
         if (toolCalls.length > 0) {
@@ -419,7 +642,6 @@ algún incidente operativo."
             const args = toolCall.args;
 
             if (toolCall.name === 'query_database') {
-                // SANDBOX: validar que sea solo lectura antes de ejecutar
                 let safeSql: string;
                 try {
                     safeSql = assertReadOnly(args.sql);
@@ -437,8 +659,6 @@ algún incidente operativo."
                 try {
                     results = await query(safeSql);
                 } catch (sqlError: any) {
-                    // SQL Auto-Correction Logic
-                    console.log("SQL Error, attempting auto-correction...");
                     const correctionPrompt = `Error SQL: ${sqlError.message}. Corrige el T-SQL. Retorna solo el código SQL sin explicaciones. SOLO SELECT permitido.`;
                     let correctedSql = safeSql;
 
@@ -460,74 +680,39 @@ algún incidente operativo."
                         correctedSql = correction.choices[0].message.content?.replace(/```sql|```/g, '').trim() || safeSql;
                     }
 
-                    // SANDBOX: re-validar el SQL corregido
                     const safeCorrected = assertReadOnly(correctedSql);
                     lastSql = safeCorrected;
                     results = await query(safeCorrected);
                 }
 
-                // ANALYTICAL METADATA - SHORT RESPONSE + ON-DEMAND DEEP DIVE
-                const metaSystem = `Eres Kesito, consultor senior conversacional. Acabas de ejecutar
-una consulta y tienes los resultados. Tu trabajo: redactar una respuesta breve y
-humana, y preparar contenido opcional para profundizar.
-
-REGLAS DEL CAMPO 'summary' (lo que el usuario ve primero):
-• Prosa fluida, 2-4 oraciones máximo
-• Cifras INLINE con **negritas Markdown** (ej: "**$1.4M**", "**+12%**")
-• Tono: consultor amigable, no robótico ni corporativo
-• NO uses listas con bullets, NO uses encabezados, NO repitas la pregunta
-• Si hay algo curioso/anómalo, mencionálo en una frase (no inventes alarmas)
-• NO termines con "¿quieres profundizar?" — los botones aparecen en la UI
-
-DETECCIÓN DE GRÁFICA RECOMENDADA:
-• 'line'/'area' → series temporales, evolución
-• 'bar' → comparativas entre categorías
-• 'pie' → distribuciones porcentuales
-• 'table' → datos de detalle multi-columna
-• Si los datos no se prestan a gráfica, usa 'table'
-
-key_insights: 3 hallazgos cortos (una oración cada uno), cada uno con un
-dato concreto. Estos aparecen como contenido expandible bajo demanda.
-
-recommendations: 2-3 acciones priorizadas y concretas. También expandibles.
-
-suggested_questions: 3 preguntas de seguimiento naturales, en primera persona
-o como continuación lógica del análisis.
-
-EJEMPLO DE BUEN summary:
-"Las ventas del día van en **$847K** consolidadas, **+6%** vs el mismo
-día de la semana pasada. Centro y Norte van bien; Sur arrastra desde
-temprano (**-18%** vs su promedio), vale la pena revisarlo."
-
-RETORNA SOLO JSON VÁLIDO:
-{
-  "summary": "Respuesta conversacional con cifras en **negritas**",
-  "key_insights": ["Insight 1 con dato", "Insight 2 con dato", "Insight 3"],
-  "recommendations": ["Acción 1", "Acción 2"],
-  "visualization": "table|bar|line|pie|area",
-  "suggested_questions": ["Pregunta 1", "Pregunta 2", "Pregunta 3"]
-}`;
+                const metaPromptNS = buildMetaPrompt(prompt, lastSql, results);
 
                 let meta: any;
                 if (isAnthropic) {
                     const metaCompletion = await anthropic.messages.create({
                         model: anthropicModel,
                         max_tokens: 2048,
-                        messages: [
-                            { role: 'user', content: `${metaSystem}\n\nPregunta usuario: ${prompt}\nSQL: ${lastSql}\nResultados: ${JSON.stringify(results.slice(0, 10))}\n\nRETORNA SOLO JSON VÁLIDO.` }
-                        ]
+                        messages: [{ role: 'user', content: metaPromptNS }]
                     });
                     const content = (metaCompletion.content[0] as any).text;
-                    try {
-                        meta = JSON.parse(content.substring(content.indexOf('{'), content.lastIndexOf('}') + 1));
-                    } catch { meta = {}; }
+                    const markerIdx = content.indexOf(META_MARKER);
+                    if (markerIdx >= 0) {
+                        const summary = content.substring(0, markerIdx).trim();
+                        const metaBlock = content.substring(markerIdx + META_MARKER.length);
+                        try {
+                            const start = metaBlock.indexOf('{');
+                            const end = metaBlock.lastIndexOf('}');
+                            meta = start >= 0 && end > start
+                                ? { summary, ...JSON.parse(metaBlock.substring(start, end + 1)) }
+                                : { summary };
+                        } catch { meta = { summary }; }
+                    } else {
+                        meta = { summary: content };
+                    }
                 } else {
                     const metaCompletion = await openai.chat.completions.create({
                         model: 'gpt-4o',
-                        messages: [
-                            { role: 'system', content: metaSystem },
-                            { role: 'user', content: `Pregunta: ${prompt}\nSQL: ${lastSql}\nResultados: ${JSON.stringify(results.slice(0, 10))}` }
-                        ],
+                        messages: [{ role: 'user', content: metaPromptNS + '\n\nRETORNA SOLO JSON sin marcadores: {"summary":"...", "key_insights":[...], "recommendations":[...], "visualization":"...", "suggested_questions":[...]}' }],
                         response_format: { type: 'json_object' }
                     });
                     meta = JSON.parse(metaCompletion.choices[0].message.content || '{}');
@@ -535,7 +720,6 @@ RETORNA SOLO JSON VÁLIDO:
 
                 const shortSummary = meta.summary || meta.analysis || "Análisis completado.";
 
-                // Generar recomendaciones de reportes basado en la pregunta
                 let suggestedReports: any[] = [];
                 const relevantReports = findRelevantReports(prompt);
                 if (relevantReports.length > 0) {
@@ -563,7 +747,7 @@ RETORNA SOLO JSON VÁLIDO:
                     data: [],
                     sql: null,
                     ai_model: selectedModel,
-                    message: `📊 RECOMENDACIÓN DE REPORTES\n\n${args.main_insight}\n\nReportes sugeridos para profundizar:`,
+                    message: `${args.main_insight}\n\nReportes que pueden ayudarte:`,
                     suggested_reports: args.recommended_reports,
                     visualization: 'table',
                     suggested_questions: args.recommended_reports.map((r: any) => r.report_name)
@@ -579,7 +763,6 @@ RETORNA SOLO JSON VÁLIDO:
                 };
             }
         } else {
-            // Sin tool call: respuesta conversacional directa (saludo, concepto, charla, etc.)
             const conversationalText = (message.text || '').trim() ||
                 "Estoy aquí. Cuéntame qué necesitas — puedo darte el pulso del negocio, profundizar en un tema específico, o ayudarte con cualquier otra pregunta.";
 
@@ -592,28 +775,73 @@ RETORNA SOLO JSON VÁLIDO:
             };
         }
 
-        // Log (Success)
-        try {
-            const cookieStore = await cookies();
-            const token = cookieStore.get('session');
-            let userId = 'unknown';
-            if (token) {
-                const { payload } = await jwtVerify(token.value, SECRET_KEY);
-                userId = (payload as any).id || 'unknown';
-            }
-            await query(
-                'INSERT INTO tblLogPreguntas (Pregunta, Resultado, FechaPregunta, IdUsuario, Error, ConsultaSQL) VALUES (?, ?, GETDATE(), ?, 0, ?)',
-                [prompt, JSON.stringify(finalResponse), userId, lastSql]
-            );
-        } catch { }
-
+        await logRequest(prompt, finalResponse, lastSql);
         return NextResponse.json(finalResponse);
 
     } catch (error: any) {
         console.error('API Error:', error);
         return NextResponse.json({
-            error: error.message || 'Error al procesar la analizar la consulta detallada.',
+            error: error.message || 'Error al procesar la consulta detallada.',
             sql: lastSql
         }, { status: 500 });
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+function buildMetaPrompt(prompt: string, sql: string | null, results: any[]): string {
+    return `Eres Kesito, consultor senior conversacional. Acabas de ejecutar una consulta
+y tienes los resultados. Vas a responder en DOS partes separadas por un marcador.
+
+PARTE 1 — Texto en prosa fluida (lo primero que verá el usuario):
+• 2-4 oraciones máximo
+• Cifras INLINE con **negritas Markdown** (ej: "**$1.4M**", "**+12%**")
+• Tono: consultor amigable, no robótico
+• NO bullets, NO encabezados, NO repitas la pregunta
+• NO digas "¿quieres profundizar?" — los botones ya aparecen en la UI
+
+DESPUÉS DEL TEXTO, en una nueva línea, escribe EXACTAMENTE este marcador:
+${META_MARKER}
+
+PARTE 2 — Debajo del marcador, un JSON válido (y nada más):
+{
+  "key_insights": ["3 hallazgos cortos con dato concreto"],
+  "recommendations": ["2-3 acciones priorizadas"],
+  "visualization": "table|bar|line|pie|area",
+  "suggested_questions": ["3 preguntas de seguimiento naturales"]
+}
+
+REGLAS DE VISUALIZACIÓN:
+• line/area → series temporales
+• bar → comparativas entre categorías
+• pie → distribuciones porcentuales
+• table → datos multi-columna de detalle
+
+──────────────────────────────────────────────
+Pregunta del usuario: ${prompt}
+SQL ejecutado: ${sql}
+Resultados (primeros 10): ${JSON.stringify(results.slice(0, 10))}
+──────────────────────────────────────────────
+
+Empieza la respuesta directamente, sin preámbulos.`;
+}
+
+async function logRequest(prompt: string, response: any, sql: string | null) {
+    try {
+        const cookieStore = await cookies();
+        const token = cookieStore.get('session');
+        let userId = 'unknown';
+        if (token) {
+            const { payload } = await jwtVerify(token.value, SECRET_KEY);
+            userId = (payload as any).id || 'unknown';
+        }
+        await query(
+            'INSERT INTO tblLogPreguntas (Pregunta, Resultado, FechaPregunta, IdUsuario, Error, ConsultaSQL) VALUES (?, ?, GETDATE(), ?, 0, ?)',
+            [prompt, JSON.stringify(response).slice(0, 4000), userId, sql]
+        );
+    } catch (e) {
+        console.error('logRequest failed:', e);
     }
 }
