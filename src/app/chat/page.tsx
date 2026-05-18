@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ChatInput } from '@/components/chat-input';
 import { ResultsDisplay } from '@/components/results-display';
 import { cn } from '@/lib/utils';
-import { Search, Trash2, Minimize2 } from 'lucide-react';
+import { Search, Trash2, Minimize2, Sparkles } from 'lucide-react';
 
 interface Message {
     role: 'user' | 'assistant';
