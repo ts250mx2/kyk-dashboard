@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m '🚀 Mejora profesional del agente de IA - Análisis estratégico y sugerencias de reportes *)"
+    ]
+  }
+}

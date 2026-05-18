@@ -27,80 +27,87 @@ interface Message {
     timestamp?: number;
     error?: string;
     ai_model?: string;
+    key_insights?: string[];
+    recommendations?: string[];
+    suggested_reports?: Array<{
+        report_name: string;
+        reason: string;
+        expected_action?: string;
+    }>;
 }
 
 const PAGE_SUGGESTIONS: Record<string, string[]> = {
     '/dashboard': [
-        '¿Cuáles fueron las ventas totales de hoy?',
-        '¿Qué tienda tiene más ventas acumuladas este mes?',
-        'Muéstrame el top 5 de productos más vendidos',
-        '¿Cuántas cancelaciones hubo hoy?',
-        'Comparar ventas de hoy contra el mismo día de la semana pasada'
+        '¿Cómo va el desempeño operativo de hoy vs ayer?',
+        'Analiza los KPIs principales del mes actual',
+        'Identifica productos con anomalías en ventas',
+        '¿Qué sucursales necesitan atención inmediata?',
+        'Proyección de ventas para fin de mes'
     ],
     '/dashboard/overview': [
-        'Resumen de ventas del mes actual',
-        '¿Cuál es el ticket promedio general?',
-        'Analizar tendencia de ventas de los últimos 7 días',
-        'Ver distribución de ventas por sucursal',
-        '¿Cómo van las aperturas de caja hoy?'
+        'Resumen ejecutivo de ventas del mes actual',
+        '¿Cuál es la evolución del ticket promedio?',
+        'Analizar tendencias de los últimos 30 días',
+        'Benchmarking de desempeño entre sucursales',
+        'Análisis de factores que impactan ventas'
     ],
     '/dashboard/sales/operations': [
-        '¿Cómo van las ventas de hoy por sucursal?',
-        'Comparar ventas de esta semana vs semana pasada',
-        '¿Cuál es el producto más vendido hoy?',
-        'Listar tickets con cancelaciones de hoy',
-        'Ticket promedio por tienda hoy'
+        '¿Cómo está el desempeño por sucursal hoy?',
+        'Comparativa semanal: esta semana vs la anterior',
+        '¿Qué productos lideran y cuáles rezagan?',
+        'Análisis de tickets cancelados hoy',
+        'Eficiencia operativa por tienda'
     ],
     '/dashboard/sales/heatmap': [
-        '¿Cuáles son las horas de mayor tráfico hoy?',
-        '¿Qué día de la semana tiene mejores ventas promedio?',
-        'Ver mapa de calor de ventas por hora',
-        'Análisis de horas pico del último mes',
-        'Días con mayor volumen de transacciones'
+        '¿Cuándo son las horas de mayor demanda?',
+        'Optimización de horarios según patrones de tráfico',
+        'Análisis de picos de venta por día',
+        'Patrones de comportamiento del cliente',
+        'Eficiencia de personal por hora'
     ],
     '/dashboard/purchases/dashboard': [
-        '¿Cuál es el total de compras de este mes?',
-        '¿Qué proveedor tiene más pedidos pendientes?',
-        'Ver desglose de recibos de hoy',
-        'Comparar compras vs devoluciones este mes',
-        'Top 10 proveedores por volumen de compra'
+        'Resumen de la cadena de suministro este mes',
+        '¿Cuál es el status general de órdenes activas?',
+        'Análisis de eficiencia de recepción',
+        'Proveedores con mejor y peor desempeño',
+        'Oportunidades de optimización en compras'
     ],
     '/dashboard/purchases/orders': [
-        'Listar órdenes de compra pendientes de entrega',
-        '¿Cuáles son los próximos arribos programados?',
-        'Buscar órdenes de compra de un proveedor específico',
-        'Estatus de órdenes de compra del mes',
-        'Órdenes de compra con retraso en entrega'
+        '¿Qué órdenes están en riesgo de retraso?',
+        'Análisis de confiabilidad de proveedores',
+        'Próximos arribes programados vs realidad',
+        'Órdenes que requieren seguimiento urgente',
+        'Evaluación de ciclos de entrega'
     ],
     '/dashboard/purchases/distributions': [
-        '¿Cómo va la distribución de mercancía hoy?',
-        'Ver estatus de envíos a sucursales',
-        'Listar transferencias de salida urgentes',
-        'Resumen de logística de distribución hoy',
-        'Eficiencia de surtido por almacén'
+        '¿Cuál es la eficiencia de distribución actual?',
+        'Identificar cuellos de botella en surtido',
+        'Análisis de tiempos de entrega a sucursales',
+        'Optimización de rutas de distribución',
+        'Evaluación de cobertura de inventario'
     ],
     '/dashboard/purchases/routes': [
-        'Ver eficiencia de rutas de entrega de hoy',
-        '¿Qué rutas tienen más retrasos programados?',
-        'Listar entregas por unidad de transporte',
-        'Resumen de entregas completadas hoy',
-        'Rutas críticas para el día de mañana'
+        '¿Cuál es la eficiencia operativa de rutas?',
+        'Rutas críticas con riesgo de retraso',
+        'Análisis de costos de transporte',
+        'Desempeño de unidades y conductores',
+        'Optimización de consolidación de entregas'
     ],
     '/dashboard/system': [
-        'Ver log de preguntas recientes',
-        '¿Quiénes son los usuarios más activos?',
-        'Revisar errores de sincronización de hoy',
-        'Estado de las sucursales activas',
-        'Historial de cancelaciones auditoría'
+        'Tendencias de comportamiento de usuarios',
+        '¿Cuáles son los análisis más consultados?',
+        'Evaluación de adopción del sistema IA',
+        'Patrones de error y mejoras necesarias',
+        'Historial de cambios y auditoría'
     ],
 };
 
 const DEFAULT_FALLBACK = [
-    '¿Cómo van las ventas hoy?',
-    'Top 5 productos más vendidos',
-    'Ventas por sucursal',
-    'Ticket promedio del día',
-    'Resumen de cancelaciones'
+    '¿Cómo va el negocio vs período anterior?',
+    'Identifica productos y categorías clave',
+    'Análisis de performance por sucursal',
+    'Evaluación de métricas operativas críticas',
+    'Oportunidades de optimización identificadas'
 ];
 
 export function ChatAgent() {
@@ -220,6 +227,9 @@ export function ChatAgent() {
                     suggestedQuestions: data.suggested_questions,
                     timestamp: Date.now(),
                     ai_model: data.ai_model,
+                    key_insights: data.key_insights,
+                    recommendations: data.recommendations,
+                    suggested_reports: data.suggested_reports,
                 };
                 setMessages((prev) => [...prev, assistantMsg]);
             } else {
@@ -358,18 +368,68 @@ export function ChatAgent() {
 
                                             {/* Analysis Content */}
                                             <div className="px-6 py-6 group">
-                                                <p className="text-[16px] leading-relaxed text-slate-700 font-medium italic mb-6 border-l-4 border-indigo-200 pl-6 bg-indigo-50/30 py-4 rounded-r-2xl whitespace-pre-wrap">
+                                                <p className="text-[16px] leading-relaxed text-slate-700 font-medium whitespace-pre-wrap mb-6">
                                                     {message.content}
                                                 </p>
 
-                                                {message.insight && (
-                                                    <div className="bg-indigo-600 text-white p-5 rounded-[24px] mb-8 shadow-lg shadow-indigo-100 flex items-start space-x-4 animate-in slide-in-from-left-4 duration-500">
-                                                        <div className="p-3 bg-white/20 rounded-2xl">
-                                                            <Search className="w-5 h-5" />
+                                                {/* Key Insights */}
+                                                {message.key_insights && message.key_insights.length > 0 && (
+                                                    <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-5 rounded-[24px] mb-8 shadow-lg shadow-indigo-100 animate-in slide-in-from-left-4 duration-500">
+                                                        <div className="flex items-start space-x-4">
+                                                            <div className="p-3 bg-white/20 rounded-2xl flex-shrink-0">
+                                                                <Search className="w-5 h-5" />
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70 block mb-3">Hallazgos Clave</span>
+                                                                <ul className="space-y-2">
+                                                                    {message.key_insights.map((insight, idx) => (
+                                                                        <li key={idx} className="text-[14px] font-bold leading-snug flex items-start">
+                                                                            <span className="inline-block w-1.5 h-1.5 bg-white rounded-full mr-3 mt-1.5 flex-shrink-0" />
+                                                                            <span>{insight}</span>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
                                                         </div>
-                                                        <div>
-                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Hallazgo Clave</span>
-                                                            <p className="text-[15px] font-bold leading-tight mt-1">{message.insight}</p>
+                                                    </div>
+                                                )}
+
+                                                {/* Recommendations */}
+                                                {message.recommendations && message.recommendations.length > 0 && (
+                                                    <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-[24px] mb-8 animate-in slide-in-from-left-4 duration-500 delay-100">
+                                                        <div className="flex items-start space-x-4">
+                                                            <div className="p-3 bg-emerald-100 rounded-2xl flex-shrink-0">
+                                                                <ArrowRight className="w-5 h-5 text-emerald-600" />
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 block mb-3">Recomendaciones</span>
+                                                                <ul className="space-y-2">
+                                                                    {message.recommendations.map((rec, idx) => (
+                                                                        <li key={idx} className="text-[14px] font-bold text-slate-700 leading-snug flex items-start">
+                                                                            <span className="inline-block w-1.5 h-1.5 bg-emerald-600 rounded-full mr-3 mt-1.5 flex-shrink-0" />
+                                                                            <span>{rec}</span>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Suggested Reports */}
+                                                {message.suggested_reports && message.suggested_reports.length > 0 && (
+                                                    <div className="bg-amber-50 border border-amber-200 p-5 rounded-[24px] mb-8 animate-in slide-in-from-left-4 duration-500 delay-200">
+                                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-700 block mb-4">Reportes Recomendados para Profundizar</span>
+                                                        <div className="space-y-3">
+                                                            {message.suggested_reports.map((report, idx) => (
+                                                                <div key={idx} className="bg-white p-4 rounded-xl border border-amber-100 hover:border-amber-300 transition-all">
+                                                                    <p className="text-sm font-bold text-slate-900 mb-2">{report.report_name}</p>
+                                                                    <p className="text-xs text-slate-600 mb-2">{report.reason}</p>
+                                                                    {report.expected_action && (
+                                                                        <p className="text-xs text-amber-700 font-semibold">→ {report.expected_action}</p>
+                                                                    )}
+                                                                </div>
+                                                            ))}
                                                         </div>
                                                     </div>
                                                 )}
