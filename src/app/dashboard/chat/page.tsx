@@ -18,6 +18,7 @@ export default function DashboardChatPage() {
         timestamp?: number;
         error?: string;
         userSelectedViz?: 'table' | 'chart' | 'sql' | null;
+        ai_model?: string;
     }
 
     const [messages, setMessages] = useState<Message[]>([]);
@@ -77,10 +78,11 @@ export default function DashboardChatPage() {
         setLoading(true);
 
         try {
+            const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-4-6' : 'claude-opus-4-6';
             const response = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: finalPrompt }),
+                body: JSON.stringify({ prompt: finalPrompt, model: selectedModel }),
             });
             const data = await response.json();
 
@@ -96,6 +98,7 @@ export default function DashboardChatPage() {
                     insight: data.insight,
                     suggestedQuestions: data.suggested_questions,
                     timestamp: Date.now(),
+                    ai_model: data.ai_model,
                 };
                 setMessages((prev) => [...prev, assistantMsg].slice(-20));
             } else {
@@ -136,7 +139,7 @@ export default function DashboardChatPage() {
                             <h3 className="font-black text-slate-900 tracking-tight leading-none uppercase text-xs">Analista Digital KYK</h3>
                             <div className="flex items-center space-x-1.5 mt-1">
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">En línea</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">En línea (Claude Priority)</span>
                             </div>
                         </div>
                     </div>
@@ -210,6 +213,16 @@ export default function DashboardChatPage() {
                                                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Reporte Analítico Senior</span>
                                                 </div>
                                             </div>
+
+                                            {/* Model Annotation */}
+                                            {msg.ai_model && (
+                                                <div className="px-6 pt-4 flex items-center justify-end">
+                                                    <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                                        <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
+                                                        Modelo: {msg.ai_model}
+                                                    </span>
+                                                </div>
+                                            )}
 
                                             {/* Analysis Content */}
                                             <div className="px-6 py-6 group">

@@ -73,6 +73,13 @@ const ANTHROPIC_TOOLS: any[] = [
     }
 ];
 
+interface IncomingTurn {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
+const MAX_HISTORY_TURNS = 8; // pares user/assistant que conservamos como contexto
+
 export async function POST(req: Request) {
     let prompt = 'Unknown Prompt';
     let lastSql: string | null = null;
@@ -82,10 +89,31 @@ export async function POST(req: Request) {
         const body = await req.json();
         prompt = body.prompt;
         selectedModel = body.model || 'gpt-4o';
+        const rawHistory: IncomingTurn[] = Array.isArray(body.history) ? body.history : [];
 
         if (!prompt) {
             return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
         }
+
+        // Construir el array de mensajes para el modelo:
+        // - Conservamos los últimos MAX_HISTORY_TURNS turnos previos (sin el user actual)
+        // - Filtramos contenido vacío o ruido
+        // - Truncamos cada turno a 4000 chars para evitar overflow
+        const conversationHistory = rawHistory
+            .filter(t => t && (t.role === 'user' || t.role === 'assistant') && typeof t.content === 'string' && t.content.trim())
+            .slice(-MAX_HISTORY_TURNS * 2)
+            .map(t => ({
+                role: t.role,
+                content: t.content.length > 4000 ? t.content.slice(0, 4000) + '…' : t.content
+            }));
+
+        // Asegurar que el primer mensaje sea de user (Anthropic lo requiere)
+        while (conversationHistory.length > 0 && conversationHistory[0].role !== 'user') {
+            conversationHistory.shift();
+        }
+
+        // Mensaje del turno actual (siempre se agrega al final)
+        const messagesForModel = [...conversationHistory, { role: 'user' as const, content: prompt }];
 
         const schemaPath = path.join(process.cwd(), 'database-schema-ia.md');
         const schemaString = fs.readFileSync(schemaPath, 'utf-8');
@@ -210,7 +238,8 @@ ${formattedRules}
 T-SQL PRECISO (cuando ejecutes consultas)
 ──────────────────────────────────────────────────────────────
 • SOLO SELECT y WITH (CTE). Nunca INSERT/UPDATE/DELETE.
-• Corchetes para columnas con espacios: [Fecha Venta], [Folio Venta]
+• Corchetes para columnas con espacios: [Fecha Venta], [Folio Venta], [Fecha Cancelacion]
+• NUNCA inventes nombres de columnas (ej: Fecha_Cancelacion, FechaCancelado). Usa ESTRICTAMENTE los nombres exactos definidos en el esquema.
 • Tabla principal: Ventas (Tienda, Total, [Fecha Venta], Depto, IdMes, [Año])
 • Meses: SIEMPRE IdMes (INT), nunca Mes (VARCHAR)
 • Año: YEAR(GETDATE()) o [Año] = YEAR(GETDATE())
@@ -303,29 +332,41 @@ en las últimas 2 horas, lo cual no es típico — vale la pena revisar si hubo
 algún incidente operativo."
 `;
 
-        const isAnthropic = selectedModel.includes('claude');
+        let isAnthropic = selectedModel.includes('claude');
         const anthropicModel = 'claude-opus-4-6'; // Use specific Opus model for the SDK
 
         let message: any;
         let toolCalls: any[] = [];
 
         if (isAnthropic) {
-            const response = await anthropic.messages.create({
-                model: anthropicModel,
-                max_tokens: 4096,
-                system: systemPrompt,
-                messages: [{ role: 'user', content: prompt }],
-                tools: ANTHROPIC_TOOLS,
-                tool_choice: { type: 'auto' }
-            });
+            try {
+                const response = await anthropic.messages.create({
+                    model: anthropicModel,
+                    max_tokens: 4096,
+                    system: systemPrompt,
+                    messages: [{ role: 'user', content: prompt }],
+                    tools: ANTHROPIC_TOOLS,
+                    tool_choice: { type: 'auto' }
+                });
 
-            message = response.content.find(c => c.type === 'text') || { text: '' };
-            toolCalls = response.content.filter(c => c.type === 'tool_use').map(t => ({
-                id: (t as any).id,
-                name: (t as any).name,
-                args: (t as any).input
-            }));
-        } else {
+                message = response.content.find(c => c.type === 'text') || { text: '' };
+                toolCalls = response.content.filter(c => c.type === 'tool_use').map(t => ({
+                    id: (t as any).id,
+                    name: (t as any).name,
+                    args: (t as any).input
+                }));
+            } catch (error: any) {
+                if (error.status === 400 || (error.message && error.message.toLowerCase().includes('credit'))) {
+                    console.warn("Anthropic credit error detected. Falling back to OpenAI.");
+                    isAnthropic = false;
+                    selectedModel = 'gpt-4o';
+                } else {
+                    throw error;
+                }
+            }
+        }
+        
+        if (!isAnthropic) {
             const completion = await openai.chat.completions.create({
                 model: 'gpt-4o',
                 messages: [

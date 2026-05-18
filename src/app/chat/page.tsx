@@ -99,7 +99,7 @@ export default function ChatFullPage() {
         setLoading(true);
 
         try {
-            const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'gpt-4o' : 'gpt-4o';
+            const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-4-6' : 'claude-opus-4-6';
             const response = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -155,7 +155,7 @@ export default function ChatFullPage() {
                         <h3 className="font-black text-slate-900 tracking-tight leading-none uppercase text-xs">Analista Digital KYK</h3>
                         <div className="flex items-center space-x-1.5 mt-1">
                             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">En línea</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">En línea (Claude Priority)</span>
                         </div>
                     </div>
                 </div>
@@ -219,6 +219,15 @@ export default function ChatFullPage() {
                                             <div className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
                                         </div>
                                     </div>
+                                    {/* Model Annotation */}
+                                    {message.ai_model && (
+                                        <div className="px-6 pt-4 flex items-center justify-end">
+                                            <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                                <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
+                                                Modelo: {message.ai_model}
+                                            </span>
+                                        </div>
+                                    )}
                                     {/* Analysis Content */}
                                     <div className="px-6 py-6 group">
                                         <p className="text-[16px] leading-relaxed text-slate-700 font-medium italic mb-6 border-l-4 border-indigo-200 pl-6 bg-indigo-50/30 py-4 rounded-r-2xl whitespace-pre-wrap">
