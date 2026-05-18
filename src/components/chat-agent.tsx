@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatInput } from '@/components/chat-input';
 import { AgentDataView } from '@/components/agent-data-view';
 import { InlineMarkdown } from '@/components/inline-markdown';
+import { ConversationsDropdown } from '@/components/conversations-dropdown';
 import { readSseStream } from '@/lib/sse-client';
 import { cn } from '@/lib/utils';
 import {
@@ -169,8 +170,78 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
     const [expandedInsights, setExpandedInsights] = useState<Record<number, boolean>>({});
     const [expandedRecommendations, setExpandedRecommendations] = useState<Record<number, boolean>>({});
     const [expandedData, setExpandedData] = useState<Record<number, boolean>>({});
+    const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+    const [conversationsRefreshKey, setConversationsRefreshKey] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const streamControllerRef = useRef<AbortController | null>(null);
+    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    /** Genera un ID de conversación nuevo (UUID v4 simplificado) */
+    const generateConversationId = (): string => {
+        return 'conv_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    };
+
+    /** Guarda la conversación actual en el backend (debounced) */
+    const saveCurrentConversation = useCallback((msgs: Message[], idOverride?: string) => {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        const userMessages = msgs.filter(m => m.role === 'user');
+        if (userMessages.length === 0) return; // nada que guardar
+
+        saveTimerRef.current = setTimeout(async () => {
+            try {
+                let convId = idOverride || activeConversationId;
+                if (!convId) {
+                    convId = generateConversationId();
+                    setActiveConversationId(convId);
+                }
+                const r = await fetch('/api/agent/conversations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: convId, messages: msgs })
+                });
+                if (r.ok) {
+                    setConversationsRefreshKey(k => k + 1);
+                }
+            } catch (e) {
+                console.error('Error guardando conversación:', e);
+            }
+        }, 800);
+    }, [activeConversationId]);
+
+    /** Carga una conversación existente desde el backend */
+    const loadConversation = useCallback(async (id: string) => {
+        if (streamControllerRef.current) {
+            streamControllerRef.current.abort();
+            streamControllerRef.current = null;
+        }
+        try {
+            const r = await fetch(`/api/agent/conversations/${id}`);
+            const data = await r.json();
+            if (data.conversation) {
+                setMessages(data.conversation.messages || []);
+                setActiveConversationId(id);
+                setExpandedInsights({});
+                setExpandedRecommendations({});
+                setExpandedData({});
+            }
+        } catch (e) {
+            console.error('Error cargando conversación:', e);
+        }
+    }, []);
+
+    /** Inicia una conversación nueva (limpia el estado) */
+    const startNewConversation = useCallback(() => {
+        if (streamControllerRef.current) {
+            streamControllerRef.current.abort();
+            streamControllerRef.current = null;
+        }
+        setMessages([]);
+        setActiveConversationId(null);
+        setExpandedInsights({});
+        setExpandedRecommendations({});
+        setExpandedData({});
+        localStorage.removeItem('kyk_integrated_chat_history');
+    }, []);
 
     const fetchDailyInsights = useCallback(async (forceRefresh = false) => {
         const todayKey = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
@@ -304,9 +375,15 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
     useEffect(() => {
         if (isHistoryLoaded) {
             localStorage.setItem('kyk_integrated_chat_history', JSON.stringify(messages));
+            // Auto-save remoto: solo si hay mensajes completos (no en medio del streaming)
+            const lastMsg = messages[messages.length - 1];
+            const hasPendingStream = lastMsg?.streaming;
+            if (messages.length > 0 && !hasPendingStream) {
+                saveCurrentConversation(messages);
+            }
         }
         scrollToBottom();
-    }, [messages, isHistoryLoaded]);
+    }, [messages, isHistoryLoaded, saveCurrentConversation]);
 
     const handleSend = async (prompt: string) => {
         if (!prompt.trim()) return;
@@ -501,12 +578,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
     };
 
     const handleClear = () => {
-        if (streamControllerRef.current) {
-            streamControllerRef.current.abort();
-            streamControllerRef.current = null;
-        }
-        setMessages([]);
-        localStorage.removeItem('kyk_integrated_chat_history');
+        startNewConversation();
         loadDefaultSuggestions();
     };
 
@@ -557,8 +629,14 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                 </div>
                             </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                            <button onClick={handleClear} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title="Limpiar chat">
+                        <div className="flex items-center space-x-1">
+                            <ConversationsDropdown
+                                activeId={activeConversationId}
+                                onSelect={loadConversation}
+                                onNew={startNewConversation}
+                                refreshKey={conversationsRefreshKey}
+                            />
+                            <button onClick={handleClear} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title="Nueva conversación">
                                 <Trash2 className="w-5 h-5" />
                             </button>
                             {!isEmbedded && (
