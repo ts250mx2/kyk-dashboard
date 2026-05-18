@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatInput } from '@/components/chat-input';
 import { ResultsDisplay } from '@/components/results-display';
+import { InlineMarkdown } from '@/components/inline-markdown';
 import { cn } from '@/lib/utils';
 import {
     X,
@@ -12,7 +13,12 @@ import {
     Target,
     ChevronDown,
     ChevronUp,
-    ExternalLink
+    ExternalLink,
+    AlertCircle,
+    TrendingUp,
+    Sparkles,
+    RefreshCw,
+    BarChart3
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -26,6 +32,7 @@ interface Message {
     timestamp?: number;
     error?: string;
     ai_model?: string;
+    conversational?: boolean;
     key_insights?: string[];
     recommendations?: string[];
     suggested_reports?: Array<{
@@ -35,6 +42,20 @@ interface Message {
         path?: string;
     }>;
 }
+
+interface DailyInsight {
+    id: string;
+    question: string;
+    severity: 'critical' | 'opportunity' | 'info';
+    area: string;
+    summary: string;
+}
+
+const SEVERITY_STYLES: Record<DailyInsight['severity'], { bar: string; dot: string; icon: any; label: string }> = {
+    critical: { bar: 'bg-rose-500', dot: 'bg-rose-500', icon: AlertCircle, label: 'Crítico' },
+    opportunity: { bar: 'bg-emerald-500', dot: 'bg-emerald-500', icon: TrendingUp, label: 'Oportunidad' },
+    info: { bar: 'bg-indigo-400', dot: 'bg-indigo-400', icon: Sparkles, label: 'Insight' }
+};
 
 const PAGE_SUGGESTIONS: Record<string, string[]> = {
     '/dashboard': [
@@ -116,11 +137,66 @@ export function ChatAgent() {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [defaultSuggestions, setDefaultSuggestions] = useState<string[]>([]);
+    const [dailyInsights, setDailyInsights] = useState<DailyInsight[]>([]);
+    const [briefing, setBriefing] = useState<string>('');
+    const [loadingInsights, setLoadingInsights] = useState(false);
     const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
     const [loading, setLoading] = useState(false);
     const [expandedInsights, setExpandedInsights] = useState<Record<number, boolean>>({});
     const [expandedRecommendations, setExpandedRecommendations] = useState<Record<number, boolean>>({});
+    const [expandedData, setExpandedData] = useState<Record<number, boolean>>({});
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const fetchDailyInsights = useCallback(async (forceRefresh = false) => {
+        const todayKey = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
+        const cacheKey = 'kyk_daily_insights';
+        const briefingKey = 'kyk_daily_briefing';
+        const cacheDateKey = 'kyk_daily_insights_date';
+
+        const cachedDate = localStorage.getItem(cacheDateKey);
+        if (cachedDate !== todayKey) {
+            localStorage.removeItem(cacheKey);
+            localStorage.removeItem(briefingKey);
+            localStorage.setItem(cacheDateKey, todayKey);
+        } else if (!forceRefresh) {
+            const cached = localStorage.getItem(cacheKey);
+            const cachedBriefing = localStorage.getItem(briefingKey);
+            if (cached) {
+                try {
+                    const parsed = JSON.parse(cached);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        setDailyInsights(parsed);
+                        if (cachedBriefing) setBriefing(cachedBriefing);
+                        return;
+                    }
+                } catch { }
+            }
+        }
+
+        setLoadingInsights(true);
+        try {
+            const url = forceRefresh ? '/api/agent/daily-insights?refresh=true&limit=6' : '/api/agent/daily-insights?limit=6';
+            const response = await fetch(url);
+            const data = await response.json();
+            if (Array.isArray(data.insights)) {
+                setDailyInsights(data.insights);
+                localStorage.setItem(cacheKey, JSON.stringify(data.insights));
+                localStorage.setItem(cacheDateKey, todayKey);
+            }
+            if (data.briefing) {
+                setBriefing(data.briefing);
+                localStorage.setItem(briefingKey, data.briefing);
+            }
+        } catch (e) {
+            console.error('Error cargando hallazgos diarios:', e);
+        } finally {
+            setLoadingInsights(false);
+        }
+    }, []);
+
+    const toggleData = (index: number) => {
+        setExpandedData(prev => ({ ...prev, [index]: !prev[index] }));
+    };
 
     const toggleInsights = (index: number) => {
         setExpandedInsights(prev => ({ ...prev, [index]: !prev[index] }));
@@ -162,6 +238,12 @@ export function ChatAgent() {
             loadDefaultSuggestions();
         }
     }, [messages.length, loadDefaultSuggestions]);
+
+    useEffect(() => {
+        if (isOpen && dailyInsights.length === 0 && !loadingInsights) {
+            fetchDailyInsights(false);
+        }
+    }, [isOpen, dailyInsights.length, loadingInsights, fetchDailyInsights]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -243,6 +325,7 @@ export function ChatAgent() {
                     suggestedQuestions: data.suggested_questions,
                     timestamp: Date.now(),
                     ai_model: data.ai_model,
+                    conversational: data.conversational === true,
                     key_insights: data.key_insights,
                     recommendations: data.recommendations,
                     suggested_reports: data.suggested_reports,
@@ -334,27 +417,122 @@ export function ChatAgent() {
                     {/* Messages Area */}
                     <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth scrollbar-hide" id="chat-messages">
                         {messages.length === 0 && (
-                            <div className="flex flex-col items-center justify-center h-full text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                                <div className="p-8 bg-white rounded-[40px] shadow-xl border border-slate-100">
-                                    <img src="/kesito.svg" alt="Kesito" className="w-16 h-16 object-contain animate-pulse" />
-                                </div>
-                                <div className="space-y-2">
-                                    <h2 className="text-3xl font-black tracking-tight text-slate-900">¿Qué analizamos hoy?</h2>
-                                    <p className="text-slate-500 max-w-sm font-medium">Estoy listo para explorar tus datos de ventas, compras e inventario.</p>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-lg">
-                                    {defaultSuggestions.map((s, i) => (
-                                        <button
-                                            key={i}
-                                            onClick={() => handleSend(s)}
-                                            className="p-5 text-left bg-white border border-slate-100 rounded-[24px] hover:border-indigo-500 hover:shadow-xl transition-all group animate-in fade-in zoom-in duration-300"
-                                            style={{ animationDelay: `${i * 100}ms` }}
-                                        >
-                                            <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest mb-1.5 opacity-60">Sugerencia</p>
-                                            <p className="text-sm font-bold text-slate-700 group-hover:text-indigo-700 leading-tight">{s}</p>
-                                        </button>
-                                    ))}
-                                </div>
+                            <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                {/* Briefing Narrativo Matutino */}
+                                {briefing ? (
+                                    <div className="bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden mb-6">
+                                        <div className="px-6 pt-5 pb-2 flex items-center gap-2">
+                                            <Sparkles className="w-4 h-4 text-indigo-500" />
+                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Briefing del día</span>
+                                            <span className="ml-auto text-[10px] text-slate-400 font-medium">
+                                                {new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}
+                                            </span>
+                                        </div>
+                                        <div className="px-6 pb-6">
+                                            <InlineMarkdown
+                                                text={briefing}
+                                                className="text-[15px] leading-relaxed text-slate-700 font-medium"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center text-center mb-6 py-6">
+                                        <div className="p-6 bg-white rounded-[32px] shadow-sm border border-slate-100 mb-4">
+                                            <img src="/kesito.svg" alt="Kesito" className={cn("w-12 h-12 object-contain", loadingInsights && "animate-pulse")} />
+                                        </div>
+                                        <h2 className="text-2xl font-black tracking-tight text-slate-900">
+                                            {loadingInsights ? 'Preparando briefing...' : 'Hola, soy Kesito'}
+                                        </h2>
+                                        <p className="text-slate-500 max-w-sm font-medium mt-2 text-sm">
+                                            {loadingInsights
+                                                ? 'Analizando los datos del día para tu resumen ejecutivo'
+                                                : 'Tu consultor senior. Pregúntame lo que necesites del negocio o cualquier otro tema.'}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* 6 Hallazgos del día como preguntas */}
+                                {dailyInsights.length > 0 && (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between px-2">
+                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                                Hallazgos del día · {dailyInsights.length}
+                                            </span>
+                                            <button
+                                                onClick={() => fetchDailyInsights(true)}
+                                                disabled={loadingInsights}
+                                                className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                                                title="Actualizar hallazgos"
+                                            >
+                                                <RefreshCw className={cn("w-3 h-3", loadingInsights && "animate-spin")} />
+                                                Actualizar
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-2">
+                                            {dailyInsights.slice(0, 6).map((insight, i) => {
+                                                const sev = SEVERITY_STYLES[insight.severity];
+                                                const SevIcon = sev.icon;
+                                                return (
+                                                    <button
+                                                        key={insight.id || i}
+                                                        onClick={() => handleSend(insight.question)}
+                                                        className="group relative flex items-start gap-3 p-4 text-left bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all animate-in fade-in slide-in-from-left-2 duration-300"
+                                                        style={{ animationDelay: `${i * 50}ms` }}
+                                                    >
+                                                        <div className={cn("absolute left-0 top-3 bottom-3 w-1 rounded-full", sev.bar)} />
+                                                        <div className="pl-2 flex items-start gap-3 flex-1 min-w-0">
+                                                            <SevIcon className={cn(
+                                                                "w-4 h-4 mt-0.5 flex-shrink-0",
+                                                                insight.severity === 'critical' && 'text-rose-500',
+                                                                insight.severity === 'opportunity' && 'text-emerald-500',
+                                                                insight.severity === 'info' && 'text-indigo-400'
+                                                            )} />
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700 leading-snug">
+                                                                    {insight.question}
+                                                                </p>
+                                                                {insight.summary && (
+                                                                    <p className="text-[11px] text-slate-500 mt-1 leading-snug line-clamp-2">
+                                                                        {insight.summary}
+                                                                    </p>
+                                                                )}
+                                                                <div className="flex items-center gap-2 mt-2">
+                                                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                                                        {insight.area}
+                                                                    </span>
+                                                                    <span className="text-[9px] text-slate-300">·</span>
+                                                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                                                        {sev.label}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Si no hay insights pero sí hay default suggestions */}
+                                {dailyInsights.length === 0 && !loadingInsights && defaultSuggestions.length > 0 && (
+                                    <div className="space-y-3">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-2">
+                                            Para empezar
+                                        </span>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            {defaultSuggestions.slice(0, 6).map((s, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => handleSend(s)}
+                                                    className="p-4 text-left bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all"
+                                                >
+                                                    <p className="text-sm font-bold text-slate-700 leading-snug">{s}</p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -368,28 +546,63 @@ export function ChatAgent() {
                                 )}>
                                     {message.role === 'assistant' ? (
                                         <div className="flex flex-col">
-                                            {/* Analyst Header */}
-                                            <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 flex items-center justify-between">
-                                                <div className="flex items-center space-x-2">
-                                                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" />
-                                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
-                                                        Reporte Analítico Senior {message.ai_model && `(${message.ai_model})`}
-                                                    </span>
-                                                </div>
-                                                <div className="flex space-x-1">
-                                                    <div className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
-                                                    <div className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
-                                                </div>
-                                            </div>
+                                            {/* Contenido principal del mensaje */}
+                                            <div className="px-6 py-5">
+                                                {/* Respuesta conversacional con métricas inline */}
+                                                <InlineMarkdown
+                                                    text={message.content}
+                                                    className="text-[15px] leading-relaxed text-slate-700"
+                                                />
 
-                                            {/* Analysis Content - Respuesta Corta */}
-                                            <div className="px-6 py-6 group">
-                                                <p className="text-[15px] leading-relaxed text-slate-700 font-medium whitespace-pre-wrap mb-5">
-                                                    {message.content}
-                                                </p>
+                                                {/* Chips de acción contextuales — solo si NO es respuesta conversacional pura */}
+                                                {!message.conversational && (
+                                                    ((message.results && message.results.length > 0) ||
+                                                        (message.key_insights && message.key_insights.length > 0) ||
+                                                        (message.recommendations && message.recommendations.length > 0)) && (
+                                                        <div className="mt-5 flex flex-wrap gap-2">
+                                                            {message.results && message.results.length > 0 && !(message.results.length === 1 && Object.keys(message.results[0]).length === 1) && (
+                                                                <button
+                                                                    onClick={() => toggleData(index)}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-full transition-all border bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95"
+                                                                >
+                                                                    <BarChart3 className="w-3.5 h-3.5 text-slate-500" />
+                                                                    <span>{expandedData[index] ? 'Ocultar datos' : 'Ver datos'}</span>
+                                                                    {expandedData[index] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                                                </button>
+                                                            )}
+                                                            {message.key_insights && message.key_insights.length > 0 && (
+                                                                <button
+                                                                    onClick={() => toggleInsights(index)}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-full transition-all border bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50 active:scale-95"
+                                                                >
+                                                                    <Lightbulb className="w-3.5 h-3.5" />
+                                                                    <span>Hallazgos</span>
+                                                                    <span className="ml-0.5 px-1.5 bg-indigo-100 rounded-full text-[9px]">
+                                                                        {message.key_insights.length}
+                                                                    </span>
+                                                                    {expandedInsights[index] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                                                </button>
+                                                            )}
+                                                            {message.recommendations && message.recommendations.length > 0 && (
+                                                                <button
+                                                                    onClick={() => toggleRecommendations(index)}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-full transition-all border bg-white border-emerald-200 text-emerald-700 hover:bg-emerald-50 active:scale-95"
+                                                                >
+                                                                    <Target className="w-3.5 h-3.5" />
+                                                                    <span>Acciones</span>
+                                                                    <span className="ml-0.5 px-1.5 bg-emerald-100 rounded-full text-[9px]">
+                                                                        {message.recommendations.length}
+                                                                    </span>
+                                                                    {expandedRecommendations[index] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )
+                                                )}
 
-                                                {message.results && message.results.length > 0 && !(message.results.length === 1 && Object.keys(message.results[0]).length === 1) && (
-                                                    <div className="mt-2 mb-2 animate-in zoom-in-95 duration-700 delay-200">
+                                                {/* Panel expandible: Datos crudos (tabla/gráfica) */}
+                                                {expandedData[index] && message.results && message.results.length > 0 && (
+                                                    <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                                                         <ResultsDisplay
                                                             data={message.results}
                                                             sql={message.sql || ''}
@@ -399,114 +612,83 @@ export function ChatAgent() {
                                                     </div>
                                                 )}
 
-                                                {/* Botones para profundizar: Hallazgos clave + Recomendaciones */}
-                                                {((message.key_insights && message.key_insights.length > 0) || (message.recommendations && message.recommendations.length > 0)) && (
-                                                    <div className="mt-6 flex flex-wrap gap-2">
-                                                        {message.key_insights && message.key_insights.length > 0 && (
-                                                            <button
-                                                                onClick={() => toggleInsights(index)}
-                                                                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-full transition-all border bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 active:scale-95"
-                                                            >
-                                                                <Lightbulb className="w-3.5 h-3.5" />
-                                                                <span>Hallazgos clave</span>
-                                                                {expandedInsights[index] ? (
-                                                                    <ChevronUp className="w-3.5 h-3.5" />
-                                                                ) : (
-                                                                    <ChevronDown className="w-3.5 h-3.5" />
-                                                                )}
-                                                            </button>
-                                                        )}
-                                                        {message.recommendations && message.recommendations.length > 0 && (
-                                                            <button
-                                                                onClick={() => toggleRecommendations(index)}
-                                                                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-full transition-all border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 active:scale-95"
-                                                            >
-                                                                <Target className="w-3.5 h-3.5" />
-                                                                <span>Recomendaciones</span>
-                                                                {expandedRecommendations[index] ? (
-                                                                    <ChevronUp className="w-3.5 h-3.5" />
-                                                                ) : (
-                                                                    <ChevronDown className="w-3.5 h-3.5" />
-                                                                )}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                                {/* Hallazgos clave - Desplegable */}
+                                                {/* Panel expandible: Hallazgos */}
                                                 {expandedInsights[index] && message.key_insights && message.key_insights.length > 0 && (
-                                                    <div className="mt-4 bg-indigo-50 border border-indigo-100 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
-                                                        <ul className="space-y-2">
+                                                    <div className="mt-4 relative bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+                                                        <div className="absolute left-0 top-3 bottom-3 w-1 bg-indigo-500 rounded-full" />
+                                                        <ul className="space-y-2 pl-2">
                                                             {message.key_insights.map((insight, idx) => (
                                                                 <li key={idx} className="text-[13px] text-slate-700 leading-snug flex items-start">
-                                                                    <span className="inline-block w-1.5 h-1.5 bg-indigo-600 rounded-full mr-3 mt-1.5 flex-shrink-0" />
-                                                                    <span>{insight}</span>
+                                                                    <span className="inline-block w-1 h-1 bg-indigo-500 rounded-full mr-2.5 mt-2 flex-shrink-0" />
+                                                                    <InlineMarkdown text={insight} className="flex-1" />
                                                                 </li>
                                                             ))}
                                                         </ul>
                                                     </div>
                                                 )}
 
-                                                {/* Recomendaciones - Desplegable */}
+                                                {/* Panel expandible: Recomendaciones */}
                                                 {expandedRecommendations[index] && message.recommendations && message.recommendations.length > 0 && (
-                                                    <div className="mt-4 bg-emerald-50 border border-emerald-100 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
-                                                        <ul className="space-y-2">
+                                                    <div className="mt-4 relative bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+                                                        <div className="absolute left-0 top-3 bottom-3 w-1 bg-emerald-500 rounded-full" />
+                                                        <ul className="space-y-2 pl-2">
                                                             {message.recommendations.map((rec, idx) => (
                                                                 <li key={idx} className="text-[13px] text-slate-700 leading-snug flex items-start">
-                                                                    <span className="inline-block w-1.5 h-1.5 bg-emerald-600 rounded-full mr-3 mt-1.5 flex-shrink-0" />
-                                                                    <span>{rec}</span>
+                                                                    <span className="inline-block w-1 h-1 bg-emerald-500 rounded-full mr-2.5 mt-2 flex-shrink-0" />
+                                                                    <InlineMarkdown text={rec} className="flex-1" />
                                                                 </li>
                                                             ))}
                                                         </ul>
-                                                    </div>
-                                                )}
-
-                                                {/* Reportes sugeridos - Clickeables que navegan */}
-                                                {message.suggested_reports && message.suggested_reports.length > 0 && (
-                                                    <div className="mt-8 pt-6 border-t border-slate-100 animate-in fade-in duration-700 delay-400">
-                                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 block mb-4">Reportes para profundizar</span>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                            {message.suggested_reports.map((report, idx) => (
-                                                                <button
-                                                                    key={idx}
-                                                                    onClick={() => navigateToReport(report.path)}
-                                                                    disabled={!report.path}
-                                                                    className="group/report text-left bg-slate-50 hover:bg-indigo-50 disabled:hover:bg-slate-50 disabled:cursor-not-allowed p-3 rounded-2xl border border-slate-100 hover:border-indigo-200 transition-all active:scale-95"
-                                                                >
-                                                                    <div className="flex items-start justify-between gap-2">
-                                                                        <div className="flex-1 min-w-0">
-                                                                            <p className="text-xs font-bold text-slate-800 group-hover/report:text-indigo-700 mb-1 flex items-center gap-1.5">
-                                                                                📊 {report.report_name}
-                                                                            </p>
-                                                                            <p className="text-[11px] text-slate-500 leading-snug">{report.reason}</p>
-                                                                        </div>
-                                                                        {report.path && (
-                                                                            <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover/report:text-indigo-600 flex-shrink-0 mt-0.5" />
-                                                                        )}
-                                                                    </div>
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
-                                                    <div className="mt-8 pt-6 border-t border-slate-100 animate-in fade-in duration-700 delay-500">
-                                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 block mb-4">Continuar el análisis</span>
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {message.suggestedQuestions.map((q, i) => (
-                                                                <button
-                                                                    key={i}
-                                                                    onClick={() => handleSend(q)}
-                                                                    className="px-5 py-2.5 text-xs font-bold text-indigo-600 bg-white hover:bg-indigo-600 hover:text-white rounded-2xl transition-all border border-indigo-100 shadow-sm hover:shadow-md active:scale-95"
-                                                                >
-                                                                    {q}
-                                                                </button>
-                                                            ))}
-                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
+
+                                            {/* Footer: reportes navegables + preguntas de continuación */}
+                                            {((message.suggested_reports && message.suggested_reports.length > 0) ||
+                                                (message.suggestedQuestions && message.suggestedQuestions.length > 0)) && (
+                                                <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-4 space-y-4">
+                                                    {message.suggested_reports && message.suggested_reports.length > 0 && (
+                                                        <div className="space-y-2">
+                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                                                Reportes relacionados
+                                                            </span>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {message.suggested_reports.map((report, idx) => (
+                                                                    <button
+                                                                        key={idx}
+                                                                        onClick={() => navigateToReport(report.path)}
+                                                                        disabled={!report.path}
+                                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-full transition-all border bg-white border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                                                                        title={report.reason}
+                                                                    >
+                                                                        <span>{report.report_name}</span>
+                                                                        {report.path && <ExternalLink className="w-3 h-3" />}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
+                                                        <div className="space-y-2">
+                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                                                Continuar
+                                                            </span>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {message.suggestedQuestions.map((q, i) => (
+                                                                    <button
+                                                                        key={i}
+                                                                        onClick={() => handleSend(q)}
+                                                                        className="px-3 py-1.5 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-900 hover:text-white rounded-full transition-all border border-slate-200 hover:border-slate-900 active:scale-95"
+                                                                    >
+                                                                        {q}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     ) : (
                                         <p className="text-[16px] font-bold leading-relaxed whitespace-pre-wrap">{message.content}</p>

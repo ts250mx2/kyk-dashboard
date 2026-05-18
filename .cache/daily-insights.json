@@ -1,0 +1,70 @@
+{
+  "date": "18/5/2026",
+  "executed_scanner_ids": [
+    "ventas_depto_anomalias",
+    "ventas_sucursal_top_bottom",
+    "ticket_promedio_tendencia",
+    "ventas_dia_vs_promedio"
+  ],
+  "insights": [
+    {
+      "id": "ventas_hoy_vs_promedio_1779090689462_p68vxh",
+      "question": "¿Por qué las ventas de hoy están en $0 vs promedio de $3.1M?",
+      "severity": "critical",
+      "area": "ventas",
+      "detected_at": "2026-05-18T07:51:29.462Z",
+      "summary": "Ventas del 18 de mayo registran $0 contra un promedio de $3.1M en 7 días"
+    },
+    {
+      "id": "ventas_hoy_vs_promedio_1779090689462_dbuked",
+      "question": "¿Las sucursales están operando hoy 18 de mayo?",
+      "severity": "critical",
+      "area": "operacion",
+      "detected_at": "2026-05-18T07:51:29.462Z",
+      "summary": "No se detecta actividad de ventas en ninguna sucursal hoy"
+    },
+    {
+      "id": "tendencia_ticket_promedio_1779090689462_r8e9b2",
+      "question": "¿Por qué el ticket promedio cayó de $456 a $393 en 4 días?",
+      "severity": "critical",
+      "area": "ventas",
+      "detected_at": "2026-05-18T07:51:29.462Z",
+      "summary": "Ticket promedio cayó 14% entre el 15 y el 17 de mayo"
+    },
+    {
+      "id": "tendencia_ticket_promedio_1779090689462_phtxni",
+      "question": "¿Qué productos dejaron de venderse que bajaron el ticket promedio?",
+      "severity": "opportunity",
+      "area": "productos",
+      "detected_at": "2026-05-18T07:51:29.462Z",
+      "summary": "Caída sostenida del ticket sugiere cambio en mix de productos vendidos"
+    },
+    {
+      "id": "tendencia_ticket_promedio_1779090689462_ibbu5h",
+      "question": "¿Qué impulsó el pico de 8,515 tickets el 16 de mayo?",
+      "severity": "opportunity",
+      "area": "ventas",
+      "detected_at": "2026-05-18T07:51:29.462Z",
+      "summary": "El 16 de mayo tuvo el mayor volumen de tickets de la semana"
+    },
+    {
+      "id": "tendencia_ticket_promedio_1779090689462_4cgqca",
+      "question": "¿El martes 13 con 6,736 tickets tuvo algún problema operativo?",
+      "severity": "info",
+      "area": "operacion",
+      "detected_at": "2026-05-18T07:51:29.462Z",
+      "summary": "El martes registró 26% menos tickets que el viernes 16"
+    },
+    {
+      "id": "sucursal_lider_rezagada_1779090689462_h3r3uc",
+      "question": "¿Por qué no hay datos de sucursales líderes ni rezagadas hoy?",
+      "severity": "critical",
+      "area": "operacion",
+      "detected_at": "2026-05-18T07:51:29.462Z",
+      "summary": "Scanner de sucursales devolvió datos vacíos, posible fallo de información"
+    }
+  ],
+  "last_updated": "2026-05-18T07:51:29.462Z",
+  "briefing": "Buen día. El panorama de hoy exige atención inmediata: las ventas del **18 de mayo registran $0** contra un promedio de **$3.1M** en los últimos siete días, y no se detecta actividad en ninguna sucursal, lo cual puede estar ligado a un fallo en la captura de información más que a un cierre real, pero necesita confirmarse cuanto antes. A esto se suma que el ticket promedio ya venía arrastrando una caída del **14%** entre el 15 y el 17 de mayo, una tendencia que apunta a un cambio en el mix de productos que los clientes están llevando y que vale la pena desmenuzar, sobre todo porque el **viernes 16** mostró el mayor volumen de tickets de la semana y ahí puede haber pistas de qué sí está funcionando. Empecemos por confirmar el estatus operativo de hoy y de ahí nos metemos a entender qué está pasando con ese ticket.",
+  "briefing_generated_at": "2026-05-18T07:51:37.180Z"
+}
