@@ -4,6 +4,9 @@
  *  - *itálicas*
  *  - `código`
  *
+ * Si se proporciona `onCite`, las cifras numéricas en **negritas** se vuelven
+ * clickeables y trigger del callback (citación inline a la fuente de datos).
+ *
  * Liviano: sin dependencias externas, solo para los mensajes del chat.
  */
 
@@ -12,12 +15,43 @@ import React from 'react';
 interface InlineMarkdownProps {
     text: string;
     className?: string;
+    /** Si se provee, las cifras en negrita son clickeables y disparan el callback */
+    onCite?: () => void;
 }
 
-function renderSegment(segment: string, key: number): React.ReactNode {
+/**
+ * Heurística: detecta si el contenido de una **negrita** es una cifra/dato
+ * citable (número, porcentaje, currency, fecha).
+ */
+function isCitableValue(content: string): boolean {
+    const trimmed = content.trim();
+    // Incluye: $1.4M, +12%, -25%, 847K, 1,234.56, 2026-05-18, 18 mayo, etc.
+    return /^[$+\-]?[\d.,]+[%KkMmBb]?$/.test(trimmed) ||
+        /^[$+\-]?[\d.,]+\s*(mil|millones|MXN|USD)$/i.test(trimmed) ||
+        /^\d{4}-\d{2}-\d{2}/.test(trimmed) ||
+        /^[$+\-]?[\d.,]+\s*[a-zA-Zñ]{0,15}$/.test(trimmed) && /\d/.test(trimmed);
+}
+
+function renderSegment(segment: string, key: number, onCite?: () => void): React.ReactNode {
     const boldMatch = segment.match(/^\*\*(.+?)\*\*$/);
     if (boldMatch) {
-        return <strong key={key} className="font-bold text-slate-900">{boldMatch[1]}</strong>;
+        const content = boldMatch[1];
+        const citable = onCite && isCitableValue(content);
+
+        if (citable) {
+            return (
+                <button
+                    key={key}
+                    type="button"
+                    onClick={onCite}
+                    className="font-bold text-slate-900 cursor-pointer border-b border-dotted border-slate-400 hover:border-indigo-500 hover:text-indigo-700 transition-colors decoration-dotted inline"
+                    title="Ver fuente de este dato"
+                >
+                    {content}
+                </button>
+            );
+        }
+        return <strong key={key} className="font-bold text-slate-900">{content}</strong>;
     }
 
     const italicMatch = segment.match(/^\*(.+?)\*$/);
@@ -37,7 +71,7 @@ function renderSegment(segment: string, key: number): React.ReactNode {
     return <React.Fragment key={key}>{segment}</React.Fragment>;
 }
 
-export function InlineMarkdown({ text, className }: InlineMarkdownProps) {
+export function InlineMarkdown({ text, className, onCite }: InlineMarkdownProps) {
     if (!text) return null;
 
     const paragraphs = text.split(/\n\s*\n/);
@@ -49,7 +83,7 @@ export function InlineMarkdown({ text, className }: InlineMarkdownProps) {
 
                 const lineNodes = lines.map((line, lIdx) => {
                     const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g).filter(Boolean);
-                    const segments = parts.map((p, i) => renderSegment(p, i));
+                    const segments = parts.map((p, i) => renderSegment(p, i, onCite));
                     return (
                         <React.Fragment key={lIdx}>
                             {segments}

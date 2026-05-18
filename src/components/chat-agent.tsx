@@ -755,12 +755,23 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                     </div>
                                                 )}
 
-                                                {/* Respuesta conversacional con métricas inline */}
+                                                {/* Respuesta conversacional con métricas inline (cifras citables) */}
                                                 {message.content && (
                                                     <div className="relative">
                                                         <InlineMarkdown
                                                             text={message.content}
                                                             className="text-[15px] leading-relaxed text-slate-700"
+                                                            onCite={
+                                                                message.results && message.results.length > 0
+                                                                    ? () => {
+                                                                        setExpandedData(prev => ({ ...prev, [index]: true }));
+                                                                        setTimeout(() => {
+                                                                            const el = document.getElementById(`agent-data-${index}`);
+                                                                            el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                                                        }, 100);
+                                                                    }
+                                                                    : undefined
+                                                            }
                                                         />
                                                         {message.streaming && (
                                                             <span className="inline-block w-1.5 h-4 ml-0.5 bg-indigo-500 align-middle animate-pulse" />
@@ -816,7 +827,10 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
 
                                                 {/* Panel expandible: Datos crudos (tabla/gráfica/KPIs) */}
                                                 {expandedData[index] && message.results && message.results.length > 0 && (
-                                                    <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                    <div
+                                                        id={`agent-data-${index}`}
+                                                        className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300 scroll-mt-4"
+                                                    >
                                                         <AgentDataView
                                                             data={message.results}
                                                             suggestedViz={message.visualization as any}
