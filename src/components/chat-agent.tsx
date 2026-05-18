@@ -5,13 +5,8 @@ import { ChatInput } from '@/components/chat-input';
 import { ResultsDisplay } from '@/components/results-display';
 import { cn } from '@/lib/utils';
 import {
-    MessageSquare,
     X,
     Maximize2,
-    ArrowRight,
-    Sparkles,
-    Search,
-    ArrowLeft,
     Trash2
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -22,13 +17,10 @@ interface Message {
     sql?: string;
     visualization?: string;
     results?: Record<string, any>[];
-    insight?: string;
     suggestedQuestions?: string[];
     timestamp?: number;
     error?: string;
     ai_model?: string;
-    key_insights?: string[];
-    recommendations?: string[];
     suggested_reports?: Array<{
         report_name: string;
         reason: string;
@@ -223,12 +215,9 @@ export function ChatAgent() {
                     sql: data.sql,
                     visualization: data.visualization,
                     results: data.data,
-                    insight: data.insight,
                     suggestedQuestions: data.suggested_questions,
                     timestamp: Date.now(),
                     ai_model: data.ai_model,
-                    key_insights: data.key_insights,
-                    recommendations: data.recommendations,
                     suggested_reports: data.suggested_reports,
                 };
                 setMessages((prev) => [...prev, assistantMsg]);
@@ -372,68 +361,6 @@ export function ChatAgent() {
                                                     {message.content}
                                                 </p>
 
-                                                {/* Key Insights */}
-                                                {message.key_insights && message.key_insights.length > 0 && (
-                                                    <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-5 rounded-[24px] mb-8 shadow-lg shadow-indigo-100 animate-in slide-in-from-left-4 duration-500">
-                                                        <div className="flex items-start space-x-4">
-                                                            <div className="p-3 bg-white/20 rounded-2xl flex-shrink-0">
-                                                                <Search className="w-5 h-5" />
-                                                            </div>
-                                                            <div className="flex-1">
-                                                                <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70 block mb-3">Hallazgos Clave</span>
-                                                                <ul className="space-y-2">
-                                                                    {message.key_insights.map((insight, idx) => (
-                                                                        <li key={idx} className="text-[14px] font-bold leading-snug flex items-start">
-                                                                            <span className="inline-block w-1.5 h-1.5 bg-white rounded-full mr-3 mt-1.5 flex-shrink-0" />
-                                                                            <span>{insight}</span>
-                                                                        </li>
-                                                                    ))}
-                                                                </ul>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Recommendations */}
-                                                {message.recommendations && message.recommendations.length > 0 && (
-                                                    <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-[24px] mb-8 animate-in slide-in-from-left-4 duration-500 delay-100">
-                                                        <div className="flex items-start space-x-4">
-                                                            <div className="p-3 bg-emerald-100 rounded-2xl flex-shrink-0">
-                                                                <ArrowRight className="w-5 h-5 text-emerald-600" />
-                                                            </div>
-                                                            <div className="flex-1">
-                                                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 block mb-3">Recomendaciones</span>
-                                                                <ul className="space-y-2">
-                                                                    {message.recommendations.map((rec, idx) => (
-                                                                        <li key={idx} className="text-[14px] font-bold text-slate-700 leading-snug flex items-start">
-                                                                            <span className="inline-block w-1.5 h-1.5 bg-emerald-600 rounded-full mr-3 mt-1.5 flex-shrink-0" />
-                                                                            <span>{rec}</span>
-                                                                        </li>
-                                                                    ))}
-                                                                </ul>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Suggested Reports */}
-                                                {message.suggested_reports && message.suggested_reports.length > 0 && (
-                                                    <div className="bg-amber-50 border border-amber-200 p-5 rounded-[24px] mb-8 animate-in slide-in-from-left-4 duration-500 delay-200">
-                                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-700 block mb-4">Reportes Recomendados para Profundizar</span>
-                                                        <div className="space-y-3">
-                                                            {message.suggested_reports.map((report, idx) => (
-                                                                <div key={idx} className="bg-white p-4 rounded-xl border border-amber-100 hover:border-amber-300 transition-all">
-                                                                    <p className="text-sm font-bold text-slate-900 mb-2">{report.report_name}</p>
-                                                                    <p className="text-xs text-slate-600 mb-2">{report.reason}</p>
-                                                                    {report.expected_action && (
-                                                                        <p className="text-xs text-amber-700 font-semibold">→ {report.expected_action}</p>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
                                                 {message.results && message.results.length > 0 && !(message.results.length === 1 && Object.keys(message.results[0]).length === 1) && (
                                                     <div className="mt-2 animate-in zoom-in-95 duration-700 delay-200">
                                                         <ResultsDisplay
@@ -445,9 +372,24 @@ export function ChatAgent() {
                                                     </div>
                                                 )}
 
+                                                {/* Suggested Reports - Aparece al final, después del análisis */}
+                                                {message.suggested_reports && message.suggested_reports.length > 0 && (
+                                                    <div className="mt-8 pt-6 border-t border-slate-100 animate-in fade-in duration-700 delay-400">
+                                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 block mb-4">Reportes para profundizar</span>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                            {message.suggested_reports.map((report, idx) => (
+                                                                <div key={idx} className="bg-slate-50 hover:bg-slate-100 p-3 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all cursor-default">
+                                                                    <p className="text-xs font-bold text-slate-800 mb-1">📊 {report.report_name}</p>
+                                                                    <p className="text-[11px] text-slate-500 leading-snug">{report.reason}</p>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 {message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
-                                                    <div className="mt-10 pt-8 border-t border-slate-100 animate-in fade-in duration-700 delay-500">
-                                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 block mb-4">Análisis sugeridos</span>
+                                                    <div className="mt-8 pt-6 border-t border-slate-100 animate-in fade-in duration-700 delay-500">
+                                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 block mb-4">Continuar el análisis</span>
                                                         <div className="flex flex-wrap gap-2">
                                                             {message.suggestedQuestions.map((q, i) => (
                                                                 <button

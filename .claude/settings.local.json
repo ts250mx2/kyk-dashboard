@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(git add *)",
-      "Bash(git commit -m '🚀 Mejora profesional del agente de IA - Análisis estratégico y sugerencias de reportes *)"
+      "Bash(git commit -m '🚀 Mejora profesional del agente de IA - Análisis estratégico y sugerencias de reportes *)",
+      "Bash(npm run *)",
+      "Bash(git commit -m 'Refactorizar agente: respuestas conversacionales con preguntas inteligentes *)"
     ]
   }
 }
