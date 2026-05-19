@@ -66,6 +66,7 @@ const menuSections: MenuSection[] = [
             { name: "Cortes de Caja", emoji: "💸", href: "/dashboard/sales/cash-closure" },
             { name: "Operaciones", emoji: "🏢", href: "/dashboard/sales/operations" },
             { name: "Mapa de Calor", emoji: "🔥", href: "/dashboard/sales/heatmap" },
+            { name: "Clientes", emoji: "👥", href: "/dashboard/sales/clients" },
             { name: "Tendencias de Venta", emoji: "📈", href: "/dashboard/sales/reports/trends" },
             { name: "Comparativas de Ventas", emoji: "⚖️", href: "/dashboard/sales/reports/comparison" },
             { name: "Metas", emoji: "🎯", href: "/dashboard/sales/goals" },

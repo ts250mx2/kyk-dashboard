@@ -6,6 +6,7 @@ import { AgentDataView } from '@/components/agent-data-view';
 import { InlineMarkdown } from '@/components/inline-markdown';
 import { ConversationsDropdown } from '@/components/conversations-dropdown';
 import { AlertsPanel, CreateAlertDraft } from '@/components/alerts-panel';
+import { ShareMenu } from '@/components/share-menu';
 import { readSseStream } from '@/lib/sse-client';
 import { cn } from '@/lib/utils';
 import {
@@ -915,6 +916,25 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                                     </span>
                                                                     {expandedRecommendations[index] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                                                                 </button>
+                                                            )}
+                                                            {/* Compartir / Exportar */}
+                                                            {!message.streaming && (
+                                                                <ShareMenu
+                                                                    variant="pill"
+                                                                    payload={{
+                                                                        question: messages[index - 1]?.content || '',
+                                                                        analysis: message.content || '',
+                                                                        keyInsights: message.key_insights,
+                                                                        recommendations: message.recommendations,
+                                                                        data: message.results,
+                                                                        sql: message.sql,
+                                                                        aiModel: message.ai_model,
+                                                                        suggestedReports: message.suggested_reports?.map(r => ({
+                                                                            report_name: r.report_name,
+                                                                            reason: r.reason
+                                                                        }))
+                                                                    }}
+                                                                />
                                                             )}
                                                         </div>
                                                     )
