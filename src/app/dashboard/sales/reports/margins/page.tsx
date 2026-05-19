@@ -20,8 +20,52 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import {
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Cell
+} from 'recharts';
+import { DashboardCommandBar } from '@/components/dashboard-command-bar';
+import { NarrativeSummary } from '@/components/narrative-summary';
 
-type GroupBy = 'sucursal' | 'depto' | 'articulo' | 'categoria' | 'marca';
+const STORE_COLOR_MAP: Record<string, string> = {
+    'BODEGA 238': '#35e844',
+    'ARAMBERRI 210': '#eb0258',
+    'LINCOLN': '#fcc442',
+    'LEONES': '#4ecdc4',
+    'ZUAZUA': '#de6262',
+    'VALLE SOLEADO': '#ff0f35',
+    'RUPERTO MTZ QCF': '#029913',
+    'SANTA CATARINA QCF': '#fea189',
+    'SOLIDARIDAD': '#566965',
+    'MERKADON': '#fcea42',
+    'MERKDON': '#fcea42',
+};
+
+const STORE_COLORS = [
+    '#2563EB', '#3B82F6', '#DC2626', '#EF4444', '#0D9488', '#14B8A6', '#D97706', '#F59E0B',
+    '#16A34A', '#22C55E', '#064E3B', '#DCFCE7', '#7C3AED', '#8B5CF6', '#713F12', '#92400E',
+    '#EAB308', '#CA8A04', '#0F172A', '#334155', '#EA580C', '#F97316'
+];
+
+const getStoreColor = (name: string) => {
+    if (!name) return STORE_COLORS[0];
+    const cleanName = name.trim().toUpperCase();
+    if (STORE_COLOR_MAP[cleanName]) return STORE_COLOR_MAP[cleanName];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % STORE_COLORS.length;
+    return STORE_COLORS[index];
+};
+
+type GroupBy = 'sucursal' | 'depto' | 'articulo' | 'categoria' | 'marca' | 'proveedor';
 
 interface Row {
     Grupo: string;
@@ -47,6 +91,7 @@ const GROUPS: { key: GroupBy; label: string }[] = [
     { key: 'depto', label: 'Departamento' },
     { key: 'categoria', label: 'Categoría' },
     { key: 'marca', label: 'Familia' },
+    { key: 'proveedor', label: 'Proveedor' },
     { key: 'articulo', label: 'Artículo (Top 100)' }
 ];
 
@@ -91,6 +136,61 @@ export default function MargenesRentabilidadPage() {
     const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
     const [showStoreDropdown, setShowStoreDropdown] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [aiMode, setAiMode] = useState(false);
+
+    // AI Command Bar suggestions
+    const commandSuggestions = [
+        "¿Cuáles son los márgenes de este mes?",
+        "Ver los márgenes agrupados por departamento",
+        "Filtrar por sucursal Centro y ver rentabilidad por artículo",
+        "Comparar ingresos vs costos del último año",
+        "¿Qué artículo tiene la mayor utilidad bruta este mes?"
+    ];
+
+    // Callback to apply AI recommendations
+    const applyAgentUpdates = (updates: any) => {
+        if (updates.fechaInicio) setStartDate(updates.fechaInicio);
+        if (updates.fechaFin) setEndDate(updates.fechaFin);
+        if (Array.isArray(updates.storeIds)) {
+            setSelectedStoreIds(updates.storeIds.map((id: any) => String(id)));
+        }
+        if (updates.groupBy && ['sucursal', 'depto', 'articulo', 'categoria', 'marca', 'proveedor'].includes(updates.groupBy)) {
+            setGroupBy(updates.groupBy as GroupBy);
+        }
+        if (updates.search !== undefined) setSearchTerm(updates.search);
+    };
+
+    // AI Narrative Context
+    const summaryContext = useMemo(() => {
+        const topGroups = rows.slice(0, 5).map(r => ({
+            name: r.Grupo,
+            sales: r.Ingreso,
+            cost: r.Costo,
+            profit: r.Utilidad,
+            margin: r.MargenPct
+        }));
+        const activeStoresTextStr = selectedStoreIds.length === 0 
+            ? 'Todas las sucursales' 
+            : selectedStoreIds.length === 1 
+                ? (storesCatalog.find(s => s.IdTienda.toString() === selectedStoreIds[0])?.Tienda || '1 sucursal')
+                : `${selectedStoreIds.length} sucursales`;
+
+        return {
+            pageContext: 'Márgenes y Rentabilidad',
+            period: { fechaInicio: startDate, fechaFin: endDate },
+            scope: activeStoresTextStr,
+            groupBy,
+            kpis: {
+                'Ingreso Total': kpis?.ingreso || 0,
+                'Costo Total': kpis?.costo || 0,
+                'Utilidad Bruta': kpis?.utilidad || 0,
+                'Margen Promedio': kpis?.margenPct || 0,
+                'Unidades Vendidas': kpis?.unidades || 0,
+                'Tickets/Operaciones': kpis?.tickets || 0
+            },
+            topPerformers: topGroups
+        };
+    }, [startDate, endDate, selectedStoreIds, storesCatalog, groupBy, kpis, rows]);
 
     // Fetch Stores Catalog
     useEffect(() => {
@@ -153,6 +253,14 @@ export default function MargenesRentabilidadPage() {
         return copy;
     }, [filteredRows, sortKey, sortDir]);
 
+    const topUtilityRows = useMemo(() => {
+        const sorted = [...filteredRows].sort((a, b) => b.Utilidad - a.Utilidad);
+        if (groupBy === 'sucursal') {
+            return sorted;
+        }
+        return sorted.slice(0, 10);
+    }, [filteredRows, groupBy]);
+
     const toggleSort = (key: keyof Row) => {
         if (sortKey === key) {
             setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -197,7 +305,7 @@ export default function MargenesRentabilidadPage() {
     }, [selectedStoreIds, storesCatalog]);
 
     return (
-        <div className="p-6 md:p-8 max-w-[1600px] mx-auto min-h-screen">
+        <div className="p-6 pt-3 md:p-8 md:pt-4 max-w-[1600px] mx-auto min-h-screen">
             {/* Header section with Date selectors */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-none border border-slate-100 shadow-sm print:hidden mb-6">
                 <div>
@@ -298,8 +406,58 @@ export default function MargenesRentabilidadPage() {
                     >
                         <Download className="w-4 h-4" /> <span className="hidden sm:inline">Exportar XLSX</span>
                     </button>
+
+                    {/* Modo IA Switch */}
+                    <div 
+                        className="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-none shadow-sm h-[38px] cursor-pointer select-none hover:bg-slate-100 transition-all"
+                        onClick={() => setAiMode(!aiMode)}
+                        title="Activa el Asistente IA para hacer preguntas y obtener resúmenes automáticos"
+                    >
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                            🤖 Modo IA
+                        </span>
+                        <div
+                            className={cn(
+                                "relative inline-flex h-4.5 w-8.5 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                                aiMode ? "bg-[#4050B4]" : "bg-slate-300"
+                            )}
+                        >
+                            <span
+                                className={cn(
+                                    "pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                    aiMode ? "translate-x-4" : "translate-x-0"
+                                )}
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            {/* === PATRÓN 1: Barra de comando por lenguaje natural === */}
+            {aiMode && (
+                <div className="mb-6">
+                    <DashboardCommandBar
+                        currentFilters={{
+                            fechaInicio: startDate,
+                            fechaFin: endDate,
+                            storeIds: selectedStoreIds,
+                            groupBy: groupBy,
+                            search: searchTerm
+                        } as any}
+                        availableStores={storesCatalog}
+                        onApplyUpdates={applyAgentUpdates}
+                        suggestions={commandSuggestions}
+                        dashboardType="margins"
+                    />
+                </div>
+            )}
+
+            {/* === PATRÓN 3: Resumen narrativo automático === */}
+            {aiMode && !loading && (
+                <div className="mb-6">
+                    <NarrativeSummary context={summaryContext} />
+                </div>
+            )}
 
             {/* Filtros Bar */}
             <div className="bg-white border border-slate-100 shadow-sm p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -447,6 +605,99 @@ export default function MargenesRentabilidadPage() {
                     }
                 />
             </div>
+
+            {/* Gráfico de Utilidad Bruta */}
+            {!loading && topUtilityRows.length > 0 && (
+                <div className="bg-white border border-slate-100 shadow-sm p-5 mb-6">
+                    <div className="flex justify-between items-center mb-4 border-b border-slate-50 pb-3">
+                        <div>
+                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                                Gráfico de Utilidad Bruta por {GROUPS.find(g => g.key === groupBy)?.label}
+                            </h3>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                                Top 10 con mayor rentabilidad en el periodo
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-1 bg-[#4050B4]/5 px-2.5 py-1 text-[10px] font-black text-[#4050B4] uppercase tracking-widest">
+                            <TrendingUp size={12} className="text-[#4050B4]" /> Utilidad Total: {fmtMoney(kpis?.utilidad)}
+                        </div>
+                    </div>
+                    <div className="h-72 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                                data={topUtilityRows}
+                                margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                                <XAxis 
+                                    dataKey="Grupo" 
+                                    tick={{ fill: '#94A3B8', fontSize: 9, fontWeight: 800 }}
+                                    axisLine={{ stroke: '#E2E8F0' }}
+                                    tickLine={{ stroke: '#E2E8F0' }}
+                                    tickFormatter={(val) => val && val.length > 15 ? `${val.substring(0, 12)}...` : val}
+                                />
+                                <YAxis 
+                                    tick={{ fill: '#94A3B8', fontSize: 9, fontWeight: 800 }}
+                                    axisLine={{ stroke: '#E2E8F0' }}
+                                    tickLine={{ stroke: '#E2E8F0' }}
+                                    tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: 'rgba(64, 80, 180, 0.02)' }}
+                                    content={({ active, payload }) => {
+                                        if (active && payload && payload.length) {
+                                            const data = payload[0].payload;
+                                            return (
+                                                <div className="bg-white border border-slate-200/80 p-3 shadow-lg rounded-none text-left min-w-[200px]">
+                                                    <p className="text-xs font-black text-slate-800 uppercase border-b border-slate-100 pb-1.5 mb-1.5">
+                                                        {data.Grupo}
+                                                    </p>
+                                                    <div className="space-y-1">
+                                                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                                                            <span>Ingresos:</span>
+                                                            <span className="text-slate-700 font-extrabold">{fmtMoney(data.Ingreso)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                                                            <span>Costo:</span>
+                                                            <span className="text-slate-700 font-extrabold">{fmtMoney(data.Costo)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-[10px] font-black border-t border-slate-50 pt-1 mt-1 text-[#4050B4]">
+                                                            <span>Utilidad:</span>
+                                                            <span className="font-black">{fmtMoney(data.Utilidad)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                                                            <span>Margen:</span>
+                                                            <span className="text-slate-700 font-extrabold">{fmtPct(data.MargenPct)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                />
+                                <Bar 
+                                    dataKey="Utilidad" 
+                                    radius={[2, 2, 0, 0]}
+                                >
+                                    {topUtilityRows.map((entry, index) => {
+                                        const color = groupBy === 'sucursal'
+                                            ? getStoreColor(entry.Grupo)
+                                            : (entry.Utilidad >= 0 ? '#10B981' : '#EF4444');
+                                        return (
+                                            <Cell 
+                                                key={`cell-${index}`} 
+                                                fill={color} 
+                                                fillOpacity={groupBy === 'sucursal' ? 1.0 : (0.85 - (index * 0.05))}
+                                            />
+                                        );
+                                    })}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            )}
 
             {/* Data Table */}
             <div className="bg-white border border-slate-200 rounded-none overflow-hidden shadow-sm">

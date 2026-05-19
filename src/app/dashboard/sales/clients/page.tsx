@@ -1040,17 +1040,17 @@ export default function ClientsDashboardPage() {
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
                                             <Pie
-                                                data={activeDesglose.stores.slice(0, 8)}
-                                                dataKey="Total"
-                                                nameKey="Tienda"
                                                 cx="50%"
                                                 cy="50%"
+                                                data={activeDesglose.stores.slice(0, 8)}
+                                                dataKey="Total"
                                                 innerRadius={60}
+                                                nameKey="Tienda"
                                                 outerRadius={90}
                                                 paddingAngle={2}
                                             >
                                                 {activeDesglose.stores.slice(0, 8).map((entry: any, index: number) => (
-                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                    <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} />
                                                 ))}
                                             </Pie>
                                             <Tooltip formatter={(value: any) => formatCurrency(value)} />
@@ -1098,7 +1098,7 @@ export default function ClientsDashboardPage() {
                                                 <Tooltip formatter={(val: any) => [formatCurrency(val), 'Monto']} />
                                                 <Bar dataKey="Total" fill="#4050B4" radius={[4, 4, 0, 0]}>
                                                     {activeDesglose.stores.map((entry: any, index: number) => (
-                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                        <Cell key={`cell-${index}`} fill={getStoreColor(entry.Tienda)} />
                                                     ))}
                                                 </Bar>
                                             </BarChart>

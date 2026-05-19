@@ -18,14 +18,16 @@ export interface AvailableStore {
 }
 
 interface DashboardCommandBarProps {
-    currentFilters: DashboardFilters;
+    currentFilters: any;
     availableStores?: AvailableStore[];
     availableMetrics?: string[];
-    onApplyUpdates: (updates: Partial<DashboardFilters>) => void;
+    onApplyUpdates: (updates: any) => void;
     /** Placeholder personalizable. */
     placeholder?: string;
     /** Sugerencias rápidas que se muestran como chips cuando el input está vacío */
     suggestions?: string[];
+    /** Tipo de dashboard activo */
+    dashboardType?: 'clients' | 'margins';
 }
 
 type CommandStatus = 'idle' | 'thinking' | 'applied' | 'noop' | 'error';
@@ -35,8 +37,9 @@ export function DashboardCommandBar({
     availableStores = [],
     availableMetrics = ['contado', 'credito', 'publico', 'notas'],
     onApplyUpdates,
-    placeholder = 'Pregúntale al dashboard… ej: "ventas a crédito del Centro este mes"',
-    suggestions = []
+    placeholder = 'Pregúntale al dashboard…',
+    suggestions = [],
+    dashboardType = 'clients'
 }: DashboardCommandBarProps) {
     const [prompt, setPrompt] = useState('');
     const [status, setStatus] = useState<CommandStatus>('idle');
@@ -73,7 +76,8 @@ export function DashboardCommandBar({
                     prompt: trimmed,
                     currentFilters,
                     availableMetrics,
-                    availableStores
+                    availableStores,
+                    dashboardType
                 })
             });
             const data = await r.json();

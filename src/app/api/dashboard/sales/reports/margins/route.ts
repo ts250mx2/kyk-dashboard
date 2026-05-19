@@ -26,6 +26,11 @@ const GROUP_MAP: Record<string, { selectExpr: string; joinExtra: string; alias: 
         selectExpr: "ISNULL(NULLIF(A.Familia, ''), '(Sin familia)')",
         joinExtra: '',
         alias: 'Familia'
+    },
+    proveedor: {
+        selectExpr: "ISNULL(NULLIF(P.Proveedor, ''), '(Sin proveedor)')",
+        joinExtra: 'LEFT JOIN tblProveedores P ON A.IdProveedorDefault = P.IdProveedor',
+        alias: 'Proveedor'
     }
 };
 

@@ -24,7 +24,10 @@ import {
     TrendingUp,
     Sparkles,
     RefreshCw,
-    BarChart3
+    BarChart3,
+    Copy,
+    Check,
+    RotateCw
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -247,6 +250,38 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
         setExpandedData({});
         localStorage.removeItem('kyk_integrated_chat_history');
     }, []);
+
+    /** Estado para el feedback visual "Copiado!" en la toolbar de mensajes */
+    const [copiedMessageIdx, setCopiedMessageIdx] = useState<number | null>(null);
+
+    /** Copia el contenido de un mensaje del asistente al clipboard */
+    const handleCopyMessage = async (index: number) => {
+        const msg = messages[index];
+        if (!msg?.content) return;
+        try {
+            // Strip de markdown básico para copiar texto limpio
+            const plain = msg.content.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
+            await navigator.clipboard.writeText(plain);
+            setCopiedMessageIdx(index);
+            setTimeout(() => setCopiedMessageIdx(null), 1500);
+        } catch (e) {
+            console.error('Clipboard error:', e);
+        }
+    };
+
+    /**
+     * Regenera la respuesta del asistente para el índice dado.
+     * Elimina el mensaje actual del asistente y vuelve a enviar el último user.
+     */
+    const handleRegenerate = async (assistantIndex: number) => {
+        if (assistantIndex <= 0) return;
+        const userMsg = messages[assistantIndex - 1];
+        if (userMsg?.role !== 'user') return;
+        // Removemos el mensaje del asistente y todos los siguientes
+        setMessages(prev => prev.slice(0, assistantIndex));
+        // Pequeño delay para que el state se propague antes del nuevo send
+        setTimeout(() => handleSend(userMsg.content), 50);
+    };
 
     /**
      * Ejecuta un playbook: lanza cada paso en secuencia como si el usuario
@@ -659,17 +694,17 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                         : "border border-slate-200 shadow-2xl mb-4 transition-all duration-300 ease-in-out w-[380px] md:w-[850px] h-[500px] md:h-[85vh] rounded-[32px]"
                 )}>
                     {/* Header */}
-                    <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                            <div className="w-12 h-12 bg-white border border-slate-100 rounded-2xl shadow-sm flex items-center justify-center overflow-hidden">
-                                <img src="/kesito.svg" alt="KYK" className="w-8 h-8 object-contain" />
+                    <div className="px-5 py-3.5 bg-white border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="relative w-11 h-11 bg-white rounded-2xl flex items-center justify-center overflow-hidden">
+                                <img src="/kesito.svg" alt="Kesito" className="w-9 h-9 object-contain" />
+                                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
                             </div>
-                            <div>
-                                <h3 className="font-black text-slate-900 tracking-tight leading-none uppercase text-xs">Analista Digital KYK</h3>
-                                <div className="flex items-center space-x-1.5 mt-1">
-                                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">En línea (Claude Priority)</span>
-                                </div>
+                            <div className="leading-tight">
+                                <h3 className="text-[15px] font-bold text-slate-900 tracking-tight">Kesito</h3>
+                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                    Tu analista digital · Disponible
+                                </p>
                             </div>
                         </div>
                         <div className="flex items-center space-x-1">
@@ -851,12 +886,12 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                         )}
 
                         {messages.map((message, index) => (
-                            <div key={index} className={cn("flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500", message.role === 'user' ? "items-end" : "items-start")}>
+                            <div key={index} className={cn("group/msg flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-300", message.role === 'user' ? "items-end" : "items-start")}>
                                 <div className={cn(
-                                    "max-w-[85%] rounded-[32px] overflow-hidden shadow-sm",
+                                    "max-w-[85%] overflow-hidden",
                                     message.role === 'user'
-                                        ? "bg-slate-900 text-white rounded-tr-none px-6 py-4"
-                                        : "bg-white border border-slate-200 rounded-tl-none"
+                                        ? "bg-indigo-50 border border-indigo-100 text-slate-800 rounded-2xl rounded-tr-md px-5 py-3"
+                                        : "bg-white border border-slate-200/70 rounded-2xl rounded-tl-md"
                                 )}>
                                     {message.role === 'assistant' ? (
                                         <div className="flex flex-col">
@@ -1053,7 +1088,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                 <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-4 space-y-4">
                                                     {message.suggested_reports && message.suggested_reports.length > 0 && (
                                                         <div className="space-y-2">
-                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                                            <span className="text-[11px] font-semibold text-slate-500">
                                                                 Reportes relacionados
                                                             </span>
                                                             <div className="flex flex-wrap gap-2">
@@ -1062,7 +1097,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                                         key={idx}
                                                                         onClick={() => navigateToReport(report.path)}
                                                                         disabled={!report.path}
-                                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-full transition-all border bg-white border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-full transition-all border bg-white border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                                                                         title={report.reason}
                                                                     >
                                                                         <span>{report.report_name}</span>
@@ -1075,15 +1110,15 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
 
                                                     {message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
                                                         <div className="space-y-2">
-                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                                                                Continuar
+                                                            <span className="text-[11px] font-semibold text-slate-500">
+                                                                Preguntas relacionadas
                                                             </span>
                                                             <div className="flex flex-wrap gap-2">
                                                                 {message.suggestedQuestions.map((q, i) => (
                                                                     <button
                                                                         key={i}
                                                                         onClick={() => handleSend(q)}
-                                                                        className="px-3 py-1.5 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-900 hover:text-white rounded-full transition-all border border-slate-200 hover:border-slate-900 active:scale-95"
+                                                                        className="px-3 py-1.5 text-[12px] font-medium text-slate-700 bg-white hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 rounded-full transition-all border border-slate-200 active:scale-95"
                                                                     >
                                                                         {q}
                                                                     </button>
@@ -1095,25 +1130,58 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                             )}
                                         </div>
                                     ) : (
-                                        <p className="text-[16px] font-bold leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                                        <p className="text-[14.5px] font-medium leading-relaxed whitespace-pre-wrap text-slate-800">{message.content}</p>
                                     )}
                                 </div>
-                                <span className="text-[10px] font-bold text-slate-400 mt-2 px-2 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {new Date(message.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </span>
+
+                                {/* Toolbar al hover sobre mensajes del asistente (Copy + Regenerate) */}
+                                {message.role === 'assistant' && !message.streaming && message.content && (
+                                    <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1 mt-1.5 px-1">
+                                        <button
+                                            onClick={() => handleCopyMessage(index)}
+                                            className="inline-flex items-center gap-1 px-2 py-1 text-[10.5px] font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+                                            title="Copiar respuesta"
+                                        >
+                                            {copiedMessageIdx === index ? (
+                                                <>
+                                                    <Check className="w-3 h-3 text-emerald-600" />
+                                                    <span className="text-emerald-600">Copiado</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Copy className="w-3 h-3" />
+                                                    <span>Copiar</span>
+                                                </>
+                                            )}
+                                        </button>
+                                        {index === messages.length - 1 && (
+                                            <button
+                                                onClick={() => handleRegenerate(index)}
+                                                className="inline-flex items-center gap-1 px-2 py-1 text-[10.5px] font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+                                                title="Regenerar respuesta"
+                                            >
+                                                <RotateCw className="w-3 h-3" />
+                                                <span>Regenerar</span>
+                                            </button>
+                                        )}
+                                        <span className="text-[10px] text-slate-300 ml-auto px-1 tabular-nums">
+                                            {new Date(message.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         ))}
 
                         {/* Loader global: solo si NO hay un mensaje en streaming (que ya muestra el suyo) */}
                         {loading && !messages.some(m => m.streaming) && (
-                            <div className="flex items-start space-x-3 animate-in fade-in duration-300">
-                                <div className="p-4 bg-white border border-slate-200 rounded-[24px] rounded-tl-none shadow-xl flex items-center space-x-4">
-                                    <div className="flex space-x-1">
-                                        <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                                        <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                                        <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" />
+                            <div className="flex items-start animate-in fade-in duration-300">
+                                <div className="px-4 py-3 bg-white border border-slate-200/70 rounded-2xl rounded-tl-md flex items-center gap-3">
+                                    <div className="flex gap-1">
+                                        <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                                        <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                                        <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
                                     </div>
-                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Analizando datos...</span>
+                                    <span className="text-[12px] font-medium text-slate-500">Analizando…</span>
                                 </div>
                             </div>
                         )}

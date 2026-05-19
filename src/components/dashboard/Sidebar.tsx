@@ -24,6 +24,7 @@ type MenuSection = {
     title: string;
     emoji: string;
     items: MenuItem[];
+    href?: string;
 };
 
 const menuSections: MenuSection[] = [
@@ -34,7 +35,7 @@ const menuSections: MenuSection[] = [
             { name: "Dashboard de Ventas", emoji: "📈", href: "/dashboard" },
             { name: "Dashboard de Compras", emoji: "🛒", href: "/dashboard/purchases/dashboard" },
             { name: "Precios", emoji: "🏷️", href: "/dashboard/purchases/prices" },
-            { name: "Analista Digital", emoji: "🤖", href: "/dashboard/chat" },
+            { name: "Agente Kesito", emoji: "🧀", href: "/dashboard/chat" },
         ]
     },
     {
@@ -139,7 +140,7 @@ export function Sidebar({
                 item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 section.title.toLowerCase().includes(searchTerm.toLowerCase())
             )
-        })).filter(section => section.items.length > 0)
+        })).filter(section => section.items.length > 0 || (section.href && section.title.toLowerCase().includes(searchTerm.toLowerCase())))
     }, [searchTerm])
 
     return (
@@ -188,6 +189,34 @@ export function Sidebar({
                     {filteredSections.map((section) => {
                         const isOpen = openSections[section.title]
                         const hasActiveChild = section.items.some(item => pathname === item.href)
+
+                        if (section.href) {
+                            const isSectionActive = pathname === section.href;
+                            return (
+                                <Link
+                                    key={section.title}
+                                    href={section.href}
+                                    onClick={() => setIsMobileOpen(false)}
+                                    className={cn(
+                                        "w-full flex items-center gap-3 py-2.5 transition-all rounded-none border-l-2",
+                                        isCollapsed ? "justify-center border-l-0" : "px-3 justify-between border-transparent",
+                                        isSectionActive
+                                            ? "bg-white text-[#4050B4] font-bold shadow-lg shadow-black/20 border-white"
+                                            : "text-white/80 hover:bg-white/10 hover:text-white"
+                                    )}
+                                    title={isCollapsed ? section.title : ""}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl drop-shadow-md">{section.emoji}</span>
+                                        {!isCollapsed && (
+                                            <span className="text-[13px] font-black uppercase tracking-widest leading-none">
+                                                {section.title}
+                                            </span>
+                                        )}
+                                    </div>
+                                </Link>
+                            );
+                        }
 
                         return (
                             <div key={section.title} className="space-y-1">
