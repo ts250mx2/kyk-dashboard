@@ -7,6 +7,7 @@ export async function GET(req: Request) {
         const fechaInicio = searchParams.get('fechaInicio');
         const fechaFin = searchParams.get('fechaFin');
         const idTienda = searchParams.get('idTienda') || 'all';
+        const rfc = searchParams.get('rfc') || '';
 
         if (!fechaInicio || !fechaFin) {
             return NextResponse.json({ error: 'Missing date parameters' }, { status: 400 });
@@ -25,6 +26,15 @@ export async function GET(req: Request) {
                 storeFilter = `AND IdTienda IN (${storeIds.join(',')})`;
                 fStoreFilter = `AND f.IdTienda IN (${storeIds.join(',')})`;
             }
+        }
+
+        // Apply specific client RFC filter if selected
+        let rfcFilter = '';
+        let fRfcFilter = '';
+        if (rfc && rfc !== 'all') {
+            const cleanRfc = rfc.replace(/'/g, "''");
+            rfcFilter = `AND RFC = '${cleanRfc}'`;
+            fRfcFilter = `AND f.RFC = '${cleanRfc}'`;
         }
 
         // 1. KPI Aggregates
@@ -51,14 +61,14 @@ export async function GET(req: Request) {
                 COUNT(DISTINCT CASE WHEN Credito = 2 THEN RFC END) as NotasClientes,
                 SUM(CASE WHEN Credito = 2 THEN 1 ELSE 0 END) as NotasOperaciones
             FROM tblFacturas
-            WHERE FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
+            WHERE FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
         `;
 
         // 2. Top Clients by Category
         const topClientsTotalesSql = `
             SELECT TOP 15 RFC, ClienteConcepto, SUM(Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas
-            WHERE Credito IN (0, 1) AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
+            WHERE Credito IN (0, 1) AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
             GROUP BY RFC, ClienteConcepto
             ORDER BY Total DESC
         `;
@@ -66,7 +76,7 @@ export async function GET(req: Request) {
         const topClientsContadoSql = `
             SELECT TOP 15 RFC, ClienteConcepto, SUM(Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas
-            WHERE Credito = 0 AND RFC != 'XAXX010101000' AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
+            WHERE Credito = 0 AND RFC != 'XAXX010101000' AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
             GROUP BY RFC, ClienteConcepto
             ORDER BY Total DESC
         `;
@@ -74,7 +84,7 @@ export async function GET(req: Request) {
         const topClientsCreditoSql = `
             SELECT TOP 15 RFC, ClienteConcepto, SUM(Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas
-            WHERE Credito = 1 AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
+            WHERE Credito = 1 AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
             GROUP BY RFC, ClienteConcepto
             ORDER BY Total DESC
         `;
@@ -82,7 +92,7 @@ export async function GET(req: Request) {
         const topClientsNotasSql = `
             SELECT TOP 15 RFC, ClienteConcepto, SUM(Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas
-            WHERE Credito = 2 AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
+            WHERE Credito = 2 AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
             GROUP BY RFC, ClienteConcepto
             ORDER BY Total DESC
         `;
@@ -92,7 +102,7 @@ export async function GET(req: Request) {
             SELECT f.IdTienda, t.Tienda, SUM(f.Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas f
             JOIN tblTiendas t ON f.IdTienda = t.IdTienda
-            WHERE f.Credito IN (0, 1) AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter}
+            WHERE f.Credito IN (0, 1) AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter} ${fRfcFilter}
             GROUP BY f.IdTienda, t.Tienda
             ORDER BY Total DESC
         `;
@@ -101,7 +111,7 @@ export async function GET(req: Request) {
             SELECT f.IdTienda, t.Tienda, SUM(f.Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas f
             JOIN tblTiendas t ON f.IdTienda = t.IdTienda
-            WHERE f.Credito = 0 AND f.RFC != 'XAXX010101000' AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter}
+            WHERE f.Credito = 0 AND f.RFC != 'XAXX010101000' AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter} ${fRfcFilter}
             GROUP BY f.IdTienda, t.Tienda
             ORDER BY Total DESC
         `;
@@ -110,7 +120,7 @@ export async function GET(req: Request) {
             SELECT f.IdTienda, t.Tienda, SUM(f.Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas f
             JOIN tblTiendas t ON f.IdTienda = t.IdTienda
-            WHERE f.Credito = 1 AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter}
+            WHERE f.Credito = 1 AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter} ${fRfcFilter}
             GROUP BY f.IdTienda, t.Tienda
             ORDER BY Total DESC
         `;
@@ -119,7 +129,7 @@ export async function GET(req: Request) {
             SELECT f.IdTienda, t.Tienda, SUM(f.Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas f
             JOIN tblTiendas t ON f.IdTienda = t.IdTienda
-            WHERE f.RFC = 'XAXX010101000' AND f.Credito IN (0, 1) AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter}
+            WHERE f.RFC = 'XAXX010101000' AND f.Credito IN (0, 1) AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter} ${fRfcFilter}
             GROUP BY f.IdTienda, t.Tienda
             ORDER BY Total DESC
         `;
@@ -128,49 +138,58 @@ export async function GET(req: Request) {
             SELECT f.IdTienda, t.Tienda, SUM(f.Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas f
             JOIN tblTiendas t ON f.IdTienda = t.IdTienda
-            WHERE f.Credito = 2 AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter}
+            WHERE f.Credito = 2 AND f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter} ${fRfcFilter}
             GROUP BY f.IdTienda, t.Tienda
             ORDER BY Total DESC
         `;
 
+        // Apply dynamic time series grouping (día, semana, mes)
+        const groupBy = searchParams.get('groupBy') || 'dia';
+        let dateSelector = 'CAST(FechaFactura AS DATE)';
+        if (groupBy === 'semana') {
+            dateSelector = 'DATEADD(WEEK, DATEDIFF(WEEK, 0, FechaFactura), 0)';
+        } else if (groupBy === 'mes') {
+            dateSelector = 'DATEFROMPARTS(YEAR(FechaFactura), MONTH(FechaFactura), 1)';
+        }
+
         // 4. Daily trends
         const dailyTotalesSql = `
-            SELECT CAST(FechaFactura AS DATE) as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
+            SELECT ${dateSelector} as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas
-            WHERE Credito IN (0, 1) AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
-            GROUP BY CAST(FechaFactura AS DATE)
+            WHERE Credito IN (0, 1) AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
+            GROUP BY ${dateSelector}
             ORDER BY Fecha
         `;
 
         const dailyContadoSql = `
-            SELECT CAST(FechaFactura AS DATE) as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
+            SELECT ${dateSelector} as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas
-            WHERE Credito = 0 AND RFC != 'XAXX010101000' AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
-            GROUP BY CAST(FechaFactura AS DATE)
+            WHERE Credito = 0 AND RFC != 'XAXX010101000' AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
+            GROUP BY ${dateSelector}
             ORDER BY Fecha
         `;
 
         const dailyCreditoSql = `
-            SELECT CAST(FechaFactura AS DATE) as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
+            SELECT ${dateSelector} as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas
-            WHERE Credito = 1 AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
-            GROUP BY CAST(FechaFactura AS DATE)
+            WHERE Credito = 1 AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
+            GROUP BY ${dateSelector}
             ORDER BY Fecha
         `;
 
         const dailyPublicoSql = `
-            SELECT CAST(FechaFactura AS DATE) as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
+            SELECT ${dateSelector} as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas
-            WHERE RFC = 'XAXX010101000' AND Credito IN (0, 1) AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
-            GROUP BY CAST(FechaFactura AS DATE)
+            WHERE RFC = 'XAXX010101000' AND Credito IN (0, 1) AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
+            GROUP BY ${dateSelector}
             ORDER BY Fecha
         `;
 
         const dailyNotasSql = `
-            SELECT CAST(FechaFactura AS DATE) as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
+            SELECT ${dateSelector} as Fecha, SUM(Total) as Total, COUNT(*) as Operaciones
             FROM tblFacturas
-            WHERE Credito = 2 AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter}
-            GROUP BY CAST(FechaFactura AS DATE)
+            WHERE Credito = 2 AND FechaFactura >= ${startStr} AND FechaFactura <= ${endStr} ${storeFilter} ${rfcFilter}
+            GROUP BY ${dateSelector}
             ORDER BY Fecha
         `;
 
@@ -182,7 +201,7 @@ export async function GET(req: Request) {
                 t.Tienda
             FROM tblFacturas f
             JOIN tblTiendas t ON f.IdTienda = t.IdTienda
-            WHERE f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter}
+            WHERE f.FechaFactura >= ${startStr} AND f.FechaFactura <= ${endStr} ${fStoreFilter} ${fRfcFilter}
             ORDER BY f.FechaFactura DESC
         `;
 

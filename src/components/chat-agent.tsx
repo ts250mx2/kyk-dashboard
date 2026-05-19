@@ -7,6 +7,8 @@ import { InlineMarkdown } from '@/components/inline-markdown';
 import { ConversationsDropdown } from '@/components/conversations-dropdown';
 import { AlertsPanel, CreateAlertDraft } from '@/components/alerts-panel';
 import { ShareMenu } from '@/components/share-menu';
+import { PlaybooksPanel, PlaybookSummary } from '@/components/playbooks-panel';
+import { ProactivePromptsBanner } from '@/components/proactive-prompts-banner';
 import { readSseStream } from '@/lib/sse-client';
 import { cn } from '@/lib/utils';
 import {
@@ -47,7 +49,7 @@ interface Message {
     }>;
     // Streaming state
     streaming?: boolean;
-    streamPhase?: 'thinking' | 'querying' | 'correcting-sql' | 'investigating' | 'analyzing' | 'finalizing';
+    streamPhase?: 'thinking' | 'querying' | 'correcting-sql' | 'investigating' | 'reasoning-causal' | 'analyzing' | 'finalizing';
     streamPhaseDetail?: string;
     awaitingMetadata?: boolean;
 }
@@ -57,6 +59,7 @@ const STREAM_PHASE_LABELS: Record<NonNullable<Message['streamPhase']>, string> =
     'querying': 'Consultando datos...',
     'correcting-sql': 'Ajustando consulta...',
     'investigating': 'Investigando causa...',
+    'reasoning-causal': 'Evaluando hipótesis...',
     'analyzing': 'Analizando resultados...',
     'finalizing': 'Preparando análisis...'
 };
@@ -245,6 +248,28 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
         localStorage.removeItem('kyk_integrated_chat_history');
     }, []);
 
+    /**
+     * Ejecuta un playbook: lanza cada paso en secuencia como si el usuario
+     * los hubiera escrito uno tras otro. Espera a que termine el streaming
+     * antes de mandar el siguiente.
+     */
+    const handleRunPlaybook = (pb: PlaybookSummary) => {
+        // Iniciamos conversación nueva con un header del playbook
+        startNewConversation();
+        setIsOpen(true);
+        // Pequeño delay para que el reset de estado se propague
+        setTimeout(async () => {
+            for (const step of pb.steps) {
+                if (!step.prompt?.trim()) continue;
+                // Esperar a que termine cualquier stream previo
+                while (streamControllerRef.current) {
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                await handleSend(step.prompt);
+            }
+        }, 100);
+    };
+
     const fetchDailyInsights = useCallback(async (forceRefresh = false) => {
         const todayKey = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
         const cacheKey = 'kyk_daily_insights';
@@ -342,6 +367,22 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
             fetchDailyInsights(false);
         }
     }, [isOpen, dailyInsights.length, loadingInsights, fetchDailyInsights]);
+
+    // Cuando hay insights del día Y el chat está abierto, intentamos generar
+    // prompts proactivos (el endpoint los rate-limita a 3/día por usuario)
+    useEffect(() => {
+        if (!isOpen || dailyInsights.length === 0) return;
+        const generatedKey = `kyk_proactive_generated_${new Date().toLocaleDateString('es-MX')}`;
+        if (localStorage.getItem(generatedKey)) return;
+
+        fetch('/api/agent/proactive-prompts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'generate', insights: dailyInsights })
+        })
+            .then(() => localStorage.setItem(generatedKey, '1'))
+            .catch(err => console.error('Error generando prompts proactivos:', err));
+    }, [isOpen, dailyInsights]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -648,6 +689,12 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                     return draft;
                                 }}
                             />
+                            <PlaybooksPanel
+                                getCurrentChatPrompts={() =>
+                                    messages.filter(m => m.role === 'user' && m.content.trim()).map(m => m.content)
+                                }
+                                onRunPlaybook={(pb: PlaybookSummary) => handleRunPlaybook(pb)}
+                            />
                             <ConversationsDropdown
                                 activeId={activeConversationId}
                                 onSelect={loadConversation}
@@ -710,6 +757,13 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                         </p>
                                     </div>
                                 )}
+
+                                {/* Pregunta inversa: prompts proactivos del agente */}
+                                <div className="mb-4">
+                                    <ProactivePromptsBanner
+                                        onInvestigate={(action) => handleSend(action)}
+                                    />
+                                </div>
 
                                 {/* 6 Hallazgos del día como preguntas */}
                                 {dailyInsights.length > 0 && (
@@ -815,20 +869,28 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                             <div className="flex space-x-1">
                                                                 <div className={cn(
                                                                     "w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:-0.3s]",
-                                                                    message.streamPhase === 'investigating' ? 'bg-amber-500' : 'bg-indigo-500'
+                                                                    message.streamPhase === 'investigating' ? 'bg-amber-500'
+                                                                        : message.streamPhase === 'reasoning-causal' ? 'bg-violet-500'
+                                                                        : 'bg-indigo-500'
                                                                 )} />
                                                                 <div className={cn(
                                                                     "w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:-0.15s]",
-                                                                    message.streamPhase === 'investigating' ? 'bg-amber-500' : 'bg-indigo-500'
+                                                                    message.streamPhase === 'investigating' ? 'bg-amber-500'
+                                                                        : message.streamPhase === 'reasoning-causal' ? 'bg-violet-500'
+                                                                        : 'bg-indigo-500'
                                                                 )} />
                                                                 <div className={cn(
                                                                     "w-1.5 h-1.5 rounded-full animate-bounce",
-                                                                    message.streamPhase === 'investigating' ? 'bg-amber-500' : 'bg-indigo-500'
+                                                                    message.streamPhase === 'investigating' ? 'bg-amber-500'
+                                                                        : message.streamPhase === 'reasoning-causal' ? 'bg-violet-500'
+                                                                        : 'bg-indigo-500'
                                                                 )} />
                                                             </div>
                                                             <span className={cn(
                                                                 "text-[11px] font-bold uppercase tracking-[0.15em]",
-                                                                message.streamPhase === 'investigating' ? 'text-amber-600' : 'text-slate-400'
+                                                                message.streamPhase === 'investigating' ? 'text-amber-600'
+                                                                    : message.streamPhase === 'reasoning-causal' ? 'text-violet-600'
+                                                                    : 'text-slate-400'
                                                             )}>
                                                                 {STREAM_PHASE_LABELS[message.streamPhase]}
                                                             </span>

@@ -14,7 +14,9 @@ import {
     Store,
     Search,
     X,
-    Check
+    Check,
+    Calendar,
+    RotateCcw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
@@ -196,101 +198,136 @@ export default function MargenesRentabilidadPage() {
 
     return (
         <div className="p-6 md:p-8 max-w-[1600px] mx-auto min-h-screen">
-            {/* Header */}
-            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            {/* Header section with Date selectors */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-none border border-slate-100 shadow-sm print:hidden mb-6">
                 <div>
-                    <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center gap-2.5">
-                        <TrendingUp className="text-[#4050B4]" /> Márgenes y Rentabilidad
+                    <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                        <TrendingUp className="text-[#4050B4]" size={24} />
+                        Márgenes y Rentabilidad
                     </h1>
-                    <p className="text-slate-500 mt-1 max-w-2xl text-sm font-medium">
-                        Analiza en tiempo real los márgenes de utilidad cruzando la facturación real con el costo vigente del artículo (<code className="bg-slate-100 text-slate-700 px-1 rounded font-bold">CostoReal</code>).
-                    </p>
                 </div>
-                <div className="flex gap-3">
+
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Period selectors */}
+                    <div className="flex bg-slate-100 border border-slate-200/60 rounded-none p-0.5">
+                        {(() => {
+                            const mtyDate = (offset = 0) => {
+                                const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
+                                d.setDate(d.getDate() + offset);
+                                return d.toLocaleDateString('en-CA');
+                            };
+                            const mtyMonth = (monthOffset = 0) => {
+                                const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
+                                d.setMonth(d.getMonth() + monthOffset);
+                                return d;
+                            };
+                            const today = mtyDate();
+                            const periods = [
+                                { label: 'Hoy', start: today, end: today },
+                                { label: 'Ayer', start: mtyDate(-1), end: mtyDate(-1) },
+                                {
+                                    label: 'Semana',
+                                    start: (() => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' })); d.setDate(d.getDate() - d.getDay()); return d.toLocaleDateString('en-CA'); })(),
+                                    end: today
+                                },
+                                { label: '7 días', start: mtyDate(-6), end: today },
+                                {
+                                    label: 'Este mes',
+                                    start: (() => { const d = mtyMonth(0); d.setDate(1); return d.toLocaleDateString('en-CA'); })(),
+                                    end: today
+                                },
+                                {
+                                    label: 'Mes ant.',
+                                    start: (() => { const d = mtyMonth(-1); d.setDate(1); return d.toLocaleDateString('en-CA'); })(),
+                                    end: (() => { const d = mtyMonth(0); d.setDate(0); return d.toLocaleDateString('en-CA'); })()
+                                },
+                            ];
+                            return periods.map(({ label, start, end }) => {
+                                const isActive = startDate === start && endDate === end;
+                                return (
+                                    <button
+                                        key={label}
+                                        onClick={() => { setStartDate(start); setEndDate(end); }}
+                                        className={cn(
+                                            'px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap',
+                                            isActive ? 'bg-[#4050B4] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-white'
+                                        )}
+                                    >
+                                        {label}
+                                    </button>
+                                );
+                            });
+                        })()}
+                    </div>
+
+                    {/* Date Pickers */}
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-none px-3 py-1.5 focus-within:ring-2 focus-within:ring-[#4050B4]/20 transition-all">
+                        <Calendar size={16} className="text-[#4050B4]" />
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Inicio</span>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="bg-transparent text-sm font-bold text-slate-700 outline-none p-0 border-none h-auto leading-none"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-none px-3 py-1.5 focus-within:ring-2 focus-within:ring-[#4050B4]/20 transition-all">
+                        <Calendar size={16} className="text-[#4050B4]" />
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Fin</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="bg-transparent text-sm font-bold text-slate-700 outline-none p-0 border-none h-auto leading-none"
+                            />
+                        </div>
+                    </div>
+
                     <button
                         onClick={exportXls}
                         disabled={loading || rows.length === 0}
                         className={cn(
-                            "flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed",
-                            "text-white rounded-none text-xs font-black uppercase tracking-wider shadow transition-colors"
+                            "flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed",
+                            "text-white rounded-none text-xs font-black uppercase tracking-wider shadow transition-colors h-[38px]"
                         )}
+                        title="Exportar a Excel"
                     >
-                        <Download className="w-4 h-4" /> Exportar XLSX
+                        <Download className="w-4 h-4" /> <span className="hidden sm:inline">Exportar XLSX</span>
                     </button>
                 </div>
             </div>
 
             {/* Filtros Bar */}
-            <div className="bg-white border border-slate-200 rounded-none p-5 mb-6 shadow-sm">
-                <div className="flex flex-wrap items-end gap-5">
-                    {/* Periodo Desde */}
-                    <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Desde</label>
-                        <input
-                            type="date"
-                            value={startDate}
-                            onChange={e => setStartDate(e.target.value)}
-                            className="border border-slate-200 rounded-none px-3 py-2 text-sm font-bold text-slate-800 focus:outline-none focus:border-[#4050B4] focus:ring-1 focus:ring-[#4050B4]"
-                        />
-                    </div>
-
-                    {/* Periodo Hasta */}
-                    <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Hasta</label>
-                        <input
-                            type="date"
-                            value={endDate}
-                            onChange={e => setEndDate(e.target.value)}
-                            className="border border-slate-200 rounded-none px-3 py-2 text-sm font-bold text-slate-800 focus:outline-none focus:border-[#4050B4] focus:ring-1 focus:ring-[#4050B4]"
-                        />
-                    </div>
-
-                    {/* Atajos */}
-                    <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Atajos Rápidos</label>
-                        <div className="flex gap-1">
-                            {[
-                                { label: 'Hoy', fn: () => { const t = getToday(); setStartDate(t); setEndDate(t); } },
-                                { label: '7d', fn: () => { const d = new Date(); d.setDate(d.getDate() - 6); setStartDate(d.toISOString().slice(0, 10)); setEndDate(getToday()); } },
-                                { label: 'Mes', fn: () => { setStartDate(getFirstOfMonth()); setEndDate(getToday()); } },
-                                { label: 'Mes anterior', fn: () => { const d = new Date(); const first = new Date(d.getFullYear(), d.getMonth() - 1, 1); const last = new Date(d.getFullYear(), d.getMonth(), 0); setStartDate(first.toISOString().slice(0, 10)); setEndDate(last.toISOString().slice(0, 10)); } },
-                                { label: 'Año', fn: () => { setStartDate(`${new Date().getFullYear()}-01-01`); setEndDate(getToday()); } }
-                            ].map(p => (
-                                <button
-                                    key={p.label}
-                                    onClick={p.fn}
-                                    className="px-2.5 py-2 text-[10px] font-black uppercase tracking-wider bg-slate-50 hover:bg-[#4050B4] hover:text-white text-slate-500 rounded-none transition-colors border border-slate-200"
-                                >
-                                    {p.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
+            <div className="bg-white border border-slate-100 shadow-sm p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                     {/* Filtro Sucursal Multi-select */}
                     <div className="relative">
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Filtrar por Tienda</label>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Filtrar por Tienda</label>
                         <button
                             onClick={() => setShowStoreDropdown(!showStoreDropdown)}
-                            className="flex items-center gap-2 border border-slate-200 rounded-none px-4 py-2 text-sm font-bold text-slate-800 bg-white hover:bg-slate-50 min-w-[200px] justify-between"
+                            className="flex items-center gap-2 border border-slate-200 rounded-none px-4 py-2 text-xs font-bold text-slate-800 bg-white hover:bg-slate-50 min-w-[200px] justify-between h-[38px]"
                         >
                             <span className="flex items-center gap-2">
                                 <Store size={16} className="text-slate-400" />
                                 {activeStoresText}
                             </span>
-                            <Filter size={14} className="text-slate-400" />
+                            <ArrowUpDown size={14} className="text-slate-400" />
                         </button>
 
                         {showStoreDropdown && (
                             <>
                                 <div className="fixed inset-0 z-10" onClick={() => setShowStoreDropdown(false)} />
-                                <div className="absolute left-0 mt-2 w-72 bg-white border border-slate-200 rounded-none shadow-xl z-20 p-3 max-h-80 overflow-y-auto">
+                                <div className="absolute left-0 mt-1 w-72 bg-white border border-slate-200 rounded-none shadow-xl z-20 p-3 max-h-80 overflow-y-auto">
                                     <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
                                         <span className="text-xs font-black uppercase tracking-wider text-slate-500">Seleccionar Tiendas</span>
                                         {selectedStoreIds.length > 0 && (
                                             <button
                                                 onClick={clearStoreSelection}
-                                                className="text-[10px] text-red-500 font-bold hover:underline"
+                                                className="text-[10px] text-rose-500 font-bold hover:underline"
                                             >
                                                 Limpiar
                                             </button>
@@ -309,7 +346,7 @@ export default function MargenesRentabilidadPage() {
                                                     )}
                                                 >
                                                     <span>{s.Tienda}</span>
-                                                    {isSelected && <Check size={14} className="text-blue-700 font-black" />}
+                                                    {isSelected && <Check size={14} className="text-[#4050B4] font-black" />}
                                                 </button>
                                             );
                                         })}
@@ -324,23 +361,41 @@ export default function MargenesRentabilidadPage() {
 
                     {/* Agrupación */}
                     <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Agrupar Datos por</label>
-                        <div className="flex gap-1.5">
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Agrupar por</label>
+                        <div className="flex bg-slate-100 p-0.5 border border-slate-200 gap-0.5 rounded-none h-[38px] items-center">
                             {GROUPS.map(g => (
                                 <button
                                     key={g.key}
                                     onClick={() => setGroupBy(g.key)}
                                     className={cn(
-                                        'px-3.5 py-2 text-xs font-black uppercase tracking-wider border rounded-none transition-all',
-                                        groupBy === g.key
-                                            ? 'bg-[#4050B4] text-white border-[#4050B4] shadow'
-                                            : 'bg-white text-slate-600 border-slate-200 hover:border-[#4050B4]'
+                                        "px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all h-[32px]",
+                                        groupBy === g.key ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                                     )}
                                 >
                                     {g.label}
                                 </button>
                             ))}
                         </div>
+                    </div>
+                </div>
+
+                {/* Buscador reactivo integrado */}
+                <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Buscar</label>
+                    <div className="relative flex items-center border border-slate-200 bg-white px-3 py-1 focus-within:ring-2 focus-within:ring-[#4050B4]/20 transition-all h-[38px] w-64">
+                        <Search size={16} className="text-slate-400 mr-2" />
+                        <input
+                            type="text"
+                            placeholder="Buscar en la tabla..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="bg-transparent text-xs font-bold text-slate-700 outline-none w-full border-none p-0 h-auto"
+                        />
+                        {searchTerm && (
+                            <button onClick={() => setSearchTerm('')}>
+                                <X size={14} className="text-slate-400 hover:text-slate-600" />
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

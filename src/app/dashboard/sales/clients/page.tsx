@@ -15,7 +15,9 @@ import {
     Building,
     FileText,
     Store,
-    Check
+    Check,
+    X,
+    Loader2
 } from 'lucide-react';
 import { DashboardCommandBar } from '@/components/dashboard-command-bar';
 import { KpiExplainButton } from '@/components/kpi-explain-button';
@@ -92,6 +94,15 @@ export default function ClientsDashboardPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({ key: 'FechaFactura', direction: 'desc' });
 
+    // Client Filter States
+    const [filterMode, setFilterMode] = useState<'sucursales' | 'clientes'>('sucursales');
+    const [selectedClient, setSelectedClient] = useState<{ RFC: string, ClienteConcepto: string } | null>(null);
+    const [clientSearchInput, setClientSearchInput] = useState('');
+    const [clientSuggestions, setClientSuggestions] = useState<any[]>([]);
+    const [searchingClients, setSearchingClients] = useState(false);
+    const [trendGroupBy, setTrendGroupBy] = useState<'dia' | 'semana' | 'mes'>('dia');
+    const [aiMode, setAiMode] = useState(false);
+
     // HSL Colors harmonized with Kesos iA branding
     const COLORS = ['#10B981', '#F59E0B', '#3B82F6', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#4050B4'];
 
@@ -101,12 +112,36 @@ export default function ClientsDashboardPage() {
         setFechaFin(getMonterreyDate());
     }, []);
 
+    // Incremental Search suggestions loader
+    useEffect(() => {
+        if (clientSearchInput.trim().length < 2) {
+            setClientSuggestions([]);
+            return;
+        }
+        const delayDebounce = setTimeout(async () => {
+            setSearchingClients(true);
+            try {
+                const res = await fetch(`/api/dashboard/sales/clients/search?q=${encodeURIComponent(clientSearchInput)}`);
+                const json = await res.json();
+                if (json.clients) {
+                    setClientSuggestions(json.clients);
+                }
+            } catch (err) {
+                console.error('Error fetching client search suggestions:', err);
+            } finally {
+                setSearchingClients(false);
+            }
+        }, 300);
+        return () => clearTimeout(delayDebounce);
+    }, [clientSearchInput]);
+
     const fetchData = async () => {
         if (!fechaInicio || !fechaFin) return;
         setLoading(true);
         try {
             const storeParam = selectedStoreIds.length > 0 ? selectedStoreIds.join(',') : 'all';
-            const res = await fetch(`/api/dashboard/sales/clients?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&idTienda=${storeParam}`);
+            const rfcParam = selectedClient ? encodeURIComponent(selectedClient.RFC) : '';
+            const res = await fetch(`/api/dashboard/sales/clients?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&idTienda=${storeParam}&rfc=${rfcParam}&groupBy=${trendGroupBy}`);
             const json = await res.json();
             setData(json);
         } catch (error) {
@@ -120,7 +155,7 @@ export default function ClientsDashboardPage() {
         if (fechaInicio && fechaFin) {
             fetchData();
         }
-    }, [fechaInicio, fechaFin, selectedStoreIds]);
+    }, [fechaInicio, fechaFin, selectedStoreIds, selectedClient, trendGroupBy]);
 
     if (!mounted) return null;
 
@@ -417,92 +452,229 @@ export default function ClientsDashboardPage() {
                     >
                         <RotateCcw size={18} className={cn("group-hover:rotate-180 transition-transform duration-500", loading && "animate-spin")} />
                     </button>
+
+                    {/* Modo IA Switch */}
+                    <div 
+                        className="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-none shadow-sm h-[38px] cursor-pointer select-none hover:bg-slate-100 transition-all"
+                        onClick={() => setAiMode(!aiMode)}
+                        title="Activa el Asistente IA para hacer preguntas y obtener resúmenes automáticos"
+                    >
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                            🤖 Modo IA
+                        </span>
+                        <div
+                            className={cn(
+                                "relative inline-flex h-4.5 w-8.5 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                                aiMode ? "bg-[#4050B4]" : "bg-slate-300"
+                            )}
+                        >
+                            <span
+                                className={cn(
+                                    "pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                    aiMode ? "translate-x-4" : "translate-x-0"
+                                )}
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
 
             {/* Split panel layout: Sidebar Store Selector on Left, Dashboard content on Right */}
-            <div className="flex flex-col lg:flex-row gap-6">
-                
-                {/* Left Panel: Store selector list with Multi-selection */}
+            <div className="flex flex-col lg:flex-row gap-6">                {/* Left Panel: Store selector list with Multi-selection or Clients select */}
                 <div className="lg:w-72 shrink-0">
                     <div className="bg-white border border-slate-100 shadow-sm overflow-hidden flex flex-col h-[650px] sticky top-20">
-                        <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                             <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                <Store size={14} />
-                                Seleccionar Sucursales {selectedStoreIds.length > 0 && `(${selectedStoreIds.length})`}
-                             </h2>
-                             {selectedStoreIds.length > 0 && (
-                                 <button 
-                                     onClick={selectAllStores}
-                                     className="text-[9px] font-black text-[#4050B4] uppercase hover:underline"
-                                 >
-                                     Ver Todas
-                                 </button>
-                             )}
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                        {/* Tab Selector: Sucursales vs. Clientes */}
+                        <div className="flex border-b border-slate-100 p-2 gap-1 bg-slate-50">
                             <button
-                                onClick={selectAllStores}
+                                onClick={() => setFilterMode('sucursales')}
                                 className={cn(
-                                    "w-full flex items-center justify-between p-3 transition-all border-l-4 group text-left rounded-none",
-                                    selectedStoreIds.length === 0 
-                                        ? "bg-slate-900 text-white border-slate-900 shadow-md"
-                                        : "bg-white text-slate-600 border-transparent hover:bg-slate-50 hover:border-slate-200"
+                                    "flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-[10px] font-black uppercase tracking-wider transition-all rounded-none border",
+                                    filterMode === 'sucursales'
+                                        ? "bg-slate-900 text-white shadow-sm border-slate-900"
+                                        : "bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700 border-slate-200"
                                 )}
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className={cn(
-                                        "w-8 h-8 rounded-none flex items-center justify-center text-xs font-black",
-                                        selectedStoreIds.length === 0 ? "bg-white/20" : "bg-slate-100"
-                                    )}>
-                                        AZ
-                                    </div>
-                                    <span className="text-[13px] font-bold tracking-tight uppercase">Todas las sucursales</span>
-                                </div>
-                                {selectedStoreIds.length === 0 && <Check size={14} className="text-white" />}
+                                <Store size={14} />
+                                Sucursales
                             </button>
+                            <button
+                                onClick={() => setFilterMode('clientes')}
+                                className={cn(
+                                    "flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-[10px] font-black uppercase tracking-wider transition-all rounded-none border",
+                                    filterMode === 'clientes'
+                                        ? "bg-slate-900 text-white shadow-sm border-slate-900"
+                                        : "bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700 border-slate-200"
+                                )}
+                            >
+                                <Users size={14} />
+                                Clientes
+                            </button>
+                        </div>
 
-                            {storesCatalog.map((store: any) => {
-                                const isActive = selectedStoreIds.includes(store.IdTienda.toString());
-                                const color = getStoreColor(store.Tienda);
-                                return (
+                        {filterMode === 'sucursales' ? (
+                            <>
+                                <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                                     <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Store size={14} />
+                                        Seleccionar Sucursales {selectedStoreIds.length > 0 && `(${selectedStoreIds.length})`}
+                                     </h2>
+                                     {selectedStoreIds.length > 0 && (
+                                         <button 
+                                             onClick={selectAllStores}
+                                             className="text-[9px] font-black text-[#4050B4] uppercase hover:underline"
+                                         >
+                                             Ver Todas
+                                         </button>
+                                     )}
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
                                     <button
-                                        key={store.IdTienda}
-                                        onClick={() => toggleStoreSelection(store.IdTienda.toString())}
+                                        onClick={selectAllStores}
                                         className={cn(
                                             "w-full flex items-center justify-between p-3 transition-all border-l-4 group text-left rounded-none",
-                                            isActive 
-                                                ? "bg-slate-50 text-slate-900 shadow-sm border-l-4"
-                                                : "bg-white text-slate-600 border-transparent hover:bg-slate-50"
+                                            selectedStoreIds.length === 0 
+                                                ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                                                : "bg-white text-slate-600 border-transparent hover:bg-slate-50 hover:border-slate-200"
                                         )}
-                                        style={{ borderLeftColor: isActive ? color : 'transparent' }}
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div 
-                                                className="w-8 h-8 rounded-none flex items-center justify-center text-[10px] font-black text-white shadow-sm transition-transform group-hover:scale-105"
-                                                style={{ backgroundColor: color }}
-                                            >
-                                                {store.Tienda.substring(0, 2).toUpperCase()}
+                                            <div className={cn(
+                                                "w-8 h-8 rounded-none flex items-center justify-center text-xs font-black",
+                                                selectedStoreIds.length === 0 ? "bg-white/20" : "bg-slate-100"
+                                            )}>
+                                                AZ
                                             </div>
-                                            <span className={cn(
-                                                "text-[13px] tracking-tight uppercase",
-                                                isActive ? "font-black text-slate-950" : "font-bold text-slate-600"
-                                            )}>{store.Tienda}</span>
+                                            <span className="text-[13px] font-bold tracking-tight uppercase">Todas las sucursales</span>
                                         </div>
-                                        {isActive ? (
-                                            <div 
-                                                className="w-4 h-4 rounded-none flex items-center justify-center text-white"
-                                                style={{ backgroundColor: color }}
-                                            >
-                                                <Check size={10} strokeWidth={3} />
-                                            </div>
-                                        ) : (
-                                            <ChevronRight size={14} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                        )}
+                                        {selectedStoreIds.length === 0 && <Check size={14} className="text-white" />}
                                     </button>
-                                );
-                            })}
-                        </div>
+
+                                    {storesCatalog.map((store: any) => {
+                                        const isActive = selectedStoreIds.includes(store.IdTienda.toString());
+                                        const color = getStoreColor(store.Tienda);
+                                        return (
+                                            <button
+                                                key={store.IdTienda}
+                                                onClick={() => toggleStoreSelection(store.IdTienda.toString())}
+                                                className={cn(
+                                                    "w-full flex items-center justify-between p-3 transition-all border-l-4 group text-left rounded-none",
+                                                    isActive 
+                                                        ? "bg-slate-50 text-slate-900 shadow-sm border-l-4"
+                                                        : "bg-white text-slate-600 border-transparent hover:bg-slate-50"
+                                                )}
+                                                style={{ borderLeftColor: isActive ? color : 'transparent' }}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div 
+                                                        className="w-8 h-8 rounded-none flex items-center justify-center text-[10px] font-black text-white shadow-sm transition-transform group-hover:scale-105"
+                                                        style={{ backgroundColor: color }}
+                                                    >
+                                                        {store.Tienda.substring(0, 2).toUpperCase()}
+                                                    </div>
+                                                    <span className={cn(
+                                                        "text-[13px] tracking-tight uppercase",
+                                                        isActive ? "font-black text-slate-950" : "font-bold text-slate-600"
+                                                    )}>{store.Tienda}</span>
+                                                </div>
+                                                {isActive ? (
+                                                    <div 
+                                                        className="w-4 h-4 rounded-none flex items-center justify-center text-white"
+                                                        style={{ backgroundColor: color }}
+                                                    >
+                                                        <Check size={10} strokeWidth={3} />
+                                                    </div>
+                                                ) : (
+                                                    <ChevronRight size={14} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex-1 flex flex-col p-4 space-y-4">
+                                <div className="border-b border-slate-100 pb-2 mb-1">
+                                    <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Users size={14} />
+                                        Búsqueda de Clientes
+                                    </h2>
+                                    <p className="text-[10px] text-slate-400 mt-1">Escribe el nombre o RFC del cliente para buscar.</p>
+                                </div>
+
+                                {selectedClient ? (
+                                    <div className="bg-blue-50 border border-blue-200 p-4 shadow-sm relative group">
+                                        <div className="absolute top-2 right-2">
+                                            <button
+                                                onClick={() => setSelectedClient(null)}
+                                                className="p-1 bg-white hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-none border border-slate-200 transition-colors"
+                                                title="Quitar filtro de cliente"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                        <div className="text-[9px] font-black uppercase text-blue-500 tracking-wider mb-1">Cliente Seleccionado</div>
+                                        <h3 className="text-xs font-black text-slate-900 leading-tight pr-6">{selectedClient.ClienteConcepto}</h3>
+                                        <p className="text-[10px] font-bold text-slate-500 mt-1 font-mono">{selectedClient.RFC}</p>
+                                        <p className="text-[10px] text-blue-700 font-bold mt-3 bg-blue-100/50 p-1.5 uppercase tracking-tight">
+                                            Ventas divididas por sucursal abajo
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar cliente..."
+                                                value={clientSearchInput}
+                                                onChange={(e) => setClientSearchInput(e.target.value)}
+                                                className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-none text-xs font-bold focus:outline-none focus:border-[#4050B4]"
+                                            />
+                                            {clientSearchInput && (
+                                                <button
+                                                    onClick={() => setClientSearchInput('')}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {clientSearchInput.trim().length >= 2 && (
+                                            <div className="absolute left-0 right-0 mt-2 bg-white border border-slate-200 shadow-xl z-20 max-h-[300px] overflow-y-auto">
+                                                {searchingClients ? (
+                                                    <div className="p-4 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[#4050B4]" />
+                                                        Buscando...
+                                                    </div>
+                                                ) : clientSuggestions.length === 0 ? (
+                                                    <div className="p-4 text-center text-xs text-slate-400">
+                                                        Sin coincidencias
+                                                    </div>
+                                                ) : (
+                                                    <div className="divide-y divide-slate-50">
+                                                        {clientSuggestions.map((c) => (
+                                                            <button
+                                                                key={c.RFC}
+                                                                onClick={() => {
+                                                                    setSelectedClient(c);
+                                                                    setClientSearchInput('');
+                                                                    setClientSuggestions([]);
+                                                                }}
+                                                                className="w-full text-left p-2.5 hover:bg-slate-50 transition-colors flex flex-col gap-0.5"
+                                                            >
+                                                                <span className="text-xs font-black text-slate-800 leading-tight uppercase">{c.ClienteConcepto}</span>
+                                                                <span className="text-[10px] text-slate-400 font-bold font-mono uppercase">{c.RFC}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -510,26 +682,28 @@ export default function ClientsDashboardPage() {
                 <div className="flex-1 min-w-0 space-y-6">
 
                     {/* === PATRÓN 1: Barra de comando por lenguaje natural === */}
-                    <DashboardCommandBar
-                        currentFilters={{
-                            fechaInicio,
-                            fechaFin,
-                            storeIds: selectedStoreIds,
-                            metric: selectedMetric,
-                            search: searchTerm
-                        }}
-                        availableStores={storesCatalog}
-                        onApplyUpdates={applyAgentUpdates}
-                        suggestions={commandSuggestions}
-                    />
+                    {aiMode && (
+                        <DashboardCommandBar
+                            currentFilters={{
+                                fechaInicio,
+                                fechaFin,
+                                storeIds: selectedStoreIds,
+                                metric: selectedMetric,
+                                search: searchTerm
+                            }}
+                            availableStores={storesCatalog}
+                            onApplyUpdates={applyAgentUpdates}
+                            suggestions={commandSuggestions}
+                        />
+                    )}
 
                     {/* === PATRÓN 3: Resumen narrativo automático === */}
-                    {!loading && (
+                    {aiMode && !loading && (
                         <NarrativeSummary context={summaryContext} />
                     )}
 
                     {/* Active stores indicator banner */}
-                    <div className="bg-slate-50 border border-slate-200/80 px-4 py-2.5 flex items-center justify-between shadow-sm">
+                    <div className="bg-slate-50 border border-slate-200/80 px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
                         <div className="flex items-start gap-2 text-xs font-bold text-slate-600">
                             <span className="w-2.5 h-2.5 rounded-full bg-[#4050B4] mt-0.5 animate-pulse shrink-0" />
                             <div className="flex flex-col gap-0.5">
@@ -537,6 +711,24 @@ export default function ClientsDashboardPage() {
                                 <span className="text-[#4050B4] uppercase font-black tracking-tight">{selectedStoreNames}</span>
                             </div>
                         </div>
+
+                        {selectedClient && (
+                            <div className="flex items-center gap-2 border-t sm:border-t-0 sm:border-l border-slate-200 pt-2 sm:pt-0 sm:pl-4">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase leading-none">Cliente Seleccionado:</span>
+                                    <span className="text-emerald-700 uppercase font-black tracking-tight flex items-center gap-1.5">
+                                        {selectedClient.ClienteConcepto} ({selectedClient.RFC})
+                                        <button
+                                            onClick={() => setSelectedClient(null)}
+                                            className="text-[9px] font-bold text-slate-400 hover:text-red-500 hover:underline shrink-0 font-sans ml-1 bg-white px-1.5 py-0.5 border border-slate-200 rounded"
+                                        >
+                                            Quitar Filtro
+                                        </button>
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Metrics Cards Grid - Balanced 4 Columns Layout */}
@@ -571,16 +763,18 @@ export default function ClientsDashboardPage() {
                                         <span className="text-slate-500">Clientes Distintos</span>
                                         <span className="text-slate-800">{kpis.ContadoClientes}</span>
                                     </div>
-                                    <div className="pt-1 -mb-1">
-                                        <KpiExplainButton
-                                            context={{
-                                                kpiName: 'Ventas a Contado',
-                                                value: kpis.ContadoMonto,
-                                                format: 'currency',
-                                                ...kpiSharedContext
-                                            }}
-                                        />
-                                    </div>
+                                    {aiMode && (
+                                        <div className="pt-1 -mb-1">
+                                            <KpiExplainButton
+                                                context={{
+                                                    kpiName: 'Ventas a Contado',
+                                                    value: kpis.ContadoMonto,
+                                                    format: 'currency',
+                                                    ...kpiSharedContext
+                                                }}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </button>
@@ -615,16 +809,18 @@ export default function ClientsDashboardPage() {
                                         <span className="text-slate-500">Clientes Distintos</span>
                                         <span className="text-slate-800">{kpis.CreditoClientes}</span>
                                     </div>
-                                    <div className="pt-1 -mb-1">
-                                        <KpiExplainButton
-                                            context={{
-                                                kpiName: 'Ventas a Crédito',
-                                                value: kpis.CreditoMonto,
-                                                format: 'currency',
-                                                ...kpiSharedContext
-                                            }}
-                                        />
-                                    </div>
+                                    {aiMode && (
+                                        <div className="pt-1 -mb-1">
+                                            <KpiExplainButton
+                                                context={{
+                                                    kpiName: 'Ventas a Crédito',
+                                                    value: kpis.CreditoMonto,
+                                                    format: 'currency',
+                                                    ...kpiSharedContext
+                                                }}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </button>
@@ -659,16 +855,18 @@ export default function ClientsDashboardPage() {
                                         <span className="text-slate-500">Operaciones</span>
                                         <span className="text-slate-800">{kpis.PublicoOperaciones}</span>
                                     </div>
-                                    <div className="pt-1 -mb-1">
-                                        <KpiExplainButton
-                                            context={{
-                                                kpiName: 'Público General',
-                                                value: kpis.PublicoMonto,
-                                                format: 'currency',
-                                                ...kpiSharedContext
-                                            }}
-                                        />
-                                    </div>
+                                    {aiMode && (
+                                        <div className="pt-1 -mb-1">
+                                            <KpiExplainButton
+                                                context={{
+                                                    kpiName: 'Público General',
+                                                    value: kpis.PublicoMonto,
+                                                    format: 'currency',
+                                                    ...kpiSharedContext
+                                                }}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </button>
@@ -703,16 +901,18 @@ export default function ClientsDashboardPage() {
                                         <span className="text-slate-500">Operaciones (Devol)</span>
                                         <span className="text-slate-800">{kpis.NotasOperaciones}</span>
                                     </div>
-                                    <div className="pt-1 -mb-1">
-                                        <KpiExplainButton
-                                            context={{
-                                                kpiName: 'Notas de Crédito',
-                                                value: kpis.NotasMonto,
-                                                format: 'currency',
-                                                ...kpiSharedContext
-                                            }}
-                                        />
-                                    </div>
+                                    {aiMode && (
+                                        <div className="pt-1 -mb-1">
+                                            <KpiExplainButton
+                                                context={{
+                                                    kpiName: 'Notas de Crédito',
+                                                    value: kpis.NotasMonto,
+                                                    format: 'currency',
+                                                    ...kpiSharedContext
+                                                }}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </button>
@@ -722,14 +922,40 @@ export default function ClientsDashboardPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Chart 1: Daily sales trend */}
                         <div className="lg:col-span-2 bg-white p-5 border border-slate-100 shadow-sm flex flex-col justify-between">
-                            <div className="flex justify-between items-center mb-4">
+                            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
                                 <div>
-                                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Tendencia Diaria</h3>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Evolución de facturación en el periodo</p>
+                                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                                        Tendencia de Ventas
+                                    </h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                                        Evolución de facturación por {trendGroupBy === 'dia' ? 'día' : trendGroupBy === 'semana' ? 'semana' : 'mes'} en el periodo
+                                    </p>
                                 </div>
-                                <span className="px-2 py-1 bg-slate-100 text-[10px] font-bold text-slate-600 rounded-none uppercase">
-                                    Métrica: {selectedMetric}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <div className="flex bg-slate-100 p-0.5 gap-0.5 rounded-none border border-slate-200">
+                                        {[
+                                            { key: 'dia', label: 'Día' },
+                                            { key: 'semana', label: 'Semana' },
+                                            { key: 'mes', label: 'Mes' }
+                                        ].map(opt => (
+                                            <button
+                                                key={opt.key}
+                                                onClick={() => setTrendGroupBy(opt.key as any)}
+                                                className={cn(
+                                                    "px-2.5 py-1 text-[9px] font-black uppercase tracking-wider transition-all",
+                                                    trendGroupBy === opt.key
+                                                        ? "bg-slate-900 text-white shadow-sm"
+                                                        : "text-slate-500 hover:text-slate-900 hover:bg-slate-200"
+                                                )}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <span className="hidden sm:inline px-2 py-1 bg-slate-100 text-[10px] font-bold text-slate-600 rounded-none uppercase">
+                                        Métrica: {selectedMetric}
+                                    </span>
+                                </div>
                             </div>
 
                             <div className="h-[300px] w-full">
@@ -750,6 +976,12 @@ export default function ClientsDashboardPage() {
                                                 tickFormatter={(str) => {
                                                     if (!str) return '';
                                                     const d = new Date(str);
+                                                    if (trendGroupBy === 'mes') {
+                                                        return d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }).toUpperCase();
+                                                    }
+                                                    if (trendGroupBy === 'semana') {
+                                                        return `Sem. ${d.getDate()}/${d.getMonth() + 1}`;
+                                                    }
                                                     return `${d.getDate()}/${d.getMonth() + 1}`;
                                                 }}
                                                 tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 700 }}
@@ -764,7 +996,16 @@ export default function ClientsDashboardPage() {
                                             />
                                             <Tooltip
                                                 formatter={(val: any) => [formatCurrency(val), 'Monto']}
-                                                labelFormatter={(label) => new Date(label).toLocaleDateString('es-MX', { dateStyle: 'long' })}
+                                                labelFormatter={(label) => {
+                                                    const d = new Date(label);
+                                                    if (trendGroupBy === 'mes') {
+                                                        return d.toLocaleDateString('es-MX', { year: 'numeric', month: 'long' }).toUpperCase();
+                                                    }
+                                                    if (trendGroupBy === 'semana') {
+                                                        return `Semana del ${d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+                                                    }
+                                                    return d.toLocaleDateString('es-MX', { dateStyle: 'long' });
+                                                }}
                                                 contentStyle={{ backgroundColor: 'white', borderRadius: '0px', border: '1px solid #E2E8F0', fontFamily: 'sans-serif' }}
                                             />
                                             <Line
@@ -826,60 +1067,133 @@ export default function ClientsDashboardPage() {
                         </div>
                     </div>
 
-                    {/* Top Customers horizontal bar chart */}
-                    {selectedMetric !== 'publico' && (
+                    {/* Top Customers or Detailed Store Breakdown of Selected Client */}
+                    {selectedClient ? (
                         <div className="bg-white p-5 border border-slate-100 shadow-sm">
                             <div className="mb-4">
-                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Top 15 Clientes Facturados</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Clientes con mayor monto facturado en la métrica activa</p>
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                                    <Store size={18} className="text-[#4050B4]" />
+                                    Distribución Detallada por Sucursal: {selectedClient.ClienteConcepto}
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Compras del cliente desglosadas por tienda y número de operaciones</p>
                             </div>
 
-                            <div className="h-[400px] w-full">
-                                {loading ? (
-                                    <div className="h-full flex items-center justify-center">
-                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4050B4]"></div>
-                                    </div>
-                                ) : activeDesglose.top.length === 0 ? (
-                                    <div className="h-full flex items-center justify-center text-slate-400 text-sm font-medium">
-                                        Sin registros en el periodo
-                                    </div>
-                                ) : (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart
-                                            data={activeDesglose.top}
-                                            layout="vertical"
-                                            margin={{ top: 10, right: 30, left: 100, bottom: 10 }}
-                                        >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
-                                            <XAxis
-                                                type="number"
-                                                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-                                                tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 700 }}
-                                                axisLine={false}
-                                                tickLine={false}
-                                            />
-                                            <YAxis
-                                                type="category"
-                                                dataKey="ClienteConcepto"
-                                                tick={{ fill: '#475569', fontSize: 9, fontWeight: 800 }}
-                                                axisLine={false}
-                                                tickLine={false}
-                                                width={120}
-                                            />
-                                            <Tooltip
-                                                formatter={(val: any) => [formatCurrency(val), 'Total Facturado']}
-                                                contentStyle={{ backgroundColor: 'white', borderRadius: '0px', border: '1px solid #E2E8F0', fontFamily: 'sans-serif' }}
-                                            />
-                                            <Bar dataKey="Total" fill="#4050B4" radius={[0, 4, 4, 0]}>
-                                                {activeDesglose.top.map((entry: any, index: number) => (
-                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                )}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Bar chart of sales per store */}
+                                <div className="h-[350px]">
+                                    {loading ? (
+                                        <div className="h-full flex items-center justify-center">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4050B4]"></div>
+                                        </div>
+                                    ) : activeDesglose.stores.length === 0 ? (
+                                        <div className="h-full flex items-center justify-center text-slate-400 text-sm font-medium">
+                                            Sin registros en el periodo
+                                        </div>
+                                    ) : (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={activeDesglose.stores} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                                                <XAxis dataKey="Tienda" tick={{ fill: '#475569', fontSize: 9, fontWeight: 800 }} />
+                                                <YAxis tickFormatter={(v) => `$${v}`} tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 700 }} />
+                                                <Tooltip formatter={(val: any) => [formatCurrency(val), 'Monto']} />
+                                                <Bar dataKey="Total" fill="#4050B4" radius={[4, 4, 0, 0]}>
+                                                    {activeDesglose.stores.map((entry: any, index: number) => (
+                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </div>
+
+                                {/* Table of sales per store */}
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-4 py-2.5 text-left font-black text-[10px] uppercase text-slate-500">Sucursal</th>
+                                                <th className="px-4 py-2.5 text-right font-black text-[10px] uppercase text-slate-500">Monto Comprado</th>
+                                                <th className="px-4 py-2.5 text-right font-black text-[10px] uppercase text-slate-500">Operaciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {activeDesglose.stores.map((s: any, idx: number) => (
+                                                <tr key={idx} className="hover:bg-slate-50/50 font-medium">
+                                                    <td className="px-4 py-3 flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                                                        <span className="font-bold text-slate-800 uppercase">{s.Tienda}</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-black text-slate-900 tabular-nums">{formatCurrency(s.Total)}</td>
+                                                    <td className="px-4 py-3 text-right font-bold text-slate-500 tabular-nums">{s.Operaciones}</td>
+                                                </tr>
+                                            ))}
+                                            {activeDesglose.stores.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={3} className="text-center py-8 text-slate-400 font-bold uppercase tracking-wider">
+                                                        Sin compras registradas
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
+                    ) : (
+                        selectedMetric !== 'publico' && (
+                            <div className="bg-white p-5 border border-slate-100 shadow-sm">
+                                <div className="mb-4">
+                                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Top 15 Clientes Facturados</h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Clientes con mayor monto facturado en la métrica activa</p>
+                                </div>
+
+                                <div className="h-[400px] w-full">
+                                    {loading ? (
+                                        <div className="h-full flex items-center justify-center">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4050B4]"></div>
+                                        </div>
+                                    ) : activeDesglose.top.length === 0 ? (
+                                        <div className="h-full flex items-center justify-center text-slate-400 text-sm font-medium">
+                                            Sin registros en el periodo
+                                        </div>
+                                    ) : (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart
+                                                data={activeDesglose.top}
+                                                layout="vertical"
+                                                margin={{ top: 10, right: 30, left: 100, bottom: 10 }}
+                                            >
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
+                                                <XAxis
+                                                    type="number"
+                                                    tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                                                    tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 700 }}
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                />
+                                                <YAxis
+                                                    type="category"
+                                                    dataKey="ClienteConcepto"
+                                                    tick={{ fill: '#475569', fontSize: 9, fontWeight: 800 }}
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                    width={120}
+                                                />
+                                                <Tooltip
+                                                    formatter={(val: any) => [formatCurrency(val), 'Total Facturado']}
+                                                    contentStyle={{ backgroundColor: 'white', borderRadius: '0px', border: '1px solid #E2E8F0', fontFamily: 'sans-serif' }}
+                                                />
+                                                <Bar dataKey="Total" fill="#4050B4" radius={[0, 4, 4, 0]}>
+                                                    {activeDesglose.top.map((entry: any, index: number) => (
+                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </div>
+                            </div>
+                        )
                     )}
 
                     {/* Invoices List Table */}

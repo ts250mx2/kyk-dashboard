@@ -6,6 +6,13 @@ import { findRelevantReports } from '@/lib/available-reports';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import { createSseStream, SSE_HEADERS } from '@/lib/sse';
 import { proposeFollowUp, FollowUpProposal } from '@/lib/investigator';
+import {
+    detectCausalIntent,
+    generateHypotheses,
+    executeHypotheses,
+    formatHypothesesForPrompt,
+    CausalHypothesisResult
+} from '@/lib/causal-reasoner';
 import { queryLimiter } from '@/lib/rate-limit';
 import { getUserId } from '@/lib/conversations';
 import { recordMetric } from '@/lib/metrics';
@@ -611,13 +618,47 @@ algún incidente operativo."
                         results = await query(safeCorrected);
                     }
 
-                    // MODO INVESTIGADOR: si detectamos algo anómalo, encadena UNA query
-                    // de follow-up automática para entender la causa raíz
+                    // RAMIFICACIÓN: si la pregunta es causal ("¿por qué?"), ejecutamos
+                    // razonamiento causal multi-hipótesis. Si no, modo investigador
+                    // tradicional (UNA query de follow-up automática si hay anomalía).
+                    const isCausal = detectCausalIntent(prompt);
+
                     let followUp: FollowUpProposal | null = null;
                     let followUpResults: any[] = [];
                     let followUpSql: string | null = null;
+                    let causalResults: CausalHypothesisResult[] = [];
 
-                    if (results.length > 0) {
+                    if (isCausal && results.length > 0) {
+                        // MODO CAUSAL: genera 4-6 hipótesis y las ejecuta en paralelo
+                        emit({
+                            event: 'status',
+                            data: {
+                                phase: 'reasoning-causal',
+                                detail: 'Diseñando hipótesis…'
+                            }
+                        });
+                        try {
+                            const hypotheses = await generateHypotheses({
+                                userPrompt: prompt,
+                                schemaContext: schemaString
+                            });
+                            if (hypotheses.length > 0) {
+                                emit({
+                                    event: 'status',
+                                    data: {
+                                        phase: 'reasoning-causal',
+                                        detail: `Probando ${hypotheses.length} hipótesis en paralelo…`,
+                                        hypothesesCount: hypotheses.length
+                                    }
+                                });
+                                causalResults = await executeHypotheses(hypotheses);
+                            }
+                        } catch (e) {
+                            console.error('Causal reasoning failed:', e);
+                        }
+                    } else if (results.length > 0) {
+                        // MODO INVESTIGADOR: si detectamos algo anómalo, encadena UNA query
+                        // de follow-up automática para entender la causa raíz
                         try {
                             followUp = await proposeFollowUp({
                                 userPrompt: prompt,
@@ -661,7 +702,8 @@ algún incidente operativo."
                         results,
                         followUp && followUpResults.length > 0
                             ? { question: followUp.question, sql: followUpSql, results: followUpResults }
-                            : null
+                            : null,
+                        causalResults.length > 0 ? causalResults : null
                     );
 
                     const streamResp = anthropic.messages.stream({
@@ -969,7 +1011,8 @@ function buildMetaPrompt(
     prompt: string,
     sql: string | null,
     results: any[],
-    followUp?: FollowUpContext | null
+    followUp?: FollowUpContext | null,
+    causalResults?: CausalHypothesisResult[] | null
 ): string {
     const followUpSection = followUp && followUp.results.length > 0 ? `
 
@@ -984,16 +1027,47 @@ SQL de la investigación: ${followUp.sql}
 Resultados de la investigación (primeros 10): ${JSON.stringify(followUp.results.slice(0, 10))}
 ` : '';
 
+    const causalSection = causalResults && causalResults.length > 0 ? `
+
+RAZONAMIENTO CAUSAL MULTI-HIPÓTESIS:
+La pregunta del usuario es de tipo "¿por qué pasó X?". Ejecutaste ${causalResults.length}
+hipótesis en paralelo para investigar la causa raíz. Tu trabajo ahora es:
+
+1. ANALIZAR cada hipótesis y decidir cuáles SÍ explican el fenómeno y cuáles NO.
+2. ELIMINAR las hipótesis irrelevantes mentalmente.
+3. CONCLUIR con la causa raíz más probable, sustentada en los datos.
+
+INSTRUCCIONES ESPECIALES PARA EL TEXTO DE LA PARTE 1:
+- Permitido extenderse a 5-7 oraciones (es un análisis de causa raíz)
+- Estructura recomendada: dato principal → causa identificada → 1-2 hipótesis
+  alternativas descartadas con su razón → 1 acción accionable
+- Sé contundente: si los datos apuntan claramente a una causa, dilo. No te
+  protejas con "podría ser". Si los datos son ambiguos, dilo también.
+
+INSTRUCCIONES PARA "key_insights":
+- En vez de hallazgos genéricos, lista las 3 HIPÓTESIS MÁS RELEVANTES con
+  su veredicto: "Confirmada", "Descartada" o "Parcial", y el dato que lo prueba.
+
+HIPÓTESIS EJECUTADAS:
+${formatHypothesesForPrompt(causalResults)}
+` : '';
+
+    const isCausal = !!(causalResults && causalResults.length > 0);
+    const sentenceRange = isCausal ? '5-7 oraciones (análisis de causa raíz)'
+        : followUp ? '4-6 oraciones (con investigación)'
+            : '2-4 oraciones';
+
     return `Eres Kesito, consultor senior conversacional. Acabas de ejecutar una consulta
 y tienes los resultados. Vas a responder en DOS partes separadas por un marcador.
 
 PARTE 1 — Texto en prosa fluida (lo primero que verá el usuario):
-• 2-4 oraciones máximo (puede ser 4-6 si hubo investigación adicional)
+• ${sentenceRange} máximo
 • Cifras INLINE con **negritas Markdown** (ej: "**$1.4M**", "**+12%**")
 • Tono: consultor amigable, no robótico
 • NO bullets, NO encabezados, NO repitas la pregunta
 • NO digas "¿quieres profundizar?" — los botones ya aparecen en la UI
 ${followUp ? '• Menciona el hallazgo principal Y lo que reveló la investigación, como una sola narrativa fluida' : ''}
+${isCausal ? '• Concluye con la causa raíz más probable y 1 acción accionable' : ''}
 
 DESPUÉS DEL TEXTO, en una nueva línea, escribe EXACTAMENTE este marcador:
 ${META_MARKER}
@@ -1015,7 +1089,7 @@ REGLAS DE VISUALIZACIÓN:
 ──────────────────────────────────────────────
 Pregunta del usuario: ${prompt}
 SQL ejecutado: ${sql}
-Resultados (primeros 10): ${JSON.stringify(results.slice(0, 10))}${followUpSection}
+Resultados (primeros 10): ${JSON.stringify(results.slice(0, 10))}${followUpSection}${causalSection}
 ──────────────────────────────────────────────
 
 Empieza la respuesta directamente, sin preámbulos.`;

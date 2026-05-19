@@ -58,7 +58,6 @@ export async function GET(req: Request) {
         const gb = GROUP_MAP[groupByKey] || GROUP_MAP.sucursal;
 
         const whereClauses: string[] = [
-            'V.Status = 0',
             `V.FechaVenta >= '${startDate} 00:00:00'`,
             `V.FechaVenta <= '${endDate} 23:59:59'`
         ];
@@ -80,12 +79,11 @@ export async function GET(req: Request) {
                     ${gb.selectExpr} AS Grupo,
                     DV.Cantidad AS Cantidad,
                     (DV.PrecioVenta * DV.Cantidad) AS FilaIngreso,
-                    (DV.Cantidad * ISNULL(E.CostoReal, A.UltimoCosto)) AS FilaCosto,
+                    (DV.Cantidad * A.UltimoCosto) AS FilaCosto,
                     V.IdVenta AS IdVenta
                 FROM tblDetalleVentas DV
                 INNER JOIN tblVentas V ON DV.IdVenta = V.IdVenta AND DV.IdTienda = V.IdTienda AND DV.IdComputadora = V.IdComputadora
                 INNER JOIN tblArticulos A ON DV.CodigoInterno = A.CodigoInterno
-                LEFT JOIN tblExistencias E ON E.CodigoInterno = DV.CodigoInterno AND E.IdTienda = DV.IdTienda
                 ${gb.joinExtra}
                 WHERE ${whereClauses.join(' AND ')}
             )
@@ -111,13 +109,12 @@ export async function GET(req: Request) {
         const totalsSql = `
             SELECT
                 SUM(DV.PrecioVenta * DV.Cantidad) AS Ingreso,
-                SUM(DV.Cantidad * ISNULL(E.CostoReal, A.UltimoCosto)) AS Costo,
+                SUM(DV.Cantidad * A.UltimoCosto) AS Costo,
                 SUM(DV.Cantidad) AS Unidades,
                 COUNT(DISTINCT V.IdVenta) AS Tickets
             FROM tblDetalleVentas DV
             INNER JOIN tblVentas V ON DV.IdVenta = V.IdVenta AND DV.IdTienda = V.IdTienda AND DV.IdComputadora = V.IdComputadora
             INNER JOIN tblArticulos A ON DV.CodigoInterno = A.CodigoInterno
-            LEFT JOIN tblExistencias E ON E.CodigoInterno = DV.CodigoInterno AND E.IdTienda = DV.IdTienda
             WHERE ${whereClauses.join(' AND ')}
         `;
 
