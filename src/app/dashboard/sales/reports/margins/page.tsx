@@ -32,6 +32,7 @@ import {
 } from 'recharts';
 import { DashboardCommandBar } from '@/components/dashboard-command-bar';
 import { NarrativeSummary } from '@/components/narrative-summary';
+import { KpiExplainButton, ExplainKpiContext } from '@/components/kpi-explain-button';
 
 const STORE_COLOR_MAP: Record<string, string> = {
     'BODEGA 238': '#35e844',
@@ -559,52 +560,102 @@ export default function MargenesRentabilidadPage() {
             </div>
 
             {/* KPIs Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <KpiCard
-                    icon={<DollarSign />}
-                    label="Ingreso Total"
-                    value={fmtMoney(kpis?.ingreso)}
-                    accent="emerald"
-                    loading={loading}
-                />
-                <KpiCard
-                    icon={<Package />}
-                    label="Costo Total"
-                    value={fmtMoney(kpis?.costo)}
-                    accent="orange"
-                    loading={loading}
-                />
-                <KpiCard
-                    icon={<TrendingUp />}
-                    label="Utilidad Bruta"
-                    value={fmtMoney(kpis?.utilidad)}
-                    accent="blue"
-                    loading={loading}
-                    secondary={
-                        kpis?.utilidad != null && kpis.utilidad < 0 ? (
-                            <span className="text-rose-600 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest mt-1">
-                                <TrendingDown className="w-3.5 h-3.5" /> Pérdida
-                            </span>
-                        ) : null
-                    }
-                />
-                <KpiCard
-                    icon={<Receipt />}
-                    label="Margen de Utilidad"
-                    value={fmtPct(kpis?.margenPct)}
-                    accent={
-                        kpis && kpis.margenPct >= 30 ? 'emerald' :
-                            kpis && kpis.margenPct >= 15 ? 'blue' :
-                                kpis && kpis.margenPct >= 0 ? 'amber' : 'rose'
-                    }
-                    loading={loading}
-                    secondary={
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mt-1">
-                            {fmtNumber(kpis?.tickets)} tkt · {fmtNumber(kpis?.unidades)} uds.
-                        </span>
-                    }
-                />
-            </div>
+            {(() => {
+                // Contexto compartido entre KPIs para el botón "Explícame"
+                const relatedKpis: Record<string, number> = kpis ? {
+                    'Ingreso Total': kpis.ingreso,
+                    'Costo Total': kpis.costo,
+                    'Utilidad Bruta': kpis.utilidad,
+                    'Margen %': kpis.margenPct,
+                    'Tickets': kpis.tickets,
+                    'Unidades': kpis.unidades
+                } : {};
+                const sharedKpiBase = {
+                    pageContext: 'Dashboard de Márgenes y Rentabilidad',
+                    period: { fechaInicio: startDate, fechaFin: endDate },
+                    filters: {
+                        storeIds: selectedStoreIds,
+                        storeNames: selectedStoreIds.length === 0
+                            ? ['Todas las sucursales']
+                            : storesCatalog
+                                .filter((s: any) => selectedStoreIds.includes(String(s.IdTienda)))
+                                .map((s: any) => s.Tienda)
+                    },
+                    relatedKpis
+                };
+                return (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <KpiCard
+                            icon={<DollarSign />}
+                            label="Ingreso Total"
+                            value={fmtMoney(kpis?.ingreso)}
+                            accent="emerald"
+                            loading={loading}
+                            explainContext={kpis ? {
+                                kpiName: 'Ingreso Total',
+                                value: kpis.ingreso,
+                                format: 'currency',
+                                ...sharedKpiBase
+                            } : undefined}
+                        />
+                        <KpiCard
+                            icon={<Package />}
+                            label="Costo Total"
+                            value={fmtMoney(kpis?.costo)}
+                            accent="orange"
+                            loading={loading}
+                            explainContext={kpis ? {
+                                kpiName: 'Costo Total',
+                                value: kpis.costo,
+                                format: 'currency',
+                                ...sharedKpiBase
+                            } : undefined}
+                        />
+                        <KpiCard
+                            icon={<TrendingUp />}
+                            label="Utilidad Bruta"
+                            value={fmtMoney(kpis?.utilidad)}
+                            accent="blue"
+                            loading={loading}
+                            secondary={
+                                kpis?.utilidad != null && kpis.utilidad < 0 ? (
+                                    <span className="text-rose-600 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest mt-1">
+                                        <TrendingDown className="w-3.5 h-3.5" /> Pérdida
+                                    </span>
+                                ) : null
+                            }
+                            explainContext={kpis ? {
+                                kpiName: 'Utilidad Bruta',
+                                value: kpis.utilidad,
+                                format: 'currency',
+                                ...sharedKpiBase
+                            } : undefined}
+                        />
+                        <KpiCard
+                            icon={<Receipt />}
+                            label="Margen de Utilidad"
+                            value={fmtPct(kpis?.margenPct)}
+                            accent={
+                                kpis && kpis.margenPct >= 30 ? 'emerald' :
+                                    kpis && kpis.margenPct >= 15 ? 'blue' :
+                                        kpis && kpis.margenPct >= 0 ? 'amber' : 'rose'
+                            }
+                            loading={loading}
+                            secondary={
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mt-1">
+                                    {fmtNumber(kpis?.tickets)} tkt · {fmtNumber(kpis?.unidades)} uds.
+                                </span>
+                            }
+                            explainContext={kpis ? {
+                                kpiName: 'Margen de Utilidad',
+                                value: kpis.margenPct,
+                                format: 'percent',
+                                ...sharedKpiBase
+                            } : undefined}
+                        />
+                    </div>
+                );
+            })()}
 
             {/* Gráfico de Utilidad Bruta */}
             {!loading && topUtilityRows.length > 0 && (
@@ -823,7 +874,7 @@ function Th({ label, onClick, active, dir, align = 'right' }: { label: string; o
 }
 
 function KpiCard({
-    icon, label, value, accent, loading, secondary
+    icon, label, value, accent, loading, secondary, explainContext
 }: {
     icon: React.ReactNode;
     label: string;
@@ -831,6 +882,7 @@ function KpiCard({
     accent: 'emerald' | 'blue' | 'orange' | 'amber' | 'rose';
     loading?: boolean;
     secondary?: React.ReactNode;
+    explainContext?: ExplainKpiContext;
 }) {
     const accentMap: Record<string, string> = {
         emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
@@ -851,6 +903,11 @@ function KpiCard({
                 {loading ? <Loader2 className="w-5 h-5 animate-spin text-[#4050B4]" /> : value}
             </div>
             {secondary}
+            {explainContext && !loading && (
+                <div className="mt-2 pt-2 border-t border-slate-100">
+                    <KpiExplainButton context={explainContext} />
+                </div>
+            )}
         </div>
     );
 }

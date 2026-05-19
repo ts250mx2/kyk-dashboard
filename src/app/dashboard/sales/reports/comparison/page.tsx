@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils';
 import { SalesComparisonChart } from '@/components/dashboard/sales-comparison-chart';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { DashboardCommandBar } from '@/components/dashboard-command-bar';
+import { NarrativeSummary } from '@/components/narrative-summary';
 
 const STORE_COLOR_MAP: Record<string, string> = {
     'BODEGA 238': '#35e844',
@@ -340,6 +342,56 @@ export default function SalesComparisonPage() {
                     </div>
                 </div>
             </div>
+
+            {/* === Barra de comando del agente (lenguaje natural) === */}
+            <DashboardCommandBar
+                dashboardType="comparison"
+                currentFilters={{ fechaInicio, fechaFin, storeIds: selectedStoreIds, metric, groupBy }}
+                availableStores={stores}
+                availableMetrics={['venta', 'operaciones', 'ticket']}
+                onApplyUpdates={(updates: any) => {
+                    if (updates.fechaInicio) setFechaInicio(updates.fechaInicio);
+                    if (updates.fechaFin) setFechaFin(updates.fechaFin);
+                    if (Array.isArray(updates.storeIds)) setSelectedStoreIds(updates.storeIds.map((id: any) => String(id)));
+                    if (updates.metric && ['venta', 'operaciones', 'ticket'].includes(updates.metric)) {
+                        setMetric(updates.metric);
+                    }
+                    if (updates.groupBy && ['dia', 'semana', 'mes'].includes(updates.groupBy)) {
+                        setGroupBy(updates.groupBy);
+                    }
+                }}
+                suggestions={[
+                    'comparativa diaria de este mes',
+                    'ventas vs mes pasado',
+                    'agrupar por semana',
+                    'cambiar a ticket promedio'
+                ]}
+            />
+
+            {/* === Resumen narrativo automático === */}
+            {!loading && data && (
+                <NarrativeSummary
+                    context={{
+                        pageContext: 'Comparativas de Ventas',
+                        period: { fechaInicio, fechaFin },
+                        scope: selectedStoreIds.length === 0
+                            ? 'Todas las sucursales'
+                            : stores
+                                .filter((s: any) => selectedStoreIds.includes(String(s.IdTienda)))
+                                .map((s: any) => s.Tienda)
+                                .join(', '),
+                        kpis: {
+                            'Grupo A (total)': Array.isArray(data.groupA)
+                                ? data.groupA.reduce((acc: number, r: any) => acc + (Number(r.value) || 0), 0)
+                                : 0,
+                            'Grupo B (total)': Array.isArray(data.groupB)
+                                ? data.groupB.reduce((acc: number, r: any) => acc + (Number(r.value) || 0), 0)
+                                : 0,
+                            'Métrica activa': metric === 'venta' ? 1 : metric === 'operaciones' ? 2 : 3
+                        }
+                    }}
+                />
+            )}
 
             <style jsx global>{`
                 @media print {

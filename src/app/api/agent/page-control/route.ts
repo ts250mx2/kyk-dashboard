@@ -13,7 +13,7 @@ interface PageControlRequest {
     };
     availableMetrics?: string[];
     availableStores?: Array<{ IdTienda: number | string; Tienda: string }>;
-    dashboardType?: 'clients' | 'margins';
+    dashboardType?: 'clients' | 'margins' | 'comparison';
 }
 
 export async function POST(req: Request) {
@@ -30,9 +30,68 @@ export async function POST(req: Request) {
         const metricsList = availableMetrics.length > 0 ? availableMetrics.join(', ') : 'contado, credito, publico, notas';
 
         const isMargins = dashboardType === 'margins';
+        const isComparison = dashboardType === 'comparison';
         let systemPrompt = '';
 
-        if (isMargins) {
+        if (isComparison) {
+            systemPrompt = `Eres un asistente que traduce preguntas en español a comandos para reconfigurar
+un dashboard de COMPARATIVAS DE VENTAS.
+
+CONTEXTO DEL DASHBOARD:
+- Fecha actual: ${today}
+- Sucursales disponibles (IdTienda: nombre):
+${storesContext}
+
+FILTROS ACTUALES:
+- Periodo: ${currentFilters.fechaInicio || '?'} a ${currentFilters.fechaFin || '?'}
+- Sucursales seleccionadas: ${currentFilters.storeIds?.length ? currentFilters.storeIds.join(',') : 'todas'}
+- Agrupación temporal (groupBy): ${currentFilters.groupBy || 'dia'} (válidas: 'dia', 'semana', 'mes')
+- Métrica activa: ${currentFilters.metric || 'venta'} (válidas: 'venta', 'operaciones', 'ticket')
+
+REGLAS:
+1. Período:
+   - "hoy" → fechaInicio = fechaFin = hoy
+   - "ayer" → fechaInicio = fechaFin = ayer
+   - "este mes" → fechaInicio = primer día del mes actual, fechaFin = hoy
+   - "mes pasado" → fechaInicio = primer día mes anterior, fechaFin = último día mes anterior
+   - "últimos 30 días" → fechaInicio = hoy - 29, fechaFin = hoy
+   - "este año" → fechaInicio = 1 enero año actual, fechaFin = hoy
+
+2. Sucursales:
+   - Si menciona nombres de sucursales, devuelve los IdTienda correspondientes
+   - "todas"/"todos" → storeIds = []
+   - Si no menciona sucursal, NO incluyas storeIds en updates
+
+3. Agrupación temporal (groupBy):
+   - "por día" o "diario" → groupBy = 'dia'
+   - "por semana" o "semanal" → groupBy = 'semana'
+   - "por mes" o "mensual" → groupBy = 'mes'
+
+4. Métrica:
+   - "ventas" o "venta" o "ingreso" → metric = 'venta'
+   - "operaciones" o "transacciones" → metric = 'operaciones'
+   - "ticket" o "ticket promedio" → metric = 'ticket'
+
+5. Si la pregunta es ambigua o no aplica → action='noop'
+
+ESTRUCTURA DE RESPUESTA (SOLO JSON, sin markdown):
+{
+  "action": "update_filters" | "noop",
+  "updates": {
+    "fechaInicio": "YYYY-MM-DD",
+    "fechaFin": "YYYY-MM-DD",
+    "storeIds": ["12", "15"],
+    "groupBy": "dia" | "semana" | "mes",
+    "metric": "venta" | "operaciones" | "ticket"
+  },
+  "message": "Entendí: comparativa diaria de ventas para este mes",
+  "confidence": "high" | "medium" | "low"
+}
+
+Pregunta del usuario: "${prompt}"
+
+Responde SOLO con el JSON.`;
+        } else if (isMargins) {
             systemPrompt = `Eres un asistente que traduce preguntas en español a comandos para reconfigurar un dashboard de Márgenes de Utilidad y Rentabilidad.
 
 CONTEXTO DEL DASHBOARD:

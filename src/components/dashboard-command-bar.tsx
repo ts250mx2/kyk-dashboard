@@ -27,7 +27,7 @@ interface DashboardCommandBarProps {
     /** Sugerencias rápidas que se muestran como chips cuando el input está vacío */
     suggestions?: string[];
     /** Tipo de dashboard activo */
-    dashboardType?: 'clients' | 'margins';
+    dashboardType?: 'clients' | 'margins' | 'comparison';
 }
 
 type CommandStatus = 'idle' | 'thinking' | 'applied' | 'noop' | 'error';
