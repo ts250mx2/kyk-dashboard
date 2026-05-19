@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Calendar,
     Users,
@@ -269,29 +269,28 @@ export default function ClientsDashboardPage() {
         if (updates.search !== undefined) setSearchTerm(updates.search);
     };
 
-    // Contexto para el resumen narrativo y los KPIs (se recalcula cuando cambian los datos)
-    const summaryContext = useMemo(() => {
-        const topStoresActive = activeDesglose.stores
-            ?.slice(0, 3)
-            .map((s: any) => ({ name: s.Tienda, value: s.Total })) || [];
-        return {
-            pageContext: 'Dashboard de Ventas por Cliente',
-            period: { fechaInicio, fechaFin },
-            scope: selectedStoreNames,
-            kpis: {
-                'Ventas a Contado': kpis.ContadoMonto,
-                'Clientes a Contado': kpis.ContadoClientes,
-                'Ventas a Crédito': kpis.CreditoMonto,
-                'Clientes a Crédito': kpis.CreditoClientes,
-                'Público General': kpis.PublicoMonto,
-                'Operaciones Público': kpis.PublicoOperaciones,
-                'Notas de Crédito': kpis.NotasMonto,
-                'Operaciones Notas': kpis.NotasOperaciones
-            },
-            highlights: { topStores: topStoresActive }
-        };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fechaInicio, fechaFin, selectedStoreNames, kpis.ContadoMonto, kpis.CreditoMonto, kpis.PublicoMonto, kpis.NotasMonto]);
+    // Contexto para el resumen narrativo. NarrativeSummary tiene su propio
+    // hash + debounce internamente, así que aquí lo calculamos plano (sin useMemo
+    // para no violar Rules of Hooks por el early-return de !mounted más arriba).
+    const topStoresActive = activeDesglose.stores
+        ?.slice(0, 3)
+        .map((s: any) => ({ name: s.Tienda, value: s.Total })) || [];
+    const summaryContext = {
+        pageContext: 'Dashboard de Ventas por Cliente',
+        period: { fechaInicio, fechaFin },
+        scope: selectedStoreNames,
+        kpis: {
+            'Ventas a Contado': kpis.ContadoMonto,
+            'Clientes a Contado': kpis.ContadoClientes,
+            'Ventas a Crédito': kpis.CreditoMonto,
+            'Clientes a Crédito': kpis.CreditoClientes,
+            'Público General': kpis.PublicoMonto,
+            'Operaciones Público': kpis.PublicoOperaciones,
+            'Notas de Crédito': kpis.NotasMonto,
+            'Operaciones Notas': kpis.NotasOperaciones
+        },
+        highlights: { topStores: topStoresActive }
+    };
 
     const kpiSharedContext = {
         pageContext: 'Dashboard de Ventas por Cliente',
