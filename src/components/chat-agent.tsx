@@ -707,8 +707,9 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center space-x-1">
+                        <div className="flex items-center gap-0.5">
                             <AlertsPanel
+                                compact
                                 onCreateFromChat={() => {
                                     // Si el último mensaje del asistente tiene SQL, lo proponemos como base
                                     const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.sql);
@@ -725,18 +726,21 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                 }}
                             />
                             <PlaybooksPanel
+                                compact
                                 getCurrentChatPrompts={() =>
                                     messages.filter(m => m.role === 'user' && m.content.trim()).map(m => m.content)
                                 }
                                 onRunPlaybook={(pb: PlaybookSummary) => handleRunPlaybook(pb)}
                             />
                             <ConversationsDropdown
+                                compact
                                 activeId={activeConversationId}
                                 onSelect={loadConversation}
                                 onNew={startNewConversation}
                                 refreshKey={conversationsRefreshKey}
                             />
-                            <button onClick={handleClear} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title="Nueva conversación">
+                            <div className="w-px h-5 bg-slate-200 mx-0.5" />
+                            <button onClick={handleClear} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400" title="Nueva conversación">
                                 <Trash2 className="w-5 h-5" />
                             </button>
                             {!isEmbedded && (
@@ -895,7 +899,17 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                         {messages.map((message, index) => (
                             <div key={index} className={cn("group/msg flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-300", message.role === 'user' ? "items-end" : "items-start")}>
                                 <div className={cn(
-                                    "max-w-[85%] overflow-hidden",
+                                    "flex items-start gap-2.5 max-w-[90%]",
+                                    message.role === 'user' ? "flex-row-reverse" : "flex-row"
+                                )}>
+                                    {/* Avatar (solo en mensajes del asistente) */}
+                                    {message.role === 'assistant' && (
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-white border border-slate-200/70 flex items-center justify-center overflow-hidden mt-0.5">
+                                            <img src="/kesito.svg" alt="Kesito" className="w-6 h-6 object-contain" />
+                                        </div>
+                                    )}
+                                <div className={cn(
+                                    "overflow-hidden flex-1 min-w-0",
                                     message.role === 'user'
                                         ? "bg-indigo-50 border border-indigo-100 text-slate-800 rounded-2xl rounded-tr-md px-5 py-3"
                                         : "bg-white border border-slate-200/70 rounded-2xl rounded-tl-md"
@@ -1140,10 +1154,11 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                         <p className="text-[14.5px] font-medium leading-relaxed whitespace-pre-wrap text-slate-800">{message.content}</p>
                                     )}
                                 </div>
+                                </div>
 
                                 {/* Toolbar al hover sobre mensajes del asistente (Copy + Regenerate) */}
                                 {message.role === 'assistant' && !message.streaming && message.content && (
-                                    <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1 mt-1.5 px-1">
+                                    <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1 mt-1.5 ml-[42px]">
                                         <button
                                             onClick={() => handleCopyMessage(index)}
                                             className="inline-flex items-center gap-1 px-2 py-1 text-[10.5px] font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"

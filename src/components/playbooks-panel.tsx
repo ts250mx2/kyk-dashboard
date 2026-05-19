@@ -26,6 +26,8 @@ interface PlaybooksPanelProps {
     onRunPlaybook?: (playbook: PlaybookSummary) => void;
     /** Trigger externo de refresh (cuando se crea uno nuevo desde el chat) */
     refreshKey?: number;
+    /** Mostrar solo el icono (sin label) — para headers compactos */
+    compact?: boolean;
 }
 
 function formatRelative(iso: string): string {
@@ -42,7 +44,7 @@ function formatRelative(iso: string): string {
     } catch { return ''; }
 }
 
-export function PlaybooksPanel({ getCurrentChatPrompts, onRunPlaybook, refreshKey }: PlaybooksPanelProps) {
+export function PlaybooksPanel({ getCurrentChatPrompts, onRunPlaybook, refreshKey, compact = false }: PlaybooksPanelProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [playbooks, setPlaybooks] = useState<PlaybookSummary[]>([]);
     const [loading, setLoading] = useState(false);
@@ -147,11 +149,14 @@ export function PlaybooksPanel({ getCurrentChatPrompts, onRunPlaybook, refreshKe
         <div ref={containerRef} className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-slate-100 transition-colors text-slate-500"
+                className={cn(
+                    "flex items-center gap-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500",
+                    compact ? "p-2" : "px-3 py-1.5"
+                )}
                 title="Playbooks guardados"
             >
                 <BookMarked className="w-4 h-4" />
-                <span className="text-[11px] font-bold uppercase tracking-wider">Playbooks</span>
+                {!compact && <span className="text-[11px] font-semibold">Playbooks</span>}
             </button>
 
             {isOpen && (

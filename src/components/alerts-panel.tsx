@@ -33,6 +33,8 @@ interface AlertsPanelProps {
     onCreateFromChat?: () => CreateAlertDraft | null;
     /** Trigger externo para refrescar la lista (cuando se crea una alerta nueva) */
     refreshKey?: number;
+    /** Mostrar solo el icono (sin label) — para headers compactos */
+    compact?: boolean;
 }
 
 export interface CreateAlertDraft {
@@ -68,7 +70,7 @@ const FREQUENCY_LABELS: Record<string, string> = {
     hourly: 'Cada hora', daily: 'Diario', weekly: 'Semanal'
 };
 
-export function AlertsPanel({ onCreateFromChat, refreshKey }: AlertsPanelProps) {
+export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: AlertsPanelProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [tab, setTab] = useState<'events' | 'rules'>('events');
     const [events, setEvents] = useState<AlertEvent[]>([]);
@@ -214,7 +216,10 @@ export function AlertsPanel({ onCreateFromChat, refreshKey }: AlertsPanelProps) 
         <div ref={containerRef} className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-slate-100 transition-colors text-slate-500"
+                className={cn(
+                    "relative flex items-center gap-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500",
+                    compact ? "p-2" : "px-3 py-1.5"
+                )}
                 title="Alertas y bandeja"
             >
                 {unreadCount > 0 ? (
@@ -222,9 +227,9 @@ export function AlertsPanel({ onCreateFromChat, refreshKey }: AlertsPanelProps) 
                 ) : (
                     <Bell className="w-4 h-4" />
                 )}
-                <span className="text-[11px] font-bold uppercase tracking-wider">Alertas</span>
+                {!compact && <span className="text-[11px] font-semibold">Alertas</span>}
                 {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-rose-500 text-white text-[9px] font-black rounded-full px-1">
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] flex items-center justify-center bg-rose-500 text-white text-[9px] font-black rounded-full px-1">
                         {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                 )}

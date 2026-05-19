@@ -17,6 +17,8 @@ interface ConversationsDropdownProps {
     onNew: () => void;
     /** Cuando el padre guarda una conversación nueva, llama a este ref para refrescar la lista */
     refreshKey?: number;
+    /** Mostrar solo el icono (sin label) — para headers compactos */
+    compact?: boolean;
 }
 
 function formatRelativeDate(iso: string): string {
@@ -38,7 +40,7 @@ function formatRelativeDate(iso: string): string {
     }
 }
 
-export function ConversationsDropdown({ activeId, onSelect, onNew, refreshKey }: ConversationsDropdownProps) {
+export function ConversationsDropdown({ activeId, onSelect, onNew, refreshKey, compact = false }: ConversationsDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [conversations, setConversations] = useState<ConversationSummary[]>([]);
     const [loading, setLoading] = useState(false);
@@ -101,11 +103,14 @@ export function ConversationsDropdown({ activeId, onSelect, onNew, refreshKey }:
         <div ref={containerRef} className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-slate-100 transition-colors text-slate-500"
+                className={cn(
+                    "flex items-center gap-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500",
+                    compact ? "p-2" : "px-3 py-1.5"
+                )}
                 title="Historial de conversaciones"
             >
                 <History className="w-4 h-4" />
-                <span className="text-[11px] font-bold uppercase tracking-wider">Historial</span>
+                {!compact && <span className="text-[11px] font-semibold">Historial</span>}
             </button>
 
             {isOpen && (
