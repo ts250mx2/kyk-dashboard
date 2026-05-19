@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-    TrendingUp,
     Calendar,
     Users,
     DollarSign,
     RotateCcw,
     CreditCard,
-    ArrowUpRight,
     Search,
     ChevronUp,
     ChevronDown,
@@ -19,6 +17,9 @@ import {
     Store,
     Check
 } from 'lucide-react';
+import { DashboardCommandBar } from '@/components/dashboard-command-bar';
+import { KpiExplainButton } from '@/components/kpi-explain-button';
+import { NarrativeSummary } from '@/components/narrative-summary';
 import * as XLSX from 'xlsx';
 import {
     BarChart,
@@ -255,6 +256,67 @@ export default function ClientsDashboardPage() {
             .map((s: any) => s.Tienda)
             .join(', ');
 
+    // Handler para aplicar actualizaciones desde la barra de comando del agente
+    const applyAgentUpdates = (updates: any) => {
+        if (updates.fechaInicio) setFechaInicio(updates.fechaInicio);
+        if (updates.fechaFin) setFechaFin(updates.fechaFin);
+        if (Array.isArray(updates.storeIds)) {
+            setSelectedStoreIds(updates.storeIds.map((id: any) => String(id)));
+        }
+        if (updates.metric && ['contado', 'credito', 'publico', 'notas'].includes(updates.metric)) {
+            setSelectedMetric(updates.metric as MetricType);
+        }
+        if (updates.search !== undefined) setSearchTerm(updates.search);
+    };
+
+    // Contexto para el resumen narrativo y los KPIs (se recalcula cuando cambian los datos)
+    const summaryContext = useMemo(() => {
+        const topStoresActive = activeDesglose.stores
+            ?.slice(0, 3)
+            .map((s: any) => ({ name: s.Tienda, value: s.Total })) || [];
+        return {
+            pageContext: 'Dashboard de Ventas por Cliente',
+            period: { fechaInicio, fechaFin },
+            scope: selectedStoreNames,
+            kpis: {
+                'Ventas a Contado': kpis.ContadoMonto,
+                'Clientes a Contado': kpis.ContadoClientes,
+                'Ventas a Crédito': kpis.CreditoMonto,
+                'Clientes a Crédito': kpis.CreditoClientes,
+                'Público General': kpis.PublicoMonto,
+                'Operaciones Público': kpis.PublicoOperaciones,
+                'Notas de Crédito': kpis.NotasMonto,
+                'Operaciones Notas': kpis.NotasOperaciones
+            },
+            highlights: { topStores: topStoresActive }
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fechaInicio, fechaFin, selectedStoreNames, kpis.ContadoMonto, kpis.CreditoMonto, kpis.PublicoMonto, kpis.NotasMonto]);
+
+    const kpiSharedContext = {
+        pageContext: 'Dashboard de Ventas por Cliente',
+        period: { fechaInicio, fechaFin },
+        filters: {
+            storeIds: selectedStoreIds,
+            storeNames: selectedStoreIds.length === 0
+                ? ['Todas las sucursales']
+                : storesCatalog
+                    .filter((s: any) => selectedStoreIds.includes(s.IdTienda.toString()))
+                    .map((s: any) => s.Tienda)
+        },
+        relatedKpis: {
+            'Total Ventas': kpis.TotalVentas,
+            'Total Clientes': kpis.TotalClientes
+        }
+    };
+
+    const commandSuggestions = [
+        'ventas a crédito de este mes',
+        'todas las sucursales hoy',
+        'notas de crédito de la semana',
+        'público general del mes pasado'
+    ];
+
     return (
         <div className="space-y-6">
             {/* Header section with Date selectors */}
@@ -447,7 +509,26 @@ export default function ClientsDashboardPage() {
 
                 {/* Right Panel: Primary Dashboard content */}
                 <div className="flex-1 min-w-0 space-y-6">
-                    
+
+                    {/* === PATRÓN 1: Barra de comando por lenguaje natural === */}
+                    <DashboardCommandBar
+                        currentFilters={{
+                            fechaInicio,
+                            fechaFin,
+                            storeIds: selectedStoreIds,
+                            metric: selectedMetric,
+                            search: searchTerm
+                        }}
+                        availableStores={storesCatalog}
+                        onApplyUpdates={applyAgentUpdates}
+                        suggestions={commandSuggestions}
+                    />
+
+                    {/* === PATRÓN 3: Resumen narrativo automático === */}
+                    {!loading && (
+                        <NarrativeSummary context={summaryContext} />
+                    )}
+
                     {/* Active stores indicator banner */}
                     <div className="bg-slate-50 border border-slate-200/80 px-4 py-2.5 flex items-center justify-between shadow-sm">
                         <div className="flex items-start gap-2 text-xs font-bold text-slate-600">
@@ -482,14 +563,24 @@ export default function ClientsDashboardPage() {
                                 </div>
                                 <div className="flex flex-col gap-2 border-t border-slate-50 pt-4 mt-2">
                                     <div className="w-full bg-slate-100 h-1.5 rounded-none overflow-hidden mb-1">
-                                        <div 
-                                            className="bg-emerald-500 h-full rounded-none transition-all duration-500" 
+                                        <div
+                                            className="bg-emerald-500 h-full rounded-none transition-all duration-500"
                                             style={{ width: `${contadoPct}%` }}
                                         />
                                     </div>
                                     <div className="flex justify-between items-center text-xs font-bold">
                                         <span className="text-slate-500">Clientes Distintos</span>
                                         <span className="text-slate-800">{kpis.ContadoClientes}</span>
+                                    </div>
+                                    <div className="pt-1 -mb-1">
+                                        <KpiExplainButton
+                                            context={{
+                                                kpiName: 'Ventas a Contado',
+                                                value: kpis.ContadoMonto,
+                                                format: 'currency',
+                                                ...kpiSharedContext
+                                            }}
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -516,14 +607,24 @@ export default function ClientsDashboardPage() {
                                 </div>
                                 <div className="flex flex-col gap-2 border-t border-slate-50 pt-4 mt-2">
                                     <div className="w-full bg-slate-100 h-1.5 rounded-none overflow-hidden mb-1">
-                                        <div 
-                                            className="bg-amber-500 h-full rounded-none transition-all duration-500" 
+                                        <div
+                                            className="bg-amber-500 h-full rounded-none transition-all duration-500"
                                             style={{ width: `${creditoPct}%` }}
                                         />
                                     </div>
                                     <div className="flex justify-between items-center text-xs font-bold">
                                         <span className="text-slate-500">Clientes Distintos</span>
                                         <span className="text-slate-800">{kpis.CreditoClientes}</span>
+                                    </div>
+                                    <div className="pt-1 -mb-1">
+                                        <KpiExplainButton
+                                            context={{
+                                                kpiName: 'Ventas a Crédito',
+                                                value: kpis.CreditoMonto,
+                                                format: 'currency',
+                                                ...kpiSharedContext
+                                            }}
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -550,14 +651,24 @@ export default function ClientsDashboardPage() {
                                 </div>
                                 <div className="flex flex-col gap-2 border-t border-slate-50 pt-4 mt-2">
                                     <div className="w-full bg-slate-100 h-1.5 rounded-none overflow-hidden mb-1">
-                                        <div 
-                                            className="bg-blue-500 h-full rounded-none transition-all duration-500" 
+                                        <div
+                                            className="bg-blue-500 h-full rounded-none transition-all duration-500"
                                             style={{ width: `${publicoPct}%` }}
                                         />
                                     </div>
                                     <div className="flex justify-between items-center text-xs font-bold">
                                         <span className="text-slate-500">Operaciones</span>
                                         <span className="text-slate-800">{kpis.PublicoOperaciones}</span>
+                                    </div>
+                                    <div className="pt-1 -mb-1">
+                                        <KpiExplainButton
+                                            context={{
+                                                kpiName: 'Público General',
+                                                value: kpis.PublicoMonto,
+                                                format: 'currency',
+                                                ...kpiSharedContext
+                                            }}
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -584,14 +695,24 @@ export default function ClientsDashboardPage() {
                                 </div>
                                 <div className="flex flex-col gap-2 border-t border-slate-50 pt-4 mt-2">
                                     <div className="w-full bg-slate-100 h-1.5 rounded-none overflow-hidden mb-1">
-                                        <div 
-                                            className="bg-rose-500 h-full rounded-none transition-all duration-500" 
+                                        <div
+                                            className="bg-rose-500 h-full rounded-none transition-all duration-500"
                                             style={{ width: `${notasPct}%` }}
                                         />
                                     </div>
                                     <div className="flex justify-between items-center text-xs font-bold">
                                         <span className="text-slate-500">Operaciones (Devol)</span>
                                         <span className="text-slate-800">{kpis.NotasOperaciones}</span>
+                                    </div>
+                                    <div className="pt-1 -mb-1">
+                                        <KpiExplainButton
+                                            context={{
+                                                kpiName: 'Notas de Crédito',
+                                                value: kpis.NotasMonto,
+                                                format: 'currency',
+                                                ...kpiSharedContext
+                                            }}
+                                        />
                                     </div>
                                 </div>
                             </div>
