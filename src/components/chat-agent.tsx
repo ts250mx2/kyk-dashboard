@@ -762,33 +762,38 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                             <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-700">
                                 {/* Briefing Narrativo Matutino */}
                                 {briefing ? (
-                                    <div className="bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden mb-6">
-                                        <div className="px-6 pt-5 pb-2 flex items-center gap-2">
-                                            <Sparkles className="w-4 h-4 text-indigo-500" />
-                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Briefing del día</span>
-                                            <span className="ml-auto text-[10px] text-slate-400 font-medium">
-                                                {new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}
+                                    <div className="bg-white rounded-2xl border border-slate-200/70 overflow-hidden mb-6">
+                                        <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-lg bg-indigo-50 flex items-center justify-center">
+                                                <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                                            </div>
+                                            <span className="text-[12px] font-semibold text-slate-700">Briefing del día</span>
+                                            <span className="ml-auto text-[11px] text-slate-400 font-medium">
+                                                {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}
                                             </span>
                                         </div>
-                                        <div className="px-6 pb-6">
+                                        <div className="px-5 pb-5">
                                             <InlineMarkdown
                                                 text={briefing}
-                                                className="text-[15px] leading-relaxed text-slate-700 font-medium"
+                                                className="text-[14.5px] leading-relaxed text-slate-700"
                                             />
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="flex flex-col items-center text-center mb-6 py-6">
-                                        <div className="p-6 bg-white rounded-[32px] shadow-sm border border-slate-100 mb-4">
-                                            <img src="/kesito.svg" alt="Kesito" className={cn("w-12 h-12 object-contain", loadingInsights && "animate-pulse")} />
+                                    <div className="flex flex-col items-center text-center mb-6 py-8">
+                                        <div className={cn(
+                                            "p-5 bg-white rounded-3xl border border-slate-100 mb-4 transition-transform",
+                                            loadingInsights ? "animate-pulse" : "hover:scale-105"
+                                        )}>
+                                            <img src="/kesito.svg" alt="Kesito" className="w-14 h-14 object-contain" />
                                         </div>
-                                        <h2 className="text-2xl font-black tracking-tight text-slate-900">
-                                            {loadingInsights ? 'Preparando briefing...' : 'Hola, soy Kesito'}
+                                        <h2 className="text-xl font-bold tracking-tight text-slate-900">
+                                            {loadingInsights ? 'Preparando tu briefing…' : '¡Hola! Soy Kesito'}
                                         </h2>
-                                        <p className="text-slate-500 max-w-sm font-medium mt-2 text-sm">
+                                        <p className="text-slate-500 max-w-sm font-normal mt-1.5 text-[13.5px] leading-relaxed">
                                             {loadingInsights
-                                                ? 'Analizando los datos del día para tu resumen ejecutivo'
-                                                : 'Tu consultor senior. Pregúntame lo que necesites del negocio o cualquier otro tema.'}
+                                                ? 'Analizando los datos del día para tu resumen ejecutivo.'
+                                                : 'Tu analista digital. Pregúntame lo que necesites del negocio.'}
                                         </p>
                                     </div>
                                 )}
@@ -802,22 +807,23 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
 
                                 {/* 6 Hallazgos del día como preguntas */}
                                 {dailyInsights.length > 0 && (
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between px-2">
-                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                                                Hallazgos del día · {dailyInsights.length}
+                                    <div className="space-y-2.5">
+                                        <div className="flex items-center justify-between px-1">
+                                            <span className="text-[12px] font-semibold text-slate-600">
+                                                Hallazgos del día
+                                                <span className="text-slate-400 font-normal ml-1">· {dailyInsights.length}</span>
                                             </span>
                                             <button
                                                 onClick={() => fetchDailyInsights(true)}
                                                 disabled={loadingInsights}
-                                                className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                                                className="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-indigo-600 transition-colors disabled:opacity-50 px-2 py-1 rounded-md hover:bg-slate-100"
                                                 title="Actualizar hallazgos"
                                             >
                                                 <RefreshCw className={cn("w-3 h-3", loadingInsights && "animate-spin")} />
                                                 Actualizar
                                             </button>
                                         </div>
-                                        <div className="grid grid-cols-1 gap-2">
+                                        <div className="grid grid-cols-1 gap-1.5">
                                             {dailyInsights.slice(0, 6).map((insight, i) => {
                                                 const sev = SEVERITY_STYLES[insight.severity];
                                                 const SevIcon = sev.icon;
@@ -825,11 +831,11 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                     <button
                                                         key={insight.id || i}
                                                         onClick={() => handleSend(insight.question)}
-                                                        className="group relative flex items-start gap-3 p-4 text-left bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all animate-in fade-in slide-in-from-left-2 duration-300"
-                                                        style={{ animationDelay: `${i * 50}ms` }}
+                                                        className="group relative flex items-start gap-3 p-3.5 text-left bg-white border border-slate-200/70 rounded-xl hover:border-indigo-300 hover:bg-indigo-50/30 transition-all animate-in fade-in slide-in-from-left-1 duration-300"
+                                                        style={{ animationDelay: `${i * 40}ms` }}
                                                     >
-                                                        <div className={cn("absolute left-0 top-3 bottom-3 w-1 rounded-full", sev.bar)} />
-                                                        <div className="pl-2 flex items-start gap-3 flex-1 min-w-0">
+                                                        <div className={cn("absolute left-0 top-3 bottom-3 w-0.5 rounded-full", sev.bar)} />
+                                                        <div className="pl-2 flex items-start gap-2.5 flex-1 min-w-0">
                                                             <SevIcon className={cn(
                                                                 "w-4 h-4 mt-0.5 flex-shrink-0",
                                                                 insight.severity === 'critical' && 'text-rose-500',
@@ -837,20 +843,20 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                                 insight.severity === 'info' && 'text-indigo-400'
                                                             )} />
                                                             <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700 leading-snug">
+                                                                <p className="text-[13.5px] font-semibold text-slate-800 group-hover:text-indigo-700 leading-snug">
                                                                     {insight.question}
                                                                 </p>
                                                                 {insight.summary && (
-                                                                    <p className="text-[11px] text-slate-500 mt-1 leading-snug line-clamp-2">
+                                                                    <p className="text-[11.5px] text-slate-500 mt-0.5 leading-snug line-clamp-2">
                                                                         {insight.summary}
                                                                     </p>
                                                                 )}
-                                                                <div className="flex items-center gap-2 mt-2">
-                                                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                                                <div className="flex items-center gap-1.5 mt-1.5">
+                                                                    <span className="text-[10px] font-medium text-slate-500 capitalize">
                                                                         {insight.area}
                                                                     </span>
-                                                                    <span className="text-[9px] text-slate-300">·</span>
-                                                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                                                    <span className="text-[10px] text-slate-300">·</span>
+                                                                    <span className="text-[10px] font-medium text-slate-500">
                                                                         {sev.label}
                                                                     </span>
                                                                 </div>
@@ -865,8 +871,8 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
 
                                 {/* Si no hay insights pero sí hay default suggestions */}
                                 {dailyInsights.length === 0 && !loadingInsights && defaultSuggestions.length > 0 && (
-                                    <div className="space-y-3">
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-2">
+                                    <div className="space-y-2.5">
+                                        <span className="text-[12px] font-semibold text-slate-600 px-1">
                                             Para empezar
                                         </span>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -874,9 +880,10 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                 <button
                                                     key={i}
                                                     onClick={() => handleSend(s)}
-                                                    className="p-4 text-left bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all"
+                                                    className="p-3.5 text-left bg-white border border-slate-200/70 rounded-xl hover:border-indigo-300 hover:bg-indigo-50/30 transition-all animate-in fade-in duration-300"
+                                                    style={{ animationDelay: `${i * 40}ms` }}
                                                 >
-                                                    <p className="text-sm font-bold text-slate-700 leading-snug">{s}</p>
+                                                    <p className="text-[13.5px] font-medium text-slate-700 leading-snug">{s}</p>
                                                 </button>
                                             ))}
                                         </div>
@@ -1189,12 +1196,11 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                     </div>
 
                     {/* Footer / Input Area */}
-                    <div className="p-6 bg-white border-t border-slate-100 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.05)]">
+                    <div className="px-5 pt-3 pb-4 bg-white border-t border-slate-100">
                         <ChatInput
                             onSend={handleSend}
                             isLoading={loading}
                         />
-                        <p className="text-[9px] text-center text-slate-400 mt-4 uppercase tracking-[0.3em] font-bold">Powered by Merkurio Engine Analytics</p>
                     </div>
                 </div>
             )}

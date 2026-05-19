@@ -37,13 +37,21 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
         }
     };
 
+    const charCount = input.length;
+    const isLong = charCount > 500;
+
     return (
-        <div className="flex flex-col gap-2 w-full max-w-4xl mx-auto px-2">
+        <div className="flex flex-col gap-1.5 w-full max-w-4xl mx-auto">
             {error && (
-                <p className="text-[10px] text-red-500 font-bold uppercase tracking-widest px-4">{error}</p>
+                <p className="text-[11px] text-rose-600 font-medium px-2">{error}</p>
             )}
-            <form onSubmit={handleSubmit} className="flex-1 flex gap-3 items-end">
-                <div className="relative flex-1">
+            <form onSubmit={handleSubmit} className="flex-1 flex gap-2 items-end">
+                <div className={cn(
+                    "relative flex-1 bg-white border rounded-2xl transition-all overflow-hidden",
+                    isListening ? "border-rose-300 ring-2 ring-rose-100" :
+                    "border-slate-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100",
+                    isLoading && "opacity-60"
+                )}>
                     <textarea
                         rows={1}
                         value={input}
@@ -54,59 +62,70 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
                                 handleSubmit(e);
                             }
                         }}
-                        placeholder={isListening ? "Escuchando..." : "Hazme una consulta analítica..."}
+                        placeholder={isListening ? "Escuchando…" : "Escribe tu pregunta o pide un análisis…"}
                         className={cn(
-                            "w-full px-6 py-4 text-[15px] bg-white border border-slate-200 rounded-[24px] shadow-sm",
-                            "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent",
-                            "placeholder:text-slate-400 text-slate-700 transition-all duration-300",
-                            "resize-none min-h-[56px] max-h-[150px] overflow-y-auto font-medium",
-                            (isLoading || isListening) && "border-indigo-500",
-                            isLoading && "opacity-50 cursor-not-allowed"
+                            "w-full px-4 py-3 pr-12 text-[14.5px] bg-transparent",
+                            "focus:outline-none",
+                            "placeholder:text-slate-400 text-slate-800",
+                            "resize-none min-h-[48px] max-h-[180px] overflow-y-auto font-medium leading-relaxed"
                         )}
                         disabled={isLoading}
                     />
-                    {isListening && (
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center space-x-1">
-                            <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                            <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                            <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce" />
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex gap-2 mb-0.5">
+                    {/* Botón de voz inline (esquina interior) */}
                     <button
                         type="button"
                         onClick={toggleListening}
                         disabled={isLoading}
                         className={cn(
-                            "p-4 h-14 w-14 flex items-center justify-center rounded-[20px] transition-all duration-300",
+                            "absolute right-2 top-2 w-8 h-8 flex items-center justify-center rounded-lg transition-all",
                             isListening
-                                ? "bg-red-500 text-white shadow-lg shadow-red-100 animate-pulse"
-                                : "bg-slate-100 text-slate-500 hover:bg-slate-200",
-                            "disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 flex-shrink-0"
+                                ? "bg-rose-500 text-white"
+                                : "text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+                            "disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
                         )}
+                        title={isListening ? "Detener grabación" : "Dictar por voz"}
                     >
-                        {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-                    </button>
-
-                    <button
-                        type="submit"
-                        disabled={!input.trim() || isLoading}
-                        className={cn(
-                            "p-4 h-14 w-14 flex items-center justify-center rounded-[20px] bg-indigo-600 text-white",
-                            "hover:bg-indigo-700 hover:shadow-lg transition-all duration-300 shadow-indigo-100",
-                            "disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 flex-shrink-0"
-                        )}
-                    >
-                        {isLoading ? (
-                            <Loader2 className="w-6 h-6 animate-spin" />
-                        ) : (
-                            <Send className="w-6 h-6" />
-                        )}
+                        {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                     </button>
                 </div>
+
+                <button
+                    type="submit"
+                    disabled={!input.trim() || isLoading}
+                    className={cn(
+                        "h-12 w-12 flex items-center justify-center rounded-2xl transition-all flex-shrink-0",
+                        input.trim() && !isLoading
+                            ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-100"
+                            : "bg-slate-100 text-slate-400",
+                        "disabled:cursor-not-allowed active:scale-95"
+                    )}
+                    title="Enviar (Enter)"
+                >
+                    {isLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                        <Send className="w-4 h-4" />
+                    )}
+                </button>
             </form>
+
+            {/* Hint de atajos */}
+            <div className="flex items-center justify-between px-1 text-[10.5px] text-slate-400">
+                <div className="flex items-center gap-3">
+                    <span>
+                        <kbd className="font-mono font-semibold text-slate-500">Enter</kbd> enviar
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span>
+                        <kbd className="font-mono font-semibold text-slate-500">Shift+Enter</kbd> nueva línea
+                    </span>
+                </div>
+                {charCount > 0 && (
+                    <span className={cn("tabular-nums", isLong && "text-amber-600 font-semibold")}>
+                        {charCount}
+                    </span>
+                )}
+            </div>
         </div>
     );
 }
