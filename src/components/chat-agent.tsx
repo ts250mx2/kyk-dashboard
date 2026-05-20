@@ -357,6 +357,30 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
         }, 100);
     };
 
+    /**
+     * Escucha el evento global `kesito:ask` (despachado desde otros componentes
+     * como DashboardCommandBar cuando una pregunta es analítica y no se puede
+     * traducir a un filtro). Abre el chat y envía la pregunta automáticamente.
+     */
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            const prompt = detail?.prompt;
+            if (typeof prompt !== 'string' || !prompt.trim()) return;
+            setIsOpen(true);
+            setTimeout(async () => {
+                // Esperar a que termine cualquier stream previo
+                while (streamControllerRef.current) {
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                await handleSend(prompt);
+            }, 100);
+        };
+        window.addEventListener('kesito:ask', handler);
+        return () => window.removeEventListener('kesito:ask', handler);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const fetchDailyInsights = useCallback(async (forceRefresh = false) => {
         const todayKey = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
         const cacheKey = 'kyk_daily_insights';

@@ -95,9 +95,11 @@ export function DashboardCommandBar({
                 setPrompt('');
                 setTimeout(() => setStatus('idle'), 2500);
             } else {
-                setStatus('noop');
-                setFeedback(data.message || 'No pude interpretar la pregunta. Intenta ser más específico.');
-                setTimeout(() => setStatus('idle'), 4000);
+                // No es un cambio de filtro → es analítica. Mandamos directo a Kesito.
+                window.dispatchEvent(new CustomEvent('kesito:ask', { detail: { prompt: trimmed } }));
+                setStatus('idle');
+                setFeedback('');
+                setPrompt('');
             }
         } catch (e: any) {
             setStatus('error');
@@ -152,12 +154,11 @@ export function DashboardCommandBar({
                 </button>
             </div>
 
-            {/* Feedback bar */}
+            {/* Feedback bar (sólo applied / error, los noop van directo a Kesito) */}
             {hasFeedback && feedback && (
                 <div className={cn(
                     "mt-2 px-3 py-1.5 text-[11px] font-medium animate-in fade-in slide-in-from-top-1 duration-200",
                     status === 'applied' && 'text-emerald-700 bg-emerald-50 border border-emerald-200',
-                    status === 'noop' && 'text-amber-800 bg-amber-50 border border-amber-200',
                     status === 'error' && 'text-rose-800 bg-rose-50 border border-rose-200'
                 )}>
                     {feedback}
