@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Users, Store, Calendar, ChevronRight, ArrowLeft, Loader2, Search,
-    Package, Home, Building
+    Package, Home, Building, TrendingUp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ProductTrendModal } from '@/components/dashboard/product-trend-modal';
+import { DashboardCommandBar } from '@/components/dashboard-command-bar';
+import { NarrativeSummary } from '@/components/narrative-summary';
 
 type Level = 'suppliers' | 'products';
 
@@ -101,6 +104,12 @@ export default function VentasPorProveedorPage() {
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
+    // Modal de tendencia del producto
+    const [trendProduct, setTrendProduct] = useState<Product | null>(null);
+
+    // Modo IA
+    const [aiMode, setAiMode] = useState(false);
+
     // Carga catálogo de sucursales al cambiar fechas
     useEffect(() => {
         const load = async () => {
@@ -195,6 +204,57 @@ export default function VentasPorProveedorPage() {
         ? 'Todas las sucursales'
         : stores.find(s => String(s.IdTienda) === selectedStoreId)?.Tienda || 'Sucursal';
 
+    // Callbacks IA: aplicar updates sugeridos por el agente
+    const applyAgentUpdates = (updates: any) => {
+        if (updates.fechaInicio) setFechaInicio(updates.fechaInicio);
+        if (updates.fechaFin) setFechaFin(updates.fechaFin);
+        if (Array.isArray(updates.storeIds) && updates.storeIds.length > 0) {
+            setSelectedStoreId(String(updates.storeIds[0]));
+        } else if (updates.storeId) {
+            setSelectedStoreId(String(updates.storeId));
+        }
+        if (updates.search !== undefined) setSearchTerm(String(updates.search));
+    };
+
+    const commandSuggestions = [
+        '¿Qué proveedor vende más este mes?',
+        'Top 5 proveedores del año',
+        'Compara este mes vs el mes anterior',
+        '¿Qué proveedores cayeron vs el periodo anterior?'
+    ];
+
+    // Contexto para resumen narrativo
+    const summaryContext = useMemo(() => {
+        if (level === 'suppliers') {
+            const topSuppliers = suppliers.slice(0, 5).map(s => ({ name: s.Proveedor, value: s.Venta }));
+            return {
+                pageContext: 'Ventas por Proveedor',
+                period: { fechaInicio, fechaFin },
+                scope: activeStoreName,
+                kpis: {
+                    'Venta Total': totals.Venta || 0,
+                    'Proveedores con venta': suppliers.length,
+                    'Unidades vendidas': totals.Unidades || 0,
+                    'Artículos distintos': totals.Articulos || 0
+                },
+                highlights: { topStores: topSuppliers }
+            };
+        }
+        // Nivel productos
+        const topProducts = products.slice(0, 5).map(p => ({ name: p.Descripcion, value: p.Venta }));
+        return {
+            pageContext: `Productos del proveedor "${selectedSupplier?.name || ''}"`,
+            period: { fechaInicio, fechaFin },
+            scope: activeStoreName,
+            kpis: {
+                'Venta del proveedor': totals.Venta || 0,
+                'Productos vendidos': products.length,
+                'Unidades vendidas': totals.Cantidad || 0
+            },
+            highlights: { topItems: topProducts }
+        };
+    }, [level, suppliers, products, totals, fechaInicio, fechaFin, activeStoreName, selectedSupplier]);
+
     return (
         <div className="p-6 pt-3 md:p-8 md:pt-4 max-w-[1600px] mx-auto min-h-screen">
             {/* Header */}
@@ -235,6 +295,30 @@ export default function VentasPorProveedorPage() {
                         <Calendar size={14} className="text-[#4050B4]" />
                         <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)}
                             className="bg-transparent text-xs font-bold text-slate-700 outline-none border-none p-0" />
+                    </div>
+
+                    {/* Modo IA Switch */}
+                    <div
+                        className="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 shadow-sm h-[38px] cursor-pointer select-none hover:bg-slate-100 transition-all"
+                        onClick={() => setAiMode(!aiMode)}
+                        title="Activa el Asistente IA para preguntas y resúmenes automáticos"
+                    >
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                            🤖 Modo IA
+                        </span>
+                        <div
+                            className={cn(
+                                "relative inline-flex h-4.5 w-8.5 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200",
+                                aiMode ? "bg-[#4050B4]" : "bg-slate-300"
+                            )}
+                        >
+                            <span
+                                className={cn(
+                                    "pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200",
+                                    aiMode ? "translate-x-4" : "translate-x-0"
+                                )}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -285,6 +369,32 @@ export default function VentasPorProveedorPage() {
                     })}
                 </div>
             </div>
+
+            {/* === IA: Barra de comando === */}
+            {aiMode && (
+                <div className="mb-4">
+                    <DashboardCommandBar
+                        currentFilters={{
+                            fechaInicio,
+                            fechaFin,
+                            storeId: selectedStoreId,
+                            level,
+                            idProveedor: selectedSupplier?.id
+                        } as any}
+                        availableStores={stores}
+                        onApplyUpdates={applyAgentUpdates}
+                        suggestions={commandSuggestions}
+                        dashboardType="margins"
+                    />
+                </div>
+            )}
+
+            {/* === IA: Resumen narrativo === */}
+            {aiMode && !loading && (
+                <div className="mb-4">
+                    <NarrativeSummary context={summaryContext} />
+                </div>
+            )}
 
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 shadow-sm mb-6 overflow-x-auto">
@@ -483,13 +593,15 @@ export default function VentasPorProveedorPage() {
                             const pctOfTotal = totals.Venta > 0 ? (p.Venta / totals.Venta) * 100 : 0;
                             const isTop = pctOfTotal >= 5;
                             return (
-                                <div
+                                <button
                                     key={p.CodigoInterno}
+                                    onClick={() => setTrendProduct(p)}
                                     className={cn(
-                                        "relative bg-white border rounded-lg p-5 transition-all duration-150 group",
+                                        "relative bg-white border rounded-lg p-5 transition-all duration-150 group text-left w-full",
                                         "hover:border-emerald-300 hover:shadow-[0_0_0_4px_rgba(16,185,129,0.08)]",
                                         "border-slate-200"
                                     )}
+                                    title="Ver tendencia de ventas"
                                 >
                                     {/* Header */}
                                     <div className="flex items-start justify-between gap-3 mb-4">
@@ -524,12 +636,25 @@ export default function VentasPorProveedorPage() {
                                         <DataRow label="Tickets" value={fmtNumber(p.Tickets)} />
                                         <DataRow label="Precio prom." value={fmtMoney(p.PrecioPromedio)} />
                                     </div>
-                                </div>
+
+                                    {/* Hint de tendencia al hover */}
+                                    <div className="absolute top-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <TrendingUp size={14} className="text-emerald-600" />
+                                    </div>
+                                </button>
                             );
                         })}
                     </div>
                 </div>
             )}
+
+            {/* Modal de tendencia del producto */}
+            <ProductTrendModal
+                open={trendProduct !== null}
+                onClose={() => setTrendProduct(null)}
+                product={trendProduct}
+                idTienda={selectedStoreId}
+            />
         </div>
     );
 }
