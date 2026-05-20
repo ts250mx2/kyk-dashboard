@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Users, Store, Calendar, ChevronRight, ArrowLeft, Loader2, Search,
-    Package, Home, Building, TrendingUp
+    Package, Home, Building, TrendingUp, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ProductTrendModal } from '@/components/dashboard/product-trend-modal';
 import { DashboardCommandBar } from '@/components/dashboard-command-bar';
 import { NarrativeSummary } from '@/components/narrative-summary';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
 
 type Level = 'suppliers' | 'products';
 
@@ -107,8 +108,10 @@ export default function VentasPorProveedorPage() {
     // Modal de tendencia del producto
     const [trendProduct, setTrendProduct] = useState<Product | null>(null);
 
-    // Modo IA
+    // Modo IA (toggle del command bar + resumen automático)
     const [aiMode, setAiMode] = useState(false);
+    // Modal de Análisis Profundo IA (botón explícito dentro del bloque aiMode)
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
 
     // Carga catálogo de sucursales al cambiar fechas
     useEffect(() => {
@@ -389,10 +392,18 @@ export default function VentasPorProveedorPage() {
                 </div>
             )}
 
-            {/* === IA: Resumen narrativo === */}
+            {/* === IA: Resumen narrativo automático + botón de Análisis Profundo === */}
             {aiMode && !loading && (
-                <div className="mb-4">
+                <div className="mb-4 space-y-2">
                     <NarrativeSummary context={summaryContext} />
+                    <button
+                        onClick={() => setDeepSummaryOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#4050B4]/30 text-[#4050B4] hover:bg-[#4050B4] hover:text-white text-[10px] font-black uppercase tracking-widest transition-all"
+                        title="Abre un modal con análisis profundo (insights, oportunidades, riesgos, acciones)"
+                    >
+                        <Sparkles size={13} />
+                        Análisis Profundo IA
+                    </button>
                 </div>
             )}
 
@@ -654,6 +665,13 @@ export default function VentasPorProveedorPage() {
                 onClose={() => setTrendProduct(null)}
                 product={trendProduct}
                 idTienda={selectedStoreId}
+            />
+
+            {/* Modal de análisis profundo IA */}
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
             />
         </div>
     );
