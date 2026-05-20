@@ -27,7 +27,9 @@ import {
     BarChart3,
     Copy,
     Check,
-    RotateCw
+    RotateCw,
+    ThumbsUp,
+    ThumbsDown
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -55,6 +57,9 @@ interface Message {
     streamPhase?: 'thinking' | 'querying' | 'correcting-sql' | 'investigating' | 'reasoning-causal' | 'analyzing' | 'finalizing';
     streamPhaseDetail?: string;
     awaitingMetadata?: boolean;
+    // Feedback
+    messageId?: string;
+    feedbackRating?: 'up' | 'down' | null;
 }
 
 const STREAM_PHASE_LABELS: Record<NonNullable<Message['streamPhase']>, string> = {
@@ -267,6 +272,53 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
         } catch (e) {
             console.error('Clipboard error:', e);
         }
+    };
+
+    /**
+     * Envía feedback (👍/👎) sobre una respuesta del agente. Si es 👎 pide razón.
+     * Se guarda con el prompt original y el SQL para análisis posterior.
+     */
+    const [feedbackReasonFor, setFeedbackReasonFor] = useState<number | null>(null);
+    const [feedbackReason, setFeedbackReason] = useState('');
+
+    const handleFeedback = async (index: number, rating: 'up' | 'down', reason?: string) => {
+        const msg = messages[index];
+        if (!msg || msg.role !== 'assistant' || !msg.messageId) return;
+
+        // Si ya tiene el mismo rating, toggle (lo quitamos del UI; el backend guarda historial)
+        const isToggleOff = msg.feedbackRating === rating;
+        const userPrev = index > 0 ? messages[index - 1] : null;
+        const promptText = userPrev?.role === 'user' ? userPrev.content : null;
+
+        setMessages(prev => prev.map((m, i) => i === index ? { ...m, feedbackRating: isToggleOff ? null : rating } : m));
+
+        if (isToggleOff) return;
+
+        try {
+            await fetch('/api/agent/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messageId: msg.messageId,
+                    conversationId: activeConversationId,
+                    rating,
+                    reason: reason || null,
+                    prompt: promptText,
+                    response: msg.content,
+                    sql: msg.sql || null,
+                    aiModel: msg.ai_model || null
+                })
+            });
+        } catch (e) {
+            console.error('Feedback error:', e);
+        }
+    };
+
+    const submitFeedbackReason = async () => {
+        if (feedbackReasonFor == null) return;
+        await handleFeedback(feedbackReasonFor, 'down', feedbackReason.trim() || undefined);
+        setFeedbackReasonFor(null);
+        setFeedbackReason('');
     };
 
     /**
@@ -498,6 +550,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
 
         // Crea el mensaje del asistente vacío que iremos llenando
         const assistantTimestamp = Date.now();
+        const assistantMessageId = 'msg_' + assistantTimestamp.toString(36) + '_' + Math.random().toString(36).slice(2, 8);
         let assistantIndex = -1;
         setMessages((prev) => {
             assistantIndex = prev.length;
@@ -507,7 +560,8 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                 timestamp: assistantTimestamp,
                 streaming: useStreaming,
                 streamPhase: useStreaming ? 'thinking' : undefined,
-                ai_model: selectedModel
+                ai_model: selectedModel,
+                messageId: assistantMessageId
             }];
         });
 
@@ -1156,7 +1210,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                 </div>
                                 </div>
 
-                                {/* Toolbar al hover sobre mensajes del asistente (Copy + Regenerate) */}
+                                {/* Toolbar al hover sobre mensajes del asistente (Copy + Regenerate + Feedback) */}
                                 {message.role === 'assistant' && !message.streaming && message.content && (
                                     <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1 mt-1.5 ml-[42px]">
                                         <button
@@ -1186,9 +1240,62 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                 <span>Regenerar</span>
                                             </button>
                                         )}
+                                        <button
+                                            onClick={() => handleFeedback(index, 'up')}
+                                            className={cn(
+                                                "inline-flex items-center gap-1 px-2 py-1 text-[10.5px] font-medium rounded-md transition-colors",
+                                                message.feedbackRating === 'up'
+                                                    ? "bg-emerald-50 text-emerald-700"
+                                                    : "text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"
+                                            )}
+                                            title="Buena respuesta"
+                                        >
+                                            <ThumbsUp className={cn("w-3 h-3", message.feedbackRating === 'up' && "fill-emerald-600")} />
+                                        </button>
+                                        <button
+                                            onClick={() => setFeedbackReasonFor(index)}
+                                            className={cn(
+                                                "inline-flex items-center gap-1 px-2 py-1 text-[10.5px] font-medium rounded-md transition-colors",
+                                                message.feedbackRating === 'down'
+                                                    ? "bg-rose-50 text-rose-700"
+                                                    : "text-slate-500 hover:text-rose-700 hover:bg-rose-50"
+                                            )}
+                                            title="Necesita mejorar"
+                                        >
+                                            <ThumbsDown className={cn("w-3 h-3", message.feedbackRating === 'down' && "fill-rose-600")} />
+                                        </button>
                                         <span className="text-[10px] text-slate-300 ml-auto px-1 tabular-nums">
                                             {new Date(message.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </span>
+                                    </div>
+                                )}
+
+                                {/* Dialog de razón para 👎 */}
+                                {feedbackReasonFor === index && (
+                                    <div className="ml-[42px] mt-2 p-3 bg-rose-50 border border-rose-200 rounded-lg max-w-md">
+                                        <p className="text-[11px] font-bold text-rose-800 mb-2">¿Qué falló? (opcional)</p>
+                                        <textarea
+                                            value={feedbackReason}
+                                            onChange={e => setFeedbackReason(e.target.value)}
+                                            placeholder="Ej: las cifras no coinciden, faltó contexto, periodo equivocado..."
+                                            className="w-full bg-white border border-rose-200 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-rose-400 rounded-md resize-none"
+                                            rows={2}
+                                            autoFocus
+                                        />
+                                        <div className="flex gap-2 mt-2">
+                                            <button
+                                                onClick={submitFeedbackReason}
+                                                className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-wider rounded-md"
+                                            >
+                                                Enviar
+                                            </button>
+                                            <button
+                                                onClick={() => { setFeedbackReasonFor(null); setFeedbackReason(''); }}
+                                                className="px-3 py-1 text-slate-500 hover:text-slate-700 text-[10px] font-black uppercase tracking-wider"
+                                            >
+                                                Cancelar
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>

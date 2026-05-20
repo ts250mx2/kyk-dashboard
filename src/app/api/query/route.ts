@@ -17,6 +17,15 @@ import {
 import { queryLimiter } from '@/lib/rate-limit';
 import { getUserId } from '@/lib/conversations';
 import { findRelevantPlaybookSteps } from '@/lib/playbooks';
+import { auditResponse, formatAuditNote } from '@/lib/response-auditor';
+import {
+    detectForecastIntent,
+    rowsToSeries,
+    forecastSeries,
+    formatForecastForPrompt,
+    ForecastResult
+} from '@/lib/forecasting';
+import { saveMemory } from '@/lib/semantic-memory';
 import { recordMetric } from '@/lib/metrics';
 import fs from 'fs';
 import path from 'path';
@@ -279,8 +288,30 @@ SÍ usa query_database cuando:
 USA suggest_reports cuando puedas guiar al usuario a un reporte preexistente
 en vez de generar análisis desde cero.
 
-USA request_clarification SOLO si la consulta de datos es genuinamente
-ambigua (sin período, sin alcance) Y no puedes inferir razonablemente.
+USA request_clarification (OBLIGATORIO) cuando la pregunta involucra una
+tabla con columna de fecha (Ventas, Cancelaciones, Compras, Movimientos,
+Mermas, etc.) Y el usuario NO especificó período explícito.
+
+  Ejemplos que REQUIEREN clarificación:
+  • "¿Cuánto vendimos?" → ¿Hoy, esta semana, este mes, este año?
+  • "Mejores productos" → ¿De qué período?
+  • "Ventas por sucursal" → ¿Qué rango de fechas?
+  • "Cancelaciones de Centro" → ¿Cuándo?
+  • "Top clientes" → ¿En qué periodo?
+
+  Ejemplos que NO requieren clarificación (continúa con la query):
+  • Período YA explícito: "ventas de hoy", "del mes pasado", "ayer",
+    "marzo 2026", "últimos 7 días", "este año"
+  • Refinamiento del turno anterior: si el usuario ya estableció un
+    período en la conversación, hereda ese contexto sin volver a preguntar
+  • Preguntas conceptuales o sobre estructura ("¿qué reportes hay?")
+
+  Cuando pidas clarificación, ofrece SIEMPRE 3 opciones útiles en
+  suggested_questions, incluyendo periodos comunes (hoy, esta semana,
+  este mes, año actual) y/o el periodo más probable según el contexto.
+
+NO inventes un período por default. Es mejor preguntar y acertar que
+asumir y dar datos que no sirven.
 
 ──────────────────────────────────────────────────────────────
 CONTEXTO DEL NEGOCIO Y DATOS
@@ -302,7 +333,8 @@ T-SQL PRECISO (cuando ejecutes consultas)
 • Meses: SIEMPRE IdMes (INT), nunca Mes (VARCHAR)
 • Año: YEAR(GETDATE()) o [Año] = YEAR(GETDATE())
 • Si mes sin año explícito → asume año actual
-• Tendencia/evolución sin período → últimos 30 días
+• Si NO hay período en la pregunta y la tabla tiene columna de fecha,
+  usa request_clarification antes de ejecutar (NO asumas un default).
 
 ──────────────────────────────────────────────────────────────
 ESTILO DE RESPUESTA (crucial)
@@ -637,6 +669,32 @@ algún incidente operativo."
                     // tradicional (UNA query de follow-up automática si hay anomalía).
                     const isCausal = detectCausalIntent(prompt);
 
+                    // FORECASTING: si la pregunta tiene intención de pronóstico Y
+                    // los resultados forman una serie temporal válida, generamos
+                    // proyección automática (regresión + estacionalidad semanal).
+                    let forecastResult: ForecastResult | null = null;
+                    const forecastIntent = detectForecastIntent(prompt);
+                    if (forecastIntent.wants && results.length >= 7) {
+                        try {
+                            const series = rowsToSeries(results);
+                            if (series.length >= 7) {
+                                emit({
+                                    event: 'status',
+                                    data: {
+                                        phase: 'analyzing',
+                                        detail: `Proyectando ${forecastIntent.daysAhead} días…`
+                                    }
+                                });
+                                forecastResult = forecastSeries(series, forecastIntent.daysAhead);
+                                if (forecastResult) {
+                                    console.log(`[${requestId}] forecast: ${forecastResult.summary}`);
+                                }
+                            }
+                        } catch (fe) {
+                            console.error('Forecast failed:', fe);
+                        }
+                    }
+
                     let followUp: FollowUpProposal | null = null;
                     let followUpResults: any[] = [];
                     let followUpSql: string | null = null;
@@ -775,7 +833,8 @@ algún incidente operativo."
                         followUp && followUpResults.length > 0
                             ? { question: followUp.question, sql: followUpSql, results: followUpResults }
                             : null,
-                        causalResults.length > 0 ? causalResults : null
+                        causalResults.length > 0 ? causalResults : null,
+                        forecastResult
                     );
 
                     const streamResp = anthropic.messages.stream({
@@ -847,6 +906,25 @@ algún incidente operativo."
                         ? fullText.substring(0, fullText.indexOf(META_MARKER))
                         : fullText;
 
+                    // AUTO-REVISIÓN: pase con Haiku para validar cifras del texto vs SQL
+                    let auditNote = '';
+                    try {
+                        const audit = await auditResponse({
+                            userPrompt: prompt,
+                            responseText: fullSummary,
+                            sql: lastSql,
+                            results
+                        });
+                        if (!audit.ok && audit.severity !== 'none' && audit.notes.length > 0) {
+                            auditNote = formatAuditNote(audit);
+                            // Stream la nota correctiva como continuación del texto
+                            emit({ event: 'text-delta', data: { text: auditNote } });
+                            console.log(`[${requestId}] audit detected ${audit.severity}: ${audit.notes.join(' | ')}`);
+                        }
+                    } catch (auditErr) {
+                        console.error('Audit failed:', auditErr);
+                    }
+
                     emit({
                         event: 'metadata',
                         data: {
@@ -862,10 +940,21 @@ algún incidente operativo."
                     });
 
                     await logRequest(prompt, {
-                        message: fullSummary,
+                        message: fullSummary + auditNote,
                         data: results,
                         ...meta
                     }, formatExecutedQueries(executedQueries));
+
+                    // Memoria semántica: best-effort, no bloquea
+                    if (lastSql) {
+                        void saveMemory({
+                            userId: String(userIdForLimit),
+                            prompt,
+                            response: fullSummary,
+                            sql: lastSql,
+                            aiModel: selectedModel
+                        });
+                    }
 
                     emit({ event: 'done', data: {} });
                     return;
@@ -1088,8 +1177,11 @@ function buildMetaPrompt(
     sql: string | null,
     results: any[],
     followUp?: FollowUpContext | null,
-    causalResults?: CausalHypothesisResult[] | null
+    causalResults?: CausalHypothesisResult[] | null,
+    forecastResult?: ForecastResult | null
 ): string {
+    const forecastSection = forecastResult ? formatForecastForPrompt(forecastResult) : '';
+
     const followUpSection = followUp && followUp.results.length > 0 ? `
 
 INVESTIGACIÓN AUTOMÁTICA EJECUTADA:
@@ -1175,7 +1267,7 @@ REGLAS DE VISUALIZACIÓN:
 ──────────────────────────────────────────────
 Pregunta del usuario: ${prompt}
 SQL ejecutado: ${sql}
-Resultados (primeros 10): ${JSON.stringify(results.slice(0, 10))}${followUpSection}${causalSection}
+Resultados (primeros 10): ${JSON.stringify(results.slice(0, 10))}${followUpSection}${causalSection}${forecastSection}
 ──────────────────────────────────────────────
 
 Empieza la respuesta directamente, sin preámbulos.`;
