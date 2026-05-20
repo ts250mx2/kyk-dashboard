@@ -17,7 +17,6 @@ import {
 import { queryLimiter } from '@/lib/rate-limit';
 import { getUserId } from '@/lib/conversations';
 import { findRelevantPlaybookSteps } from '@/lib/playbooks';
-import { auditResponse, formatAuditNote } from '@/lib/response-auditor';
 import {
     detectForecastIntent,
     rowsToSeries,
@@ -906,25 +905,6 @@ algún incidente operativo."
                         ? fullText.substring(0, fullText.indexOf(META_MARKER))
                         : fullText;
 
-                    // AUTO-REVISIÓN: pase con Haiku para validar cifras del texto vs SQL
-                    let auditNote = '';
-                    try {
-                        const audit = await auditResponse({
-                            userPrompt: prompt,
-                            responseText: fullSummary,
-                            sql: lastSql,
-                            results
-                        });
-                        if (!audit.ok && audit.severity !== 'none' && audit.notes.length > 0) {
-                            auditNote = formatAuditNote(audit);
-                            // Stream la nota correctiva como continuación del texto
-                            emit({ event: 'text-delta', data: { text: auditNote } });
-                            console.log(`[${requestId}] audit detected ${audit.severity}: ${audit.notes.join(' | ')}`);
-                        }
-                    } catch (auditErr) {
-                        console.error('Audit failed:', auditErr);
-                    }
-
                     emit({
                         event: 'metadata',
                         data: {
@@ -940,7 +920,7 @@ algún incidente operativo."
                     });
 
                     await logRequest(prompt, {
-                        message: fullSummary + auditNote,
+                        message: fullSummary,
                         data: results,
                         ...meta
                     }, formatExecutedQueries(executedQueries));

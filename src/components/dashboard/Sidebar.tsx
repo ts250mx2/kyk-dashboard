@@ -69,6 +69,7 @@ const menuSections: MenuSection[] = [
             { name: "Mapa de Calor", emoji: "🔥", href: "/dashboard/sales/heatmap" },
             { name: "Clientes", emoji: "👥", href: "/dashboard/sales/clients" },
             { name: "Ventas Sucursales", emoji: "🏪", href: "/dashboard/sales/clients-simple" },
+            { name: "Ventas por Proveedor", emoji: "🏭", href: "/dashboard/sales/by-supplier" },
             { name: "Tendencias de Venta", emoji: "📈", href: "/dashboard/sales/reports/trends" },
             { name: "Comparativa Simple", emoji: "🆚", href: "/dashboard/sales/reports/quick-compare" },
             { name: "Comparativa Guiada", emoji: "🧙", href: "/dashboard/sales/reports/guided-compare" },
