@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Users, Store, Calendar, ChevronRight, ArrowLeft, Loader2, Search,
-    Package, Home, Building, Hash, Barcode
+    Package, Home, Building
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -367,36 +367,52 @@ export default function VentasPorProveedorPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {filteredSuppliers.map(s => {
                             const pctOfTotal = totals.Venta > 0 ? (s.Venta / totals.Venta) * 100 : 0;
+                            const isTop = pctOfTotal >= 5;
                             return (
                                 <button
                                     key={s.IdProveedor}
                                     onClick={() => goToProducts(s)}
-                                    className="bg-white border border-slate-200 hover:border-[#4050B4] hover:shadow-md p-4 text-left transition-all group"
+                                    className={cn(
+                                        "relative bg-white border rounded-lg p-5 text-left transition-all duration-150 group",
+                                        "hover:border-[#4050B4]/40 hover:shadow-[0_0_0_4px_rgba(64,80,180,0.08)]",
+                                        "border-slate-200"
+                                    )}
                                 >
-                                    <div className="flex items-start justify-between mb-2">
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            <div className="p-1.5 bg-[#4050B4]/10 text-[#4050B4] shrink-0">
-                                                <Building size={16} />
+                                    {/* Header: icono + nombre + % */}
+                                    <div className="flex items-start justify-between gap-3 mb-4">
+                                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                            <div className="w-8 h-8 rounded-md bg-slate-100 group-hover:bg-[#4050B4]/10 group-hover:text-[#4050B4] flex items-center justify-center shrink-0 transition-colors">
+                                                <Building size={15} className="text-slate-500 group-hover:text-[#4050B4] transition-colors" />
                                             </div>
-                                            <div className="min-w-0">
-                                                <h4 className="text-xs font-black text-slate-900 truncate">{s.Proveedor}</h4>
+                                            <div className="min-w-0 flex-1 pt-0.5">
+                                                <h4 className="text-[13px] font-bold text-slate-900 truncate leading-tight">{s.Proveedor}</h4>
+                                                <p className="text-[10px] font-mono text-slate-400 mt-0.5 tracking-tight">
+                                                    #PROV-{String(s.IdProveedor).padStart(4, '0')}
+                                                </p>
                                             </div>
                                         </div>
-                                        <ChevronRight size={14} className="text-slate-300 group-hover:text-[#4050B4] shrink-0 ml-1" />
-                                    </div>
-                                    <p className="text-lg font-black text-slate-900 tabular-nums mt-2">{fmtMoney(s.Venta)}</p>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-[10px] font-black text-[#4050B4] bg-[#4050B4]/10 px-1.5 py-0.5">
+                                        <span className={cn(
+                                            "text-[11px] font-semibold tabular-nums shrink-0 px-1.5 py-0.5 rounded",
+                                            isTop ? "bg-emerald-50 text-emerald-700" : "text-slate-400"
+                                        )}>
                                             {pctOfTotal.toFixed(1)}%
                                         </span>
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                            del total
-                                        </span>
                                     </div>
-                                    <div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t border-slate-100">
-                                        <MiniStat icon={<Package size={10} />} label="Artículos" value={fmtNumber(s.Articulos)} />
-                                        <MiniStat icon={<Hash size={10} />} label="Unidades" value={fmtNumber(s.Unidades)} />
-                                        <MiniStat icon={<Hash size={10} />} label="Tickets" value={fmtNumber(s.Tickets)} />
+
+                                    {/* Divider */}
+                                    <div className="h-px bg-slate-100 -mx-5 mb-3" />
+
+                                    {/* Datos en columnas perfectas */}
+                                    <div className="space-y-1.5">
+                                        <DataRow label="Venta" value={fmtMoney(s.Venta)} highlight />
+                                        <DataRow label="Artículos" value={fmtNumber(s.Articulos)} />
+                                        <DataRow label="Unidades" value={fmtNumber(s.Unidades)} />
+                                        <DataRow label="Tickets" value={fmtNumber(s.Tickets)} />
+                                    </div>
+
+                                    {/* Chevron al hover */}
+                                    <div className="absolute top-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <ChevronRight size={14} className="text-[#4050B4]" />
                                     </div>
                                 </button>
                             );
@@ -465,37 +481,48 @@ export default function VentasPorProveedorPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {filteredProducts.map(p => {
                             const pctOfTotal = totals.Venta > 0 ? (p.Venta / totals.Venta) * 100 : 0;
+                            const isTop = pctOfTotal >= 5;
                             return (
                                 <div
                                     key={p.CodigoInterno}
-                                    className="bg-white border border-slate-200 hover:border-[#4050B4] hover:shadow-md p-4 transition-all"
+                                    className={cn(
+                                        "relative bg-white border rounded-lg p-5 transition-all duration-150 group",
+                                        "hover:border-emerald-300 hover:shadow-[0_0_0_4px_rgba(16,185,129,0.08)]",
+                                        "border-slate-200"
+                                    )}
                                 >
-                                    <div className="flex items-start gap-2 mb-2">
-                                        <div className="p-1.5 bg-emerald-50 text-emerald-700 shrink-0">
-                                            <Package size={16} />
+                                    {/* Header */}
+                                    <div className="flex items-start justify-between gap-3 mb-4">
+                                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                            <div className="w-8 h-8 rounded-md bg-slate-100 group-hover:bg-emerald-50 flex items-center justify-center shrink-0 transition-colors">
+                                                <Package size={15} className="text-slate-500 group-hover:text-emerald-700 transition-colors" />
+                                            </div>
+                                            <div className="min-w-0 flex-1 pt-0.5">
+                                                <h4 className="text-[13px] font-bold text-slate-900 truncate leading-tight" title={p.Descripcion}>
+                                                    {p.Descripcion}
+                                                </h4>
+                                                <p className="text-[10px] font-mono text-slate-400 mt-0.5 tracking-tight truncate">
+                                                    #{p.CodigoInterno}{p.CodigoBarras ? ` · ${p.CodigoBarras}` : ''}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="min-w-0 flex-1">
-                                            <h4 className="text-xs font-black text-slate-900 truncate" title={p.Descripcion}>
-                                                {p.Descripcion}
-                                            </h4>
-                                            <p className="text-[10px] font-bold text-slate-400 truncate">
-                                                #{p.CodigoInterno}{p.CodigoBarras ? ` · ${p.CodigoBarras}` : ''}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <p className="text-lg font-black text-slate-900 tabular-nums mt-2">{fmtMoney(p.Venta)}</p>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5">
+                                        <span className={cn(
+                                            "text-[11px] font-semibold tabular-nums shrink-0 px-1.5 py-0.5 rounded",
+                                            isTop ? "bg-emerald-50 text-emerald-700" : "text-slate-400"
+                                        )}>
                                             {pctOfTotal.toFixed(1)}%
                                         </span>
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                            del proveedor
-                                        </span>
                                     </div>
-                                    <div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t border-slate-100">
-                                        <MiniStat icon={<Hash size={10} />} label="Cantidad" value={fmtNumber(p.Cantidad)} />
-                                        <MiniStat icon={<Hash size={10} />} label="Tickets" value={fmtNumber(p.Tickets)} />
-                                        <MiniStat icon={<Barcode size={10} />} label="P. Prom." value={fmtMoney(p.PrecioPromedio)} />
+
+                                    {/* Divider */}
+                                    <div className="h-px bg-slate-100 -mx-5 mb-3" />
+
+                                    {/* Datos en columnas perfectas */}
+                                    <div className="space-y-1.5">
+                                        <DataRow label="Venta" value={fmtMoney(p.Venta)} highlight />
+                                        <DataRow label="Cantidad" value={fmtNumber(p.Cantidad)} />
+                                        <DataRow label="Tickets" value={fmtNumber(p.Tickets)} />
+                                        <DataRow label="Precio prom." value={fmtMoney(p.PrecioPromedio)} />
                                     </div>
                                 </div>
                             );
@@ -507,14 +534,16 @@ export default function VentasPorProveedorPage() {
     );
 }
 
-function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function DataRow({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
     return (
-        <div>
-            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5 flex items-center gap-0.5">
-                {icon}
-                {label}
-            </p>
-            <p className="text-[11px] font-black text-slate-700 tabular-nums truncate">{value}</p>
+        <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[11px] font-medium text-slate-500">{label}</span>
+            <span className={cn(
+                "tabular-nums truncate",
+                highlight ? "text-[15px] font-bold text-slate-900" : "text-[12px] font-semibold text-slate-700"
+            )}>
+                {value}
+            </span>
         </div>
     );
 }
