@@ -127,7 +127,7 @@ function dimensionOptions(c: Catalogs, dim: Dimension): { label: string; value: 
     if (dim === 'categoria') return c.categorias.map(x => ({ label: x, value: x }));
     if (dim === 'marca') return c.familias.map(x => ({ label: x, value: x }));
     if (dim === 'proveedor') return c.proveedores.map(p => ({ label: p.Proveedor, value: String(p.IdProveedor) }));
-    if (dim === 'articulo') return c.articulos.slice(0, 500).map(a => ({ label: `${a.CodigoInterno} - ${a.Descripcion}`, value: String(a.CodigoInterno) }));
+    if (dim === 'articulo') return c.articulos.map(a => ({ label: `${a.CodigoInterno} - ${a.Descripcion}`, value: String(a.CodigoInterno) }));
     return [];
 }
 

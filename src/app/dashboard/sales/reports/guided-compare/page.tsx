@@ -106,7 +106,7 @@ export default function GuidedComparePage() {
             if (subDimension === 'depto') return catalogs.deptos.map(d => ({ label: d.Depto, value: String(d.IdDepto) }));
             if (subDimension === 'marca') return catalogs.familias.map(f => ({ label: f, value: f }));
             if (subDimension === 'proveedor') return catalogs.proveedores.map(p => ({ label: p.Proveedor, value: String(p.IdProveedor) }));
-            if (subDimension === 'articulo') return catalogs.articulos.slice(0, 500).map(a => ({ label: `${a.CodigoInterno} - ${a.Descripcion}`, value: String(a.CodigoInterno) }));
+            if (subDimension === 'articulo') return catalogs.articulos.map(a => ({ label: `${a.CodigoInterno} - ${a.Descripcion}`, value: String(a.CodigoInterno) }));
             return [];
         }
         return [];

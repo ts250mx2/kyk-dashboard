@@ -68,8 +68,8 @@ const menuSections: MenuSection[] = [
             { name: "Operaciones", emoji: "🏢", href: "/dashboard/sales/operations" },
             { name: "Mapa de Calor", emoji: "🔥", href: "/dashboard/sales/heatmap" },
             { name: "Clientes", emoji: "👥", href: "/dashboard/sales/clients" },
+            { name: "Ventas Sucursales", emoji: "🏪", href: "/dashboard/sales/clients-simple" },
             { name: "Tendencias de Venta", emoji: "📈", href: "/dashboard/sales/reports/trends" },
-            { name: "Comparativas de Ventas", emoji: "⚖️", href: "/dashboard/sales/reports/comparison" },
             { name: "Comparativa Simple", emoji: "🆚", href: "/dashboard/sales/reports/quick-compare" },
             { name: "Comparativa Guiada", emoji: "🧙", href: "/dashboard/sales/reports/guided-compare" },
             { name: "Márgenes y Rentabilidad", emoji: "📊", href: "/dashboard/sales/reports/margins" },
@@ -99,6 +99,7 @@ const menuSections: MenuSection[] = [
             { name: "Configuración", emoji: "🛠️", href: "/dashboard/settings" },
             { name: "Aprendizaje IA", emoji: "🧠", href: "/dashboard/system/ai-learning" },
             { name: "Historial de preguntas", emoji: "📜", href: "/dashboard/system/question-history" },
+            { name: "Feedback del Agente", emoji: "👍", href: "/dashboard/system/agent-feedback" },
         ]
     }
 ];
