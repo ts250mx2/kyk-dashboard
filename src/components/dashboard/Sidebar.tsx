@@ -70,6 +70,8 @@ const menuSections: MenuSection[] = [
             { name: "Clientes", emoji: "👥", href: "/dashboard/sales/clients" },
             { name: "Tendencias de Venta", emoji: "📈", href: "/dashboard/sales/reports/trends" },
             { name: "Comparativas de Ventas", emoji: "⚖️", href: "/dashboard/sales/reports/comparison" },
+            { name: "Comparativa Simple", emoji: "🆚", href: "/dashboard/sales/reports/quick-compare" },
+            { name: "Comparativa Guiada", emoji: "🧙", href: "/dashboard/sales/reports/guided-compare" },
             { name: "Márgenes y Rentabilidad", emoji: "📊", href: "/dashboard/sales/reports/margins" },
             { name: "Metas", emoji: "🎯", href: "/dashboard/sales/goals" },
         ]
