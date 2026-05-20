@@ -172,3 +172,70 @@ export async function recordPlaybookRun(userId: string, id: string): Promise<voi
 export function generatePlaybookId(): string {
     return 'pb_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
 }
+
+const STOPWORDS = new Set([
+    'que', 'qué', 'por', 'para', 'con', 'una', 'uno', 'los', 'las', 'del',
+    'las', 'mas', 'más', 'esta', 'este', 'son', 'fue', 'sin', 'sus', 'sobre',
+    'cual', 'cuál', 'cuando', 'cuándo', 'donde', 'dónde', 'como', 'cómo',
+    'pero', 'porque', 'hay', 'fue', 'ser', 'esta', 'están', 'pasa', 'pasó',
+    'caída', 'aumento', 'baja', 'sube', 'subió', 'bajó', 'mucho', 'poco',
+    'todo', 'todos', 'todas', 'también'
+]);
+
+function tokenize(text: string): Set<string> {
+    return new Set(
+        text
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[̀-ͯ]/g, '')
+            .split(/[^a-z0-9ñ]+/)
+            .filter(t => t.length >= 4 && !STOPWORDS.has(t))
+    );
+}
+
+/**
+ * Busca el playbook del usuario más relevante para una pregunta dada.
+ * Matcheo léxico simple (overlap de palabras significativas) — sin LLM, sin embeddings.
+ * Solo devuelve los prompts del playbook si el overlap supera el umbral mínimo.
+ *
+ * Diseñado para enriquecer el razonamiento causal: si el usuario ya guardó
+ * un playbook sobre "caída de ventas por sucursal", al preguntar
+ * "¿por qué bajaron las ventas?" usamos sus pasos como ángulos sugeridos.
+ */
+export async function findRelevantPlaybookSteps(
+    userId: string,
+    prompt: string,
+    minOverlap = 2
+): Promise<string[]> {
+    if (!userId || userId === 'anonymous' || userId === 'unknown') return [];
+
+    try {
+        const playbooks = await listPlaybooks(userId);
+        if (playbooks.length === 0) return [];
+
+        const promptTokens = tokenize(prompt);
+        if (promptTokens.size === 0) return [];
+
+        let bestMatch: { playbook: Playbook; score: number } | null = null;
+        for (const pb of playbooks) {
+            const haystack = `${pb.name} ${pb.description || ''} ${pb.steps.map(s => s.prompt).join(' ')}`;
+            const pbTokens = tokenize(haystack);
+            let overlap = 0;
+            for (const t of promptTokens) {
+                if (pbTokens.has(t)) overlap++;
+            }
+            if (overlap >= minOverlap && (!bestMatch || overlap > bestMatch.score)) {
+                bestMatch = { playbook: pb, score: overlap };
+            }
+        }
+
+        if (!bestMatch) return [];
+        return bestMatch.playbook.steps
+            .map(s => s.prompt)
+            .filter(p => typeof p === 'string' && p.length > 0)
+            .slice(0, 6);
+    } catch (e) {
+        console.error('findRelevantPlaybookSteps failed:', e);
+        return [];
+    }
+}

@@ -98,6 +98,7 @@ export async function POST(req: Request) {
             try {
                 // Sandbox: doble defensa por si alguien metió SQL malicioso en la BD
                 const safeSql = assertReadOnly(rule.sql);
+                console.log(`\n\x1b[33m[AGENT SQL - EVALUACIÓN ALERTA: ${rule.name.toUpperCase()}]\x1b[0m\n${safeSql}\n`);
                 const results = await query(safeSql);
 
                 const { triggered, observedValue } = evaluateCondition(

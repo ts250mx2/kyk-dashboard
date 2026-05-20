@@ -10,11 +10,13 @@ import {
     detectCausalIntent,
     generateHypotheses,
     executeHypotheses,
+    generateDeepDive,
     formatHypothesesForPrompt,
     CausalHypothesisResult
 } from '@/lib/causal-reasoner';
 import { queryLimiter } from '@/lib/rate-limit';
 import { getUserId } from '@/lib/conversations';
+import { findRelevantPlaybookSteps } from '@/lib/playbooks';
 import { recordMetric } from '@/lib/metrics';
 import fs from 'fs';
 import path from 'path';
@@ -91,9 +93,17 @@ interface IncomingTurn {
 
 const MAX_HISTORY_TURNS = 8; // pares user/assistant que conservamos como contexto
 
+function formatExecutedQueries(queries: Array<{ label: string; sql: string }>): string | null {
+    if (queries.length === 0) return null;
+    return queries
+        .map(q => `-- ==========================================\n-- ${q.label.toUpperCase()}\n-- ==========================================\n${q.sql}`)
+        .join('\n\n');
+}
+
 export async function POST(req: Request) {
     let prompt = 'Unknown Prompt';
     let lastSql: string | null = null;
+    const executedQueries: Array<{ label: string; sql: string }> = [];
     let selectedModel = 'gpt-4o';
     const startTime = Date.now();
     const requestId = `req_${startTime.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -599,10 +609,12 @@ algún incidente operativo."
                     }
 
                     lastSql = safeSql;
+                    executedQueries.push({ label: 'Consulta Principal', sql: safeSql });
                     emit({ event: 'status', data: { phase: 'querying' } });
 
                     let results: any[] = [];
                     try {
+                        console.log(`\n\x1b[33m[AGENT SQL - CONSULTA PRINCIPAL]\x1b[0m\n${safeSql}\n`);
                         results = await query(safeSql);
                     } catch (sqlError: any) {
                         emit({ event: 'status', data: { phase: 'correcting-sql' } });
@@ -615,6 +627,8 @@ algún incidente operativo."
                         const correctedSql = (correction.content[0] as any).text.replace(/```sql|```/g, '').trim();
                         const safeCorrected = assertReadOnly(correctedSql);
                         lastSql = safeCorrected;
+                        executedQueries.push({ label: 'Consulta Principal (Auto-Corregida)', sql: safeCorrected });
+                        console.log(`\n\x1b[33m[AGENT SQL - CONSULTA PRINCIPAL CORREGIDA]\x1b[0m\n${safeCorrected}\n`);
                         results = await query(safeCorrected);
                     }
 
@@ -638,9 +652,16 @@ algún incidente operativo."
                             }
                         });
                         try {
+                            const playbookHints = await findRelevantPlaybookSteps(
+                                String(userIdForLimit),
+                                prompt
+                            ).catch(() => [] as string[]);
                             const hypotheses = await generateHypotheses({
                                 userPrompt: prompt,
-                                schemaContext: schemaString
+                                schemaContext: schemaString,
+                                firstSql: lastSql,
+                                firstResults: results,
+                                playbookHints
                             });
                             if (hypotheses.length > 0) {
                                 emit({
@@ -652,6 +673,52 @@ algún incidente operativo."
                                     }
                                 });
                                 causalResults = await executeHypotheses(hypotheses);
+                                causalResults.forEach((r, idx) => {
+                                    if (r.sql) {
+                                        executedQueries.push({
+                                            label: `Hipótesis ${idx + 1}: ${r.label}`,
+                                            sql: r.sql
+                                        });
+                                    }
+                                });
+
+                                // SEGUNDA RONDA: si alguna hipótesis salió 'strong',
+                                // profundizamos con sub-hipótesis enfocadas en la
+                                // dimensión concentrada. Solo la primera 'strong' para
+                                // acotar latencia (queries causales ya son caras).
+                                const strongParent = causalResults.find(
+                                    r => r.success && r.evidence?.verdict === 'strong'
+                                );
+                                if (strongParent) {
+                                    emit({
+                                        event: 'status',
+                                        data: {
+                                            phase: 'reasoning-causal',
+                                            detail: `Profundizando en "${strongParent.evidence?.topDimension?.value || strongParent.label}"…`
+                                        }
+                                    });
+                                    try {
+                                        const subHypotheses = await generateDeepDive({
+                                            userPrompt: prompt,
+                                            parent: strongParent,
+                                            schemaContext: schemaString
+                                        });
+                                        if (subHypotheses.length > 0) {
+                                            const subResults = await executeHypotheses(subHypotheses);
+                                            subResults.forEach((r, idx) => {
+                                                if (r.sql) {
+                                                    executedQueries.push({
+                                                        label: `Sub-Hipótesis ${idx + 1}: ${r.label}`,
+                                                        sql: r.sql
+                                                    });
+                                                }
+                                            });
+                                            causalResults = [...causalResults, ...subResults];
+                                        }
+                                    } catch (e) {
+                                        console.error('Deep dive failed:', e);
+                                    }
+                                }
                             }
                         } catch (e) {
                             console.error('Causal reasoning failed:', e);
@@ -683,6 +750,11 @@ algún incidente operativo."
                             try {
                                 const safeFollowUpSql = assertReadOnly(followUp.sql);
                                 followUpSql = safeFollowUpSql;
+                                executedQueries.push({
+                                    label: `Investigación de Seguimiento: ${followUp.question}`,
+                                    sql: safeFollowUpSql
+                                });
+                                console.log(`\n\x1b[33m[AGENT SQL - INVESTIGACIÓN DE SEGUIMIENTO: ${followUp.question.toUpperCase()}]\x1b[0m\n${safeFollowUpSql}\n`);
                                 followUpResults = await query(safeFollowUpSql);
                             } catch (e) {
                                 console.error('Follow-up query failed:', e);
@@ -793,7 +865,7 @@ algún incidente operativo."
                         message: fullSummary,
                         data: results,
                         ...meta
-                    }, lastSql);
+                    }, formatExecutedQueries(executedQueries));
 
                     emit({ event: 'done', data: {} });
                     return;
@@ -848,8 +920,10 @@ algún incidente operativo."
                 }
 
                 lastSql = safeSql;
+                executedQueries.push({ label: 'Consulta Principal', sql: safeSql });
                 let results: any[];
                 try {
+                    console.log(`\n\x1b[33m[AGENT SQL - CONSULTA PRINCIPAL]\x1b[0m\n${safeSql}\n`);
                     results = await query(safeSql);
                 } catch (sqlError: any) {
                     const correctionPrompt = `Error SQL: ${sqlError.message}. Corrige el T-SQL. Retorna solo el código SQL sin explicaciones. SOLO SELECT permitido.`;
@@ -875,6 +949,8 @@ algún incidente operativo."
 
                     const safeCorrected = assertReadOnly(correctedSql);
                     lastSql = safeCorrected;
+                    executedQueries.push({ label: 'Consulta Principal (Auto-Corregida)', sql: safeCorrected });
+                    console.log(`\n\x1b[33m[AGENT SQL - CONSULTA PRINCIPAL CORREGIDA]\x1b[0m\n${safeCorrected}\n`);
                     results = await query(safeCorrected);
                 }
 
@@ -968,7 +1044,7 @@ algún incidente operativo."
             };
         }
 
-        await logRequest(prompt, finalResponse, lastSql);
+        await logRequest(prompt, finalResponse, formatExecutedQueries(executedQueries));
         void recordMetric({
             userId: userIdForLimit,
             endpoint: '/api/query',
@@ -1027,28 +1103,38 @@ SQL de la investigación: ${followUp.sql}
 Resultados de la investigación (primeros 10): ${JSON.stringify(followUp.results.slice(0, 10))}
 ` : '';
 
+    const subCount = (causalResults || []).filter(r => r.label.startsWith('↳')).length;
+    const baseCount = (causalResults?.length || 0) - subCount;
     const causalSection = causalResults && causalResults.length > 0 ? `
 
 RAZONAMIENTO CAUSAL MULTI-HIPÓTESIS:
-La pregunta del usuario es de tipo "¿por qué pasó X?". Ejecutaste ${causalResults.length}
-hipótesis en paralelo para investigar la causa raíz. Tu trabajo ahora es:
+La pregunta del usuario es de tipo "¿por qué pasó X?". Ejecutaste ${baseCount}
+hipótesis principales en paralelo${subCount > 0 ? ` y ${subCount} sub-hipótesis de profundización` : ''}
+para investigar la causa raíz. Cada hipótesis viene con un VEREDICTO PRELIMINAR
+calculado heurísticamente (concentración y varianza de los datos).
 
-1. ANALIZAR cada hipótesis y decidir cuáles SÍ explican el fenómeno y cuáles NO.
-2. ELIMINAR las hipótesis irrelevantes mentalmente.
-3. CONCLUIR con la causa raíz más probable, sustentada en los datos.
+Tu trabajo:
+1. CONFÍA en el veredicto preliminar pero VERIFÍCALO mirando los datos crudos.
+   Las hipótesis vienen ordenadas: primero "EVIDENCIA FUERTE", luego "PARCIAL", luego "SIN EVIDENCIA".
+2. CONCLUYE con la causa raíz más probable, fundamentada en las hipótesis con
+   evidencia fuerte/parcial.${subCount > 0 ? `
+3. Las sub-hipótesis (marcadas con "↳") profundizan en la dimensión donde se
+   detectó concentración. Úsalas para dar especificidad ("la causa es X, y
+   dentro de X específicamente Y").` : ''}
 
-INSTRUCCIONES ESPECIALES PARA EL TEXTO DE LA PARTE 1:
+INSTRUCCIONES PARA EL TEXTO DE LA PARTE 1:
 - Permitido extenderse a 5-7 oraciones (es un análisis de causa raíz)
-- Estructura recomendada: dato principal → causa identificada → 1-2 hipótesis
-  alternativas descartadas con su razón → 1 acción accionable
-- Sé contundente: si los datos apuntan claramente a una causa, dilo. No te
-  protejas con "podría ser". Si los datos son ambiguos, dilo también.
+- Estructura: dato principal → causa identificada con su evidencia cuantificada
+  → 1-2 hipótesis descartadas brevemente → 1 acción accionable
+- Sé contundente con las hipótesis "EVIDENCIA FUERTE": di "la causa es X"
+  no "podría ser X". Para las "PARCIAL", matízalo.
 
 INSTRUCCIONES PARA "key_insights":
-- En vez de hallazgos genéricos, lista las 3 HIPÓTESIS MÁS RELEVANTES con
-  su veredicto: "Confirmada", "Descartada" o "Parcial", y el dato que lo prueba.
+- Lista las 3 HIPÓTESIS MÁS RELEVANTES con su veredicto ya calculado:
+  "Confirmada" (evidencia fuerte), "Parcial" o "Descartada" (sin evidencia),
+  acompañada del dato concreto que lo prueba.
 
-HIPÓTESIS EJECUTADAS:
+HIPÓTESIS EJECUTADAS (ordenadas por fuerza de evidencia):
 ${formatHypothesesForPrompt(causalResults)}
 ` : '';
 
@@ -1099,10 +1185,13 @@ async function logRequest(prompt: string, response: any, sql: string | null) {
     try {
         const cookieStore = await cookies();
         const token = cookieStore.get('session');
-        let userId = 'unknown';
+        let userId: number | null = null;
         if (token) {
             const { payload } = await jwtVerify(token.value, SECRET_KEY);
-            userId = (payload as any).id || 'unknown';
+            const parsedId = Number((payload as any).id);
+            if (!isNaN(parsedId)) {
+                userId = parsedId;
+            }
         }
         await query(
             'INSERT INTO tblLogPreguntas (Pregunta, Resultado, FechaPregunta, IdUsuario, Error, ConsultaSQL) VALUES (?, ?, GETDATE(), ?, 0, ?)',

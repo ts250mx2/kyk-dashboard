@@ -144,6 +144,7 @@ Si SÍ necesitas:
                 if (plan.needs_query && plan.sql) {
                     try {
                         const safeSql = assertReadOnly(plan.sql);
+                        console.log(`\n\x1b[33m[AGENT SQL - EXPLICACIÓN KPI: ${(plan.purpose || 'SIN DETALLE').toUpperCase()}]\x1b[0m\n${safeSql}\n`);
                         const results = await query(safeSql);
                         extraData = (results as any[]).slice(0, 10);
                         extraSql = safeSql;
