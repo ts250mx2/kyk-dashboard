@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3002",
     "lint": "eslint",
-    "test:sandbox": "tsx scripts/test-sql-sandbox.ts"
+    "test:sandbox": "tsx scripts/test-sql-sandbox.ts",
+    "whatsapp-proxy": "node whatsapp-proxy.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
