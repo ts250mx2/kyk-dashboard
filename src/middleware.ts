@@ -9,26 +9,36 @@ export async function middleware(request: NextRequest) {
     const session = request.cookies.get('session');
     const { pathname } = request.nextUrl;
 
+    // 1. Si está activa la variable ONLY_WHATSAPP, bloqueamos todo excepto las APIs de WhatsApp
+    if (process.env.ONLY_WHATSAPP === 'true') {
+        if (!pathname.startsWith('/api/whatsapp')) {
+            console.log(`🔒 ONLY_WHATSAPP activo: Bloqueando acceso a ${pathname}`);
+            return new NextResponse(
+                JSON.stringify({ error: 'Acceso denegado. Este puerto solo atiende servicios de WhatsApp.' }),
+                { status: 403, headers: { 'content-type': 'application/json' } }
+            );
+        }
+    }
+
     // Debug: Log all cookie names
     const allCookies = request.cookies.getAll().map(c => c.name).join(', ');
     console.log(`🔍 Middleware [${pathname}]: Session set: ${!!session}. All cookies: [${allCookies}]`);
 
-    // Allow access to login page and API routes (except maybe protected ones, but for now open)
-    // We specifically want to protect the root page '/'
-    if (pathname === '/login' || pathname.startsWith('/api/auth')) {
-        // If user is already logged in and tries to go to login, redirect to home
+    // 2. Permitir acceso a la página de login y a las APIs en modo normal sin protección de sesión general
+    if (pathname === '/login' || pathname.startsWith('/api')) {
+        // Si el usuario ya tiene sesión activa e intenta ir a login, redirigir a dashboard
         if (session && pathname === '/login') {
             try {
                 await jwtVerify(session.value, SECRET_KEY);
                 return NextResponse.redirect(new URL('/dashboard', request.url));
             } catch (e) {
-                // Invalid token, let them stay on login
+                // Token inválido, dejarlo en login
             }
         }
         return NextResponse.next();
     }
 
-    // Protect the root route and any other routes not excluded above
+    // 3. Proteger la ruta raíz y cualquier otra página no excluida arriba
     if (!session) {
         console.log(`⚠️ Middleware: Redirigiendo a /login (Sesión no encontrada) para ${pathname}`);
         return NextResponse.redirect(new URL('/login', request.url));
@@ -38,7 +48,7 @@ export async function middleware(request: NextRequest) {
         await jwtVerify(session.value, SECRET_KEY);
         return NextResponse.next();
     } catch (error) {
-        // Token invalid
+        // Token inválido
         console.log(`❌ Middleware: Redirigiendo a /login (Token inválido o expirado) para ${pathname}`);
         return NextResponse.redirect(new URL('/login', request.url));
     }
@@ -47,15 +57,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
     matcher: [
         /*
-         * Match all request paths except for the ones starting with:
-         * - api (API routes) -> Wait, we want to protect some API routes? 
-         *   Actually, let's just protect the main page and let API routes handle their own auth if needed, 
-         *   or protect everything except specific public paths.
-         *   For this task, "despues del login abra el chat" implies chat is protected.
-         * - _next/static (static files)
-         * - _next/image (image optimization files)
-         * - favicon.ico (favicon file)
+         * Intercepta todas las peticiones excepto los archivos estáticos e imágenes.
+         * Esto nos permite filtrar APIs en caso de que ONLY_WHATSAPP esté activo.
          */
-        '/((?!api|_next/static|_next/image|favicon.ico).*)',
+        '/((?!_next/static|_next/image|favicon.ico).*)',
     ],
 };
