@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { anthropic } from '@/lib/anthropic';
+import { openai } from '@/lib/ai';
 import { query } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import fs from 'fs';
@@ -39,6 +40,29 @@ interface WhatsAppRequest {
 }
 
 const ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001'; // rápido + económico para WhatsApp
+const OPENAI_FALLBACK_MODEL = 'gpt-4o-mini'; // fallback cuando Anthropic devuelve 5xx/overloaded
+
+async function askLLM(prompt: string, maxTokens: number, requestId: string): Promise<string> {
+    try {
+        const resp = await anthropic.messages.create({
+            model: ANTHROPIC_MODEL,
+            max_tokens: maxTokens,
+            messages: [{ role: 'user', content: prompt }],
+        });
+        return (resp.content[0] as any)?.text || '';
+    } catch (err: any) {
+        const status = err?.status ?? err?.response?.status;
+        const transient = !status || status >= 500;
+        if (!transient) throw err;
+        console.warn(`[${requestId}] Claude falló (status=${status}, type=${err?.error?.error?.type || err?.error?.type}), fallback a ${OPENAI_FALLBACK_MODEL}`);
+        const completion = await openai.chat.completions.create({
+            model: OPENAI_FALLBACK_MODEL,
+            max_tokens: maxTokens,
+            messages: [{ role: 'user', content: prompt }],
+        });
+        return completion.choices[0]?.message?.content || '';
+    }
+}
 
 export async function POST(req: Request) {
     const startTime = Date.now();
@@ -108,13 +132,7 @@ RESPONDE EN JSON ESTRICTO (sin markdown):
   "direct_answer": "respuesta corta si no necesita query" | null
 }`;
 
-        const planResp = await anthropic.messages.create({
-            model: ANTHROPIC_MODEL,
-            max_tokens: 800,
-            messages: [{ role: 'user', content: planPrompt }]
-        });
-
-        const planText = (planResp.content[0] as any)?.text || '';
+        const planText = await askLLM(planPrompt, 800, requestId);
         const ps = planText.indexOf('{');
         const pe = planText.lastIndexOf('}');
         if (ps < 0 || pe <= ps) {
@@ -166,13 +184,8 @@ REGLAS DE FORMATO WHATSAPP:
 
 Devuelve SOLO el texto de la respuesta, nada más (sin JSON, sin comillas, sin prefijos).`;
 
-        const narrateResp = await anthropic.messages.create({
-            model: ANTHROPIC_MODEL,
-            max_tokens: 400,
-            messages: [{ role: 'user', content: narratePrompt }]
-        });
-
-        const answer = ((narrateResp.content[0] as any)?.text || '').trim().slice(0, 1500);
+        const narrateText = await askLLM(narratePrompt, 400, requestId);
+        const answer = narrateText.trim().slice(0, 1500);
 
         const totalMs = Date.now() - startTime;
         console.log(`[${requestId}] done (${totalMs}ms, ${rows.length} rows)`);
