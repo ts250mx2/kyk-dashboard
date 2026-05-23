@@ -39,7 +39,7 @@ interface WhatsAppRequest {
     timestamp?: string;
 }
 
-const ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001'; // rápido + económico para WhatsApp
+const ANTHROPIC_MODEL = 'claude-sonnet-4-6'; // calidad alta para razonar sobre el schema y NL→SQL
 const OPENAI_FALLBACK_MODEL = 'gpt-4o-mini'; // fallback cuando Anthropic devuelve 5xx/overloaded
 
 async function askLLM(prompt: string, maxTokens: number, requestId: string): Promise<string> {
@@ -119,11 +119,35 @@ ${schemaString.slice(0, 6000)}
 PREGUNTA DEL USUARIO:
 ${question}
 
-INSTRUCCIONES:
+REGLA DURA — ACCESO A DATOS:
+- Tienes acceso COMPLETO a transacciones individuales (ventas, cancelaciones, retiros, cortes) vía SQL sobre las tablas del schema.
+- NUNCA respondas "no tengo acceso", "no puedo ver el detalle", "ese análisis requiere acceso a nivel detalle" ni nada parecido. Esa respuesta está PROHIBIDA.
+- Si la pregunta es sobre ventas, cancelaciones, retiros, cortes, cajeros, supervisores, tiendas, artículos, códigos de barras o tickets → SIEMPRE genera SQL (needs_query=true). Nunca uses direct_answer para evadirla.
+- Solo usa needs_query=false para saludos puros ("hola", "buenos días") o charla sin intención de dato.
+
+MAPEO LENGUAJE NATURAL → COLUMNAS:
+- "quién" / "qué cajero" → columna [Cajero]. Si la pregunta menciona autorización o cancelación, también incluye [Supervisor].
+- "dónde" / "en qué tienda" / "sucursal" → columna [Tienda].
+- "cuándo" / "a qué hora" / "qué día" → [Fecha Venta] para ventas, [Fecha Cancelacion] para cancelaciones, [Fecha Retiro] para retiros.
+- "código de barras X" / "artículo X" (X numérico) → filtra por [Codigo Barras] = 'X' (string, con comillas).
+- "monto X" / "$X" / "por X pesos" → filtra por [Total] = X (o rango ±0.01 si hay decimales raros). Para "monto similar a X" usa BETWEEN X-1 AND X+1.
+- "última semana" → [Fecha Cancelacion] >= DATEADD(day, -7, GETDATE()).
+- "cuántas veces" → COUNT(*) agrupado por las dimensiones que pida la pregunta.
+
+INSTRUCCIONES TÉCNICAS:
 - Genera UN solo SQL T-SQL read-only (SOLO SELECT) que responda la pregunta.
-- Usa los nombres exactos del schema (corchetes para [Fecha Venta] etc.).
+- Usa los nombres exactos del schema con corchetes para columnas con espacios: [Fecha Venta], [Fecha Cancelacion], [Codigo Barras], [Precio Venta].
 - Si la pregunta es ambigua sobre periodo, asume HOY o el más razonable.
-- Si la pregunta NO necesita datos (saludo, charla), pon needs_query=false.
+- Para preguntas multi-parte (cuántas veces + dónde + quién), devuelve UN SELECT que incluya todas las columnas/agrupaciones necesarias.
+
+EJEMPLO de pregunta válida y su SQL esperado:
+Pregunta: "Código de barras 7472, monto 39.09, ¿cuántas veces se ha cancelado la última semana, dónde y quién?"
+SQL: SELECT [Fecha Cancelacion], [Tienda], [Cajero], [Supervisor], [Cantidad], [Total]
+     FROM Cancelaciones
+     WHERE [Codigo Barras] = '7472'
+       AND [Total] BETWEEN 38.09 AND 40.10
+       AND [Fecha Cancelacion] >= DATEADD(day, -7, GETDATE())
+     ORDER BY [Fecha Cancelacion] DESC;
 
 RESPONDE EN JSON ESTRICTO (sin markdown):
 {
