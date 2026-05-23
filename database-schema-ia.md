@@ -14,7 +14,7 @@ Esta tabla contiene el histórico de transacciones detallado por artículo.
 | Fecha Venta | datetime | Fecha y hora exacta de la transacción. |
 | Z | int | **Corte de Caja**. Identifica a qué cierre diario pertenece la venta. |
 | Cajero | varchar | Nombre del empleado que realizó la venta. |
-| Codigo Barras | varchar | Código EAN/UPC del producto. |
+| CodigoBarras | varchar | Código EAN/UPC del producto. Sin espacio, sin corchetes. |
 | Descripcion | varchar | Nombre comercial del artículo vendido. |
 | Cantidad | float | Número de unidades vendidas. |
 | Precio Venta | currency | Precio unitario al que se vendió (incluye IVA). |
@@ -40,7 +40,7 @@ Registros de artículos cancelados durante o después de la venta.
 | :--- | :--- | :--- |
 | Fecha Cancelacion | datetime | Fecha y hora de la cancelación. |
 | Descripcion | varchar | Nombre del producto cancelado. |
-| Codigo Barras | varchar | Código de barras del producto. |
+| CodigoBarras | varchar | Código de barras del producto. Sin espacio, sin corchetes. |
 | Supervisor | varchar | Quién autorizó la cancelación. |
 | Cajero | varchar | Cajero que realizó la operación. |
 | Cantidad | float | Unidades canceladas. |

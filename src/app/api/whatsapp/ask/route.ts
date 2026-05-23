@@ -45,7 +45,7 @@ const ANTHROPIC_TOOLS: any[] = [
             properties: {
                 sql: {
                     type: 'string',
-                    description: 'Consulta T-SQL SELECT. Usa corchetes para columnas con espacios: [Fecha Cancelacion], [Codigo Barras], [Fecha Venta], [Precio Venta]. Solo nombres exactos del schema.'
+                    description: 'Consulta T-SQL SELECT. Usa corchetes SOLO para columnas con espacios: [Fecha Cancelacion], [Fecha Venta], [Precio Venta]. La columna del código de barras es CodigoBarras (SIN espacio, SIN corchetes). Solo nombres exactos del schema.'
                 }
             },
             required: ['sql']
@@ -216,7 +216,7 @@ MAPEO LENGUAJE NATURAL → COLUMNAS
 - "dónde" / "qué sucursal" / "qué tienda" → [Tienda].
 - "cuándo" / "a qué hora" / "qué día" → [Fecha Venta] (ventas), [Fecha Cancelacion]
   (cancelaciones), [Fecha Retiro] (retiros).
-- "código de barras X" / "artículo X" (X numérico) → [Codigo Barras] = 'X' (string, con comillas).
+- "código de barras X" / "artículo X" (X numérico) → CodigoBarras = 'X' (string con comillas, SIN espacio, SIN corchetes — la columna real se llama CodigoBarras, no "Codigo Barras").
 - "monto X" / "$X" / "por X pesos" → [Total] = X. Si la pregunta dice "similar" o
   hay decimales raros, usa BETWEEN X-1 AND X+1 para tolerancia.
 - "última semana" → [FechaCorrespondiente] >= DATEADD(day, -7, GETDATE()).
@@ -231,8 +231,9 @@ ${schemaString.slice(0, 6000)}
 T-SQL PRECISO
 ──────────────────────────────────────────────────────────────
 - SOLO SELECT (con WITH/CTE permitido). Nunca INSERT/UPDATE/DELETE/MERGE/DROP.
-- Corchetes para columnas con espacios: [Fecha Venta], [Fecha Cancelacion],
-  [Codigo Barras], [Precio Venta].
+- Corchetes SOLO para columnas que sí tienen espacios: [Fecha Venta],
+  [Fecha Cancelacion], [Precio Venta]. La columna del código de barras
+  es CodigoBarras (sin espacio, sin corchetes).
 - Nombres exactos del schema. NO inventes columnas como Fecha_Cancelacion.
 - Si la pregunta es ambigua sobre periodo, asume HOY o el más razonable.
 
@@ -240,10 +241,10 @@ EJEMPLO de pregunta real y SQL esperado:
 Pregunta: "Código de barras 7472, monto 39.09, ¿cuántas veces se ha cancelado
 la última semana, dónde y quién?"
 SQL esperado:
-  SELECT [Fecha Cancelacion], [Tienda], [Cajero], [Supervisor], [Cantidad], [Total]
+  SELECT [Fecha Cancelacion], Tienda, Cajero, Supervisor, Cantidad, Total
   FROM Cancelaciones
-  WHERE [Codigo Barras] = '7472'
-    AND [Total] BETWEEN 38.09 AND 40.10
+  WHERE CodigoBarras = '7472'
+    AND Total BETWEEN 38.09 AND 40.10
     AND [Fecha Cancelacion] >= DATEADD(day, -7, GETDATE())
   ORDER BY [Fecha Cancelacion] DESC;
 `;
