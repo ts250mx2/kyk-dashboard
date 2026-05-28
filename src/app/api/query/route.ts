@@ -24,6 +24,12 @@ import {
     formatForecastForPrompt,
     ForecastResult
 } from '@/lib/forecasting';
+import {
+    runForecastForAgent,
+    getProductRecommendationsForAgent,
+    renderForecastSummaryForAgent,
+    renderProductRecommendationsForAgent,
+} from '@/lib/forecast/agent-tools';
 import { saveMemory } from '@/lib/semantic-memory';
 import { recordMetric } from '@/lib/metrics';
 import fs from 'fs';
@@ -90,6 +96,42 @@ const ANTHROPIC_TOOLS: any[] = [
                 }
             },
             required: ['message', 'suggested_questions']
+        }
+    },
+    {
+        name: 'get_sales_forecast',
+        description: 'Devuelve la PROYECCIÓN DE VENTAS oficial del dashboard de Proyección de Ventas (promedio móvil estacional + ajuste por feriados mexicanos + proyección vs meta + tendencia + MAPE backtest). ÚSALA cuando la pregunta sea sobre el futuro: "¿cuánto vamos a vender la próxima semana?", "¿voy a llegar a la meta de mayo?", "¿proyección de Bodega 238 este mes?", "¿qué impacto tendrá Día de las Madres en la proyección?". NO la uses para datos históricos puros (eso es query_database).',
+        input_schema: {
+            type: 'object',
+            properties: {
+                horizonDays: {
+                    type: 'number',
+                    description: 'Días a proyectar hacia adelante (1-180). Default 30. Si el usuario dice "semana" usa 7, "quincena" usa 15, "mes" usa 30, "trimestre" usa 90.'
+                },
+                storeNames: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Nombres parciales de sucursales para filtrar (match LIKE %nombre%). Ej: ["Bodega 238", "Aramberri"]. Omite para considerar todas las sucursales.'
+                }
+            },
+            required: []
+        }
+    },
+    {
+        name: 'get_product_recommendations',
+        description: 'Devuelve los productos sugeridos a CARGAR/EMPUJAR/MONITOREAR/REDUCIR para los próximos N días, cruzando histórico reciente con mismo período del año pasado. Usa estacionalidad LY y crecimiento reciente para clasificar. ÚSALA cuando la pregunta sea: "¿qué productos cargar la próxima semana?", "¿qué empujar para Día de las Madres?", "¿en qué enfocarme la siguiente quincena?", "¿qué SKUs tienen oportunidad estacional ahora?".',
+        input_schema: {
+            type: 'object',
+            properties: {
+                horizonDays: { type: 'number', description: 'Días futuros a considerar para la oportunidad (1-180). Default 30.' },
+                topN: { type: 'number', description: 'Cuántos productos devolver (5-30). Default 15.' },
+                storeNames: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Nombres parciales de sucursales. Ej: ["Bodega 238"]. Omite para todas.'
+                }
+            },
+            required: []
         }
     }
 ];
@@ -280,9 +322,26 @@ NO uses herramientas (responde directo con texto) cuando:
 • Solo necesita aclaración o tu opinión profesional
 
 SÍ usa query_database cuando:
-• Pide datos concretos del negocio ("ventas de hoy", "top productos")
-• Quiere comparativas reales con números
+• Pide datos HISTÓRICOS concretos del negocio ("ventas de hoy", "top productos del mes pasado")
+• Quiere comparativas reales con números de períodos cerrados
 • Necesita análisis cuantitativo de operación
+
+SÍ usa get_sales_forecast cuando la pregunta sea sobre el FUTURO:
+• "¿cuánto vamos a vender la próxima semana/mes?"
+• "¿voy a llegar a la meta de mayo?"
+• "proyección de Bodega 238 / Aramberri / Lincoln este mes"
+• "¿cómo viene el cierre?"
+• "¿qué impacto tiene Día de las Madres en la proyección?"
+• Acepta storeNames (parciales: ["Bodega 238"]) y horizonDays (semana=7, mes=30, trimestre=90).
+• NO uses query_database para preguntas de proyección — el dashboard tiene
+  un modelo más sofisticado (SMA estacional + holiday boosts + meta).
+
+SÍ usa get_product_recommendations cuando la pregunta sea sobre PLANEAR PRODUCTOS:
+• "¿qué productos cargar la próxima semana?"
+• "¿qué empujar para Día de las Madres / Buen Fin / 15 de septiembre?"
+• "¿en qué SKUs enfocarme la siguiente quincena en Bodega 238?"
+• "productos con oportunidad estacional ahora"
+• Cruza venta reciente con mismo período LY → acción sugerida por producto.
 
 USA suggest_reports cuando puedas guiar al usuario a un reporte preexistente
 en vez de generar análisis desde cero.
@@ -528,6 +587,37 @@ algún incidente operativo."
                                 required: ['message', 'suggested_questions']
                             }
                         }
+                    },
+                    {
+                        type: 'function',
+                        function: {
+                            name: 'get_sales_forecast',
+                            description: 'Devuelve la PROYECCIÓN DE VENTAS oficial del dashboard (SMA + feriados + meta + tendencia + MAPE). Úsala para preguntas sobre el futuro: "¿cuánto vamos a vender la próxima semana?", "¿voy a llegar a la meta?".',
+                            parameters: {
+                                type: 'object',
+                                properties: {
+                                    horizonDays: { type: 'number', description: 'Días a proyectar (1-180). Default 30. "semana"=7, "mes"=30, "quincena"=15.' },
+                                    storeNames: { type: 'array', items: { type: 'string' }, description: 'Nombres parciales de sucursales para filtrar. Omite para todas.' }
+                                },
+                                required: []
+                            }
+                        }
+                    },
+                    {
+                        type: 'function',
+                        function: {
+                            name: 'get_product_recommendations',
+                            description: 'Devuelve productos sugeridos a cargar/empujar/monitorear/reducir para los próximos N días, cruzando reciente con LY estacional. Úsala para preguntas tipo "¿qué productos cargar la siguiente quincena?".',
+                            parameters: {
+                                type: 'object',
+                                properties: {
+                                    horizonDays: { type: 'number', description: 'Días futuros (1-180). Default 30.' },
+                                    topN: { type: 'number', description: '5-30. Default 15.' },
+                                    storeNames: { type: 'array', items: { type: 'string' }, description: 'Filtros por sucursal. Omite para todas.' }
+                                },
+                                required: []
+                            }
+                        }
                     }
                 ],
                 tool_choice: 'auto',
@@ -620,6 +710,106 @@ algún incidente operativo."
                     await logRequest(prompt, { message: msg, suggested_reports: args.recommended_reports }, null);
                     emit({ event: 'done', data: {} });
                     return;
+                }
+
+                // CASO D-bis: get_sales_forecast → corre el modelo del dashboard
+                if (toolCall.name === 'get_sales_forecast') {
+                    emit({ event: 'status', data: { phase: 'analyzing', detail: 'Corriendo modelo de proyección…' } });
+                    try {
+                        const summary = await runForecastForAgent({
+                            horizonDays: args?.horizonDays,
+                            storeNames: args?.storeNames,
+                        });
+                        const block = renderForecastSummaryForAgent(summary);
+                        const narratePrompt = `Eres Kesito, consultor senior. Acabas de correr el modelo OFICIAL de Proyección de Ventas del dashboard.
+
+PREGUNTA DEL USUARIO: ${prompt}
+
+RESULTADO (datos completos del modelo):
+${block}
+
+INSTRUCCIONES:
+- Responde en 3-6 oraciones en prosa fluida, con cifras INLINE en **negritas Markdown**.
+- Si la pregunta es sobre meta, lidera con el estado de la meta (%, falta/excede).
+- Si hay festivos con multiplier > 1, menciónalos (ayudan a la proyección).
+- Si MAPE > 20% o confianza < 0.6, advierte sutilmente.
+- Tono profesional pero humano (consultor senior amigable, no robótico).
+- NO uses encabezados, bullets ni listas. Prosa pura.
+- Cierra con una observación accionable si aplica.`;
+                        const narrationResp = await anthropic.messages.create({
+                            model: anthropicModel,
+                            max_tokens: 1024,
+                            messages: [{ role: 'user', content: narratePrompt }],
+                        });
+                        const text = ((narrationResp.content[0] as { text?: string })?.text || '').trim();
+                        emit({ event: 'text-delta', data: { text } });
+                        emit({
+                            event: 'metadata',
+                            data: {
+                                ai_model: selectedModel,
+                                forecast_summary: summary,
+                                tool: 'get_sales_forecast',
+                            }
+                        });
+                        await logRequest(prompt, { message: text, forecast_summary: summary }, null);
+                        emit({ event: 'done', data: {} });
+                        return;
+                    } catch (e: unknown) {
+                        const msg = e instanceof Error ? e.message : 'Error desconocido';
+                        emit({ event: 'error', data: { message: 'No pude correr la proyección.', details: msg } });
+                        emit({ event: 'done', data: {} });
+                        return;
+                    }
+                }
+
+                // CASO D-ter: get_product_recommendations → sugerencias de productos
+                if (toolCall.name === 'get_product_recommendations') {
+                    emit({ event: 'status', data: { phase: 'analyzing', detail: 'Cruzando histórico reciente con año pasado…' } });
+                    try {
+                        const rec = await getProductRecommendationsForAgent({
+                            horizonDays: args?.horizonDays,
+                            storeNames: args?.storeNames,
+                            topN: args?.topN,
+                        });
+                        const block = renderProductRecommendationsForAgent(rec, Number(args?.horizonDays) || 30);
+                        const narratePrompt = `Eres Kesito. Acabas de cruzar venta reciente con mismo período del año pasado para sugerir qué productos empujar/cargar/monitorear/reducir.
+
+PREGUNTA DEL USUARIO: ${prompt}
+
+LISTA DE PRODUCTOS:
+${block}
+
+INSTRUCCIONES:
+- Responde en 4-7 oraciones con prosa fluida.
+- Menciona 3-6 productos concretos por nombre, con **negritas** en cifras.
+- Agrupa por acción (cargar/empujar/monitorear/reducir) cuando ayude a la lectura.
+- Si hay oportunidades estacionales fuertes (LY ×1.5+), destácalas.
+- NO uses bullets ni encabezados.
+- Tutea, tono consultor senior.`;
+                        const narrationResp = await anthropic.messages.create({
+                            model: anthropicModel,
+                            max_tokens: 1200,
+                            messages: [{ role: 'user', content: narratePrompt }],
+                        });
+                        const text = ((narrationResp.content[0] as { text?: string })?.text || '').trim();
+                        emit({ event: 'text-delta', data: { text } });
+                        emit({
+                            event: 'metadata',
+                            data: {
+                                ai_model: selectedModel,
+                                product_recommendations: rec,
+                                tool: 'get_product_recommendations',
+                            }
+                        });
+                        await logRequest(prompt, { message: text, product_recommendations: rec }, null);
+                        emit({ event: 'done', data: {} });
+                        return;
+                    } catch (e: unknown) {
+                        const msg = e instanceof Error ? e.message : 'Error desconocido';
+                        emit({ event: 'error', data: { message: 'No pude generar las sugerencias.', details: msg } });
+                        emit({ event: 'done', data: {} });
+                        return;
+                    }
                 }
 
                 // CASO D: query_database (con sandbox + posible auto-corrección)
@@ -1098,6 +1288,53 @@ algún incidente operativo."
                     message: args.message,
                     visualization: 'table',
                     suggested_questions: args.suggested_questions,
+                };
+            } else if (toolCall.name === 'get_sales_forecast') {
+                const summary = await runForecastForAgent({
+                    horizonDays: args?.horizonDays,
+                    storeNames: args?.storeNames,
+                });
+                const block = renderForecastSummaryForAgent(summary);
+                const narrationResp = await anthropic.messages.create({
+                    model: anthropicModel,
+                    max_tokens: 1024,
+                    messages: [{
+                        role: 'user',
+                        content: `Eres Kesito. Acabas de correr el modelo OFICIAL de Proyección de Ventas.\n\nPREGUNTA: ${prompt}\n\nDATOS:\n${block}\n\nResponde en 3-6 oraciones, prosa fluida, cifras INLINE en **negritas Markdown**, sin bullets ni encabezados.`
+                    }],
+                });
+                const text = ((narrationResp.content[0] as { text?: string })?.text || '').trim();
+                finalResponse = {
+                    data: [],
+                    sql: null,
+                    ai_model: selectedModel,
+                    message: text,
+                    forecast_summary: summary,
+                    visualization: 'narrative',
+                };
+            } else if (toolCall.name === 'get_product_recommendations') {
+                const rec = await getProductRecommendationsForAgent({
+                    horizonDays: args?.horizonDays,
+                    storeNames: args?.storeNames,
+                    topN: args?.topN,
+                });
+                const block = renderProductRecommendationsForAgent(rec, Number(args?.horizonDays) || 30);
+                const narrationResp = await anthropic.messages.create({
+                    model: anthropicModel,
+                    max_tokens: 1200,
+                    messages: [{
+                        role: 'user',
+                        content: `Eres Kesito. Acabas de cruzar venta reciente con mismo período LY para sugerir productos.\n\nPREGUNTA: ${prompt}\n\nDATOS:\n${block}\n\nResponde en 4-7 oraciones, cifras en **negritas**, sin bullets. Menciona 3-6 productos por nombre.`
+                    }],
+                });
+                const text = ((narrationResp.content[0] as { text?: string })?.text || '').trim();
+                finalResponse = {
+                    data: rec.products,
+                    sql: null,
+                    ai_model: selectedModel,
+                    message: text,
+                    product_recommendations: rec,
+                    visualization: 'narrative',
                 };
             }
         } else {

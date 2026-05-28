@@ -3,6 +3,12 @@ import { anthropic } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { query } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
+import {
+    runForecastForAgent,
+    getProductRecommendationsForAgent,
+    renderForecastSummaryForAgent,
+    renderProductRecommendationsForAgent,
+} from '@/lib/forecast/agent-tools';
 import fs from 'fs';
 import path from 'path';
 
@@ -60,6 +66,39 @@ const ANTHROPIC_TOOLS: any[] = [
                 text: { type: 'string', description: 'Respuesta corta y cordial para chat de WhatsApp (max 300 chars, sin markdown).' }
             },
             required: ['text']
+        }
+    },
+    {
+        name: 'get_sales_forecast',
+        description: 'Devuelve la PROYECCIÓN DE VENTAS oficial del dashboard (promedio móvil estacional + ajuste por feriados + proyección vs meta + tendencia + MAPE). ÚSALA cuando la pregunta sea sobre el futuro: "¿cuánto vamos a vender la próxima semana?", "¿voy a llegar a la meta?", "¿proyección de Bodega 238 este mes?". No la uses para datos históricos (eso es query_database).',
+        input_schema: {
+            type: 'object',
+            properties: {
+                horizonDays: { type: 'number', description: 'Días a proyectar hacia adelante (1-180). Default 30. Si el usuario dice "semana" usa 7, "mes" usa 30, "quincena" usa 15.' },
+                storeNames: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Nombres parciales de sucursales para filtrar (LIKE %nombre%). Ej: ["Bodega 238", "Aramberri"]. Si no especificas ninguna, considera todas las sucursales.'
+                }
+            },
+            required: []
+        }
+    },
+    {
+        name: 'get_product_recommendations',
+        description: 'Devuelve los productos sugeridos a empujar/cargar/monitorear/reducir para los próximos N días, cruzando histórico reciente con mismo período del año pasado. ÚSALA cuando la pregunta sea: "¿qué productos cargar la próxima semana?", "¿qué empujar para Día de las Madres?", "¿en qué enfocarme la siguiente quincena?".',
+        input_schema: {
+            type: 'object',
+            properties: {
+                horizonDays: { type: 'number', description: 'Días futuros a considerar (1-180). Default 30.' },
+                topN: { type: 'number', description: 'Cuántos productos devolver (5-30). Default 15.' },
+                storeNames: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Nombres parciales de sucursales para filtrar. Ej: ["Bodega 238"]. Si no especificas, considera todas.'
+                }
+            },
+            required: []
         }
     }
 ];
@@ -180,9 +219,11 @@ FECHA Y HORA ACTUAL: ${currentDateTime}
 ──────────────────────────────────────────────────────────────
 ACCESO A DATOS (no negociable)
 ──────────────────────────────────────────────────────────────
-Tienes acceso COMPLETO de SOLO LECTURA a la base de datos del negocio vía SQL.
-Esto incluye TODAS las transacciones individuales: ventas detalladas, cancelaciones
-con cajero/supervisor/sucursal/hora, retiros, cortes, tickets, productos.
+Tienes acceso COMPLETO de SOLO LECTURA a la base de datos del negocio vía SQL,
+MÁS herramientas analíticas del dashboard: modelo de proyección de ventas
+(SMA estacional + ajuste por feriados + comparativo vs meta) y motor de
+sugerencias de productos (cruza venta reciente con mismo período LY para
+clasificar qué cargar/empujar/monitorear/reducir).
 
 PROHIBIDO responder:
 - "no tengo acceso al detalle"
@@ -190,24 +231,52 @@ PROHIBIDO responder:
 - "esos datos los maneja tu POS"
 - "consulta con tu supervisor de sucursal"
 - "ese nivel de detalle no está disponible"
+- "no tengo acceso a planificación de inventario futuro"
+- "necesitas hablar con el operador de logística"
+- "no puedo proyectar ventas" (SÍ PUEDES con get_sales_forecast)
+- "no puedo sugerir qué productos cargar" (SÍ PUEDES con get_product_recommendations)
 
 Si la pregunta menciona ventas, cancelaciones, retiros, cortes, cajeros,
 supervisores, tiendas, sucursales, artículos, códigos de barras, montos,
 fechas, horas o tickets → llama query_database. Punto. No hay excepciones.
 
+Si la pregunta es sobre el FUTURO ("próxima semana", "este mes", "voy a llegar
+a la meta", "cuánto vamos a vender", "proyección") → llama get_sales_forecast.
+
+Si la pregunta es sobre QUÉ PRODUCTOS empujar/cargar/recomendar para días
+futuros ("qué cargar la próxima semana", "qué empujar para Día de las Madres",
+"productos a recomendar para X sucursal") → llama get_product_recommendations.
+
 ──────────────────────────────────────────────────────────────
 CUÁNDO USAR CADA TOOL
 ──────────────────────────────────────────────────────────────
-query_database (úsala casi siempre):
+query_database — para HISTÓRICO y datos crudos:
 - Cualquier pregunta sobre cifras, transacciones, empleados, productos, sucursales.
-- Preguntas multi-parte ("cuántas veces + dónde + quién") → un solo SELECT
-  con todas las columnas/agrupaciones necesarias.
+- Preguntas multi-parte ("cuántas veces + dónde + quién") → un solo SELECT.
+- Top productos del PASADO, ventas de un período YA cerrado.
+
+get_sales_forecast — para PROYECCIÓN A FUTURO:
+- "¿cuánto vamos a vender la próxima semana?"
+- "¿voy a llegar a la meta de mayo?"
+- "proyección de Bodega 238 este mes"
+- "¿cómo viene el cierre?"
+- Parámetro storeNames acepta nombre parcial (ej. ["Bodega 238"]).
+- Parámetro horizonDays: "semana"=7, "quincena"=15, "mes"=30, "trimestre"=90.
+
+get_product_recommendations — para PLANEACIÓN DE PRODUCTOS:
+- "¿qué productos cargar la próxima semana en Bodega 238?"
+- "¿qué empujar para Día de las Madres?"
+- "¿en qué productos enfocarme la siguiente quincena?"
+- "productos a recomendar para promoción del 15 de septiembre"
+- Cruza venta reciente + LY estacional, devuelve productos con acción sugerida.
 
 respond_directly (úsala SOLO para):
 - Saludos puros: "hola", "buenos días", "buenas".
 - Agradecimientos: "gracias", "ok".
 - Preguntas sobre quién eres: "¿qué puedes hacer?", "¿cómo te llamas?".
-- NUNCA para evitar una consulta de negocio.
+- NUNCA para evitar una consulta de negocio o de planeación.
+- NUNCA para decir "no tengo acceso" — si menciona ventas/productos/proyección,
+  ELIGE el tool correcto en su lugar.
 
 ──────────────────────────────────────────────────────────────
 MAPEO LENGUAJE NATURAL → COLUMNAS
@@ -268,6 +337,101 @@ SQL esperado:
                     tool: 'respond_directly'
                 }
             });
+        }
+
+        // 2b. get_sales_forecast → corre el modelo de proyección y narra
+        if (toolCall.name === 'get_sales_forecast') {
+            try {
+                const summary = await runForecastForAgent({
+                    horizonDays: toolCall.args?.horizonDays,
+                    storeNames: toolCall.args?.storeNames,
+                });
+                const block = renderForecastSummaryForAgent(summary);
+                const narratePrompt = `Eres Kesito respondiendo por WhatsApp. Acabas de correr el modelo oficial de PROYECCIÓN DE VENTAS del dashboard.
+
+PREGUNTA DEL USUARIO: ${question}
+
+RESULTADO DE LA PROYECCIÓN:
+${block}
+
+REGLAS DE FORMATO WHATSAPP:
+- 1-5 oraciones (target 350 chars, max 800).
+- Cifras con formato MXN ($14,820 con coma de miles).
+- Sin markdown, texto plano puro o emojis ligeros.
+- Conversacional, tutea ("vas a", "estás").
+- Si la pregunta es sobre meta, prioriza esa información (% esperado, faltante).
+- Si hay un feriado relevante con multiplier, menciónalo.
+- Si la confianza del modelo es baja (MAPE > 20%), advierte sutilmente.
+
+Devuelve SOLO el texto. Sin prefijos.`;
+                const answer = (await narrate(narratePrompt, 500, requestId)).trim().slice(0, 1500);
+                console.log(`[${requestId}] get_sales_forecast done (${Date.now() - startTime}ms)`);
+                return NextResponse.json({
+                    answer,
+                    data: summary,
+                    meta: {
+                        rows_returned: summary.forecastSample.length,
+                        elapsed_ms: Date.now() - startTime,
+                        request_id: requestId,
+                        from_phone: fromPhone,
+                        tenant_id: tenantId,
+                        tool: 'get_sales_forecast'
+                    }
+                });
+            } catch (e: any) {
+                console.error(`[${requestId}] get_sales_forecast error:`, e);
+                return NextResponse.json({
+                    answer: 'No pude generar la proyección en este momento. ¿Puedes intentar de nuevo?',
+                    error: e?.message
+                });
+            }
+        }
+
+        // 2c. get_product_recommendations → sugerencias de productos para el horizonte
+        if (toolCall.name === 'get_product_recommendations') {
+            try {
+                const rec = await getProductRecommendationsForAgent({
+                    horizonDays: toolCall.args?.horizonDays,
+                    storeNames: toolCall.args?.storeNames,
+                    topN: toolCall.args?.topN,
+                });
+                const block = renderProductRecommendationsForAgent(rec, Number(toolCall.args?.horizonDays) || 30);
+                const narratePrompt = `Eres Kesito respondiendo por WhatsApp. Acabas de generar SUGERENCIAS DE PRODUCTOS con datos cruzados de venta reciente y mismo período del año pasado.
+
+PREGUNTA DEL USUARIO: ${question}
+
+LISTA DE PRODUCTOS:
+${block}
+
+REGLAS DE FORMATO WHATSAPP:
+- Máximo 6 oraciones / 900 chars.
+- Menciona 3-5 productos concretos por nombre.
+- Agrupa por acción (cargar/empujar/etc.) cuando ayude.
+- Cifras MXN con coma de miles.
+- Texto plano puro, sin markdown.
+
+Devuelve SOLO el texto. Sin prefijos.`;
+                const answer = (await narrate(narratePrompt, 600, requestId)).trim().slice(0, 1800);
+                console.log(`[${requestId}] get_product_recommendations done (${Date.now() - startTime}ms, ${rec.products.length} productos)`);
+                return NextResponse.json({
+                    answer,
+                    data: rec,
+                    meta: {
+                        rows_returned: rec.products.length,
+                        elapsed_ms: Date.now() - startTime,
+                        request_id: requestId,
+                        from_phone: fromPhone,
+                        tenant_id: tenantId,
+                        tool: 'get_product_recommendations'
+                    }
+                });
+            } catch (e: any) {
+                console.error(`[${requestId}] get_product_recommendations error:`, e);
+                return NextResponse.json({
+                    answer: 'No pude generar las sugerencias de productos ahorita. ¿Lo intentamos de nuevo?',
+                    error: e?.message
+                });
+            }
         }
 
         if (toolCall.name !== 'query_database') {

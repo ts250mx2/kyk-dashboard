@@ -74,6 +74,7 @@ const menuSections: MenuSection[] = [
             { name: "Comparativa Simple", emoji: "🆚", href: "/dashboard/sales/reports/quick-compare" },
             { name: "Comparativa Guiada", emoji: "🧙", href: "/dashboard/sales/reports/guided-compare" },
             { name: "Márgenes y Rentabilidad", emoji: "📊", href: "/dashboard/sales/reports/margins" },
+            { name: "Proyección de Ventas", emoji: "🔮", href: "/dashboard/sales/reports/forecast" },
             { name: "Metas", emoji: "🎯", href: "/dashboard/sales/goals" },
         ]
     },
@@ -118,11 +119,11 @@ export function Sidebar({
 
     const pathname = usePathname()
 
-    const toggleSection = (title: string) => {
-        setOpenSections(prev => ({
-            ...prev,
-            [title]: !prev[title]
-        }))
+    const toggleSection = (title: string, hasActiveChild: boolean) => {
+        setOpenSections(prev => {
+            const current = prev[title] !== undefined ? prev[title] : hasActiveChild;
+            return { ...prev, [title]: !current };
+        });
     }
 
     // Lock body scroll when mobile menu is open
@@ -191,7 +192,6 @@ export function Sidebar({
                 {/* Navigation Menu */}
                 <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto no-scrollbar">
                     {filteredSections.map((section) => {
-                        const isOpen = openSections[section.title]
                         const hasActiveChild = section.items.some(item => pathname === item.href)
 
                         if (section.href) {
@@ -222,15 +222,18 @@ export function Sidebar({
                             );
                         }
 
+                        const explicitToggle = openSections[section.title];
+                        const effectiveOpen = explicitToggle !== undefined ? explicitToggle : hasActiveChild;
+
                         return (
                             <div key={section.title} className="space-y-1">
                                 <button
-                                    onClick={() => !isCollapsed && toggleSection(section.title)}
+                                    onClick={() => !isCollapsed && toggleSection(section.title, hasActiveChild)}
                                     className={cn(
                                         "w-full flex items-center gap-3 py-2 transition-all rounded-none",
                                         isCollapsed ? "justify-center" : "px-3 justify-between",
                                         !isCollapsed && "hover:bg-white/5",
-                                        hasActiveChild && !isOpen && "bg-white/10 border border-white/10"
+                                        hasActiveChild && !effectiveOpen && "bg-white/10 border border-white/10"
                                     )}
                                     title={isCollapsed ? section.title : ""}
                                 >
@@ -245,14 +248,14 @@ export function Sidebar({
                                     {!isCollapsed && (
                                         <ChevronDown className={cn(
                                             "h-3.5 w-3.5 text-white/40 transition-transform duration-300",
-                                            isOpen ? "rotate-180" : ""
+                                            effectiveOpen ? "rotate-180" : ""
                                         )} />
                                     )}
                                 </button>
 
                                 <div className={cn(
                                     "space-y-1 overflow-hidden transition-all duration-300",
-                                    ((isOpen || hasActiveChild) && !isCollapsed) ? "max-h-[500px] opacity-100 mt-1" : "max-h-0 opacity-0"
+                                    (effectiveOpen && !isCollapsed) ? "max-h-[1000px] opacity-100 mt-1" : "max-h-0 opacity-0"
                                 )}>
                                     {section.items.map((item) => {
                                         const isActive = pathname === item.href

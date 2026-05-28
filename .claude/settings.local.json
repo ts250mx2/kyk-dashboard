@@ -9,7 +9,11 @@
       "Bash(git commit -m 'Agente conversacional + UX rediseñada + briefing narrativo + sandbox SQL *)",
       "Bash(git rm *)",
       "Bash(git commit *)",
-      "Bash(npx tsx *)"
+      "Bash(npx tsx *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(git push *)"
     ]
   }
 }
