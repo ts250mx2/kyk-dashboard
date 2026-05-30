@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
 import { query } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 
@@ -132,7 +132,7 @@ Si SÍ necesitas:
 
         try {
             const planResp = await anthropic.messages.create({
-                model: 'claude-haiku-4-5-20251001',
+                model: ANTHROPIC_MODEL_CHEAP,
                 max_tokens: 800,
                 messages: [{ role: 'user', content: planPrompt }]
             });
@@ -201,7 +201,7 @@ RESPONDE SOLO EN JSON:
 }`;
 
         const explainResp = await anthropic.messages.create({
-            model: 'claude-opus-4-6',
+            model: ANTHROPIC_MODEL,
             max_tokens: 1500,
             messages: [{ role: 'user', content: explainPrompt }]
         });

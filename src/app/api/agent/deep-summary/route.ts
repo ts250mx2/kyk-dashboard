@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
 
 /**
  * POST /api/agent/deep-summary
@@ -104,7 +104,7 @@ REGLAS:
 Devuelve SOLO el JSON.`;
 
         const response = await anthropic.messages.create({
-            model: 'claude-sonnet-4-6',
+            model: ANTHROPIC_MODEL_FAST,
             max_tokens: 2000,
             messages: [{ role: 'user', content: prompt }]
         });

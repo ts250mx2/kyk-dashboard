@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_DAYS = 90;
@@ -183,7 +183,7 @@ RESPONDE EN JSON (sin markdown alrededor):
 }`;
 
         const response = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
+            model: ANTHROPIC_MODEL_CHEAP,
             max_tokens: 1200,
             messages: [{ role: 'user', content: prompt }],
         });

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { query } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
@@ -39,7 +39,7 @@ interface WhatsAppRequest {
     timestamp?: string;
 }
 
-const ANTHROPIC_MODEL = 'claude-sonnet-4-6'; // paridad con calidad del agente
+const ANTHROPIC_MODEL = ANTHROPIC_MODEL_FAST; // configurable vía .env (ANTHROPIC_MODEL_FAST)
 const OPENAI_FALLBACK_MODEL = 'gpt-4o-mini'; // fallback cuando Anthropic devuelve 5xx/overloaded
 
 const ANTHROPIC_TOOLS: any[] = [

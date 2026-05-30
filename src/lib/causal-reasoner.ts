@@ -15,7 +15,7 @@
  *     con instrucción de eliminar hipótesis y concluir causa raíz)
  */
 
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
 import { query } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 
@@ -152,7 +152,7 @@ Genera entre 4 y 6 hipótesis. Devuelve SOLO el JSON.`;
 
     try {
         const response = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
+            model: ANTHROPIC_MODEL_CHEAP,
             max_tokens: 3000,
             messages: [{ role: 'user', content: designerPrompt }]
         });
@@ -362,7 +362,7 @@ Devuelve SOLO el JSON.`;
 
     try {
         const response = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
+            model: ANTHROPIC_MODEL_CHEAP,
             max_tokens: 1500,
             messages: [{ role: 'user', content: designerPrompt }]
         });

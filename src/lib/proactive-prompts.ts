@@ -12,7 +12,7 @@
  */
 
 import { query } from '@/lib/db';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
 
 let tableEnsured = false;
 
@@ -192,7 +192,7 @@ Genera EXACTAMENTE ${candidates.length} prompts en el mismo orden del input. Dev
     let reformulated: any[] = [];
     try {
         const resp = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
+            model: ANTHROPIC_MODEL_CHEAP,
             max_tokens: 2000,
             messages: [{ role: 'user', content: reformulationPrompt }]
         });

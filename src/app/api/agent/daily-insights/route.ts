@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { query } from '@/lib/db';
 import { INSIGHT_SCANNERS, getScannersByPriority } from '@/lib/insights-scanners';
@@ -110,7 +110,7 @@ RETORNA JSON:
     try {
         if (model === 'claude') {
             const response = await anthropic.messages.create({
-                model: 'claude-opus-4-6',
+                model: ANTHROPIC_MODEL,
                 max_tokens: 2048,
                 messages: [
                     { role: 'user', content: `${systemPrompt}\n\nDATOS A ANALIZAR:\n${dataDescription}\n\nRETORNA SOLO JSON VÁLIDO.` }
@@ -179,7 +179,7 @@ Genera SOLO el párrafo de briefing, sin comillas, sin metadata, sin JSON.`;
 
     try {
         const response = await anthropic.messages.create({
-            model: 'claude-opus-4-6',
+            model: ANTHROPIC_MODEL,
             max_tokens: 512,
             messages: [{ role: 'user', content: briefingPrompt }]
         });

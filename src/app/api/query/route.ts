@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { openai } from '@/lib/ai';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
 import { query } from '@/lib/db';
 import { findRelevantReports } from '@/lib/available-reports';
 import { assertReadOnly } from '@/lib/sql-sandbox';
@@ -481,7 +481,10 @@ algún incidente operativo."
 `;
 
         let isAnthropic = selectedModel.includes('claude');
-        const anthropicModel = 'claude-opus-4-6'; // Use specific Opus model for the SDK
+        const anthropicModel = ANTHROPIC_MODEL; // configurable vía .env (ANTHROPIC_MODEL)
+        // Reportar el modelo REAL que corre (no el default del cliente en localStorage).
+        // En el fallback a OpenAI (catch más abajo) se sobreescribe a 'gpt-4o'.
+        if (isAnthropic) selectedModel = anthropicModel;
 
         let message: any;
         let toolCalls: any[] = [];

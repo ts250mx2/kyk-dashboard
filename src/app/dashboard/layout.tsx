@@ -14,8 +14,9 @@ export default function DashboardLayout({
 }) {
     const [isCollapsed, setIsCollapsed] = useState(false)
     const pathname = usePathname()
-    // Ocultar el widget flotante cuando estamos en la página dedicada del chat
-    const isChatPage = pathname === '/dashboard/chat'
+    // Ocultar el widget flotante y usar layout full-height en páginas dedicadas
+    // (chat de Kesito y consola del Agente Avanzado)
+    const isChatPage = pathname === '/dashboard/chat' || pathname === '/dashboard/agent-console'
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">

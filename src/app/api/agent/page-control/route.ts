@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
 
 interface PageControlRequest {
     prompt: string;
@@ -208,7 +208,7 @@ Responde SOLO con el JSON.`;
         }
 
         const response = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
+            model: ANTHROPIC_MODEL_CHEAP,
             max_tokens: 1024,
             messages: [{ role: 'user', content: systemPrompt }]
         });

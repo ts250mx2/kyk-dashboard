@@ -18,7 +18,15 @@ export type SseEventName =
     | 'metadata'         // payload con insights, recommendations, reports, data, etc
     | 'clarification'    // el agente pidió aclaración (no es analítico)
     | 'error'            // error recuperable o terminal
-    | 'done';            // fin de stream
+    | 'done'             // fin de stream
+    // --- Agente Avanzado (consola): logs en vivo del loop multi-turno ---
+    | 'tool-call'        // el modelo invocó una tool { name, input }
+    | 'tool-result'      // resultado de la tool { name, ok, rowCount, preview }
+    | 'sql'              // SQL ejecutado { sql }
+    | 'reasoning'        // texto de razonamiento del assistant entre tools { text }
+    | 'usage'            // consumo de tokens/costo acumulado por turno
+    | 'report-proposed'  // el agente propone un reporte listo para armar { definition }
+    | 'report-saved';    // reporte persistido { idReporte, url }
 
 export interface SseEvent {
     event: SseEventName;

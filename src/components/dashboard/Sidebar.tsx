@@ -39,12 +39,21 @@ const menuSections: MenuSection[] = [
         ]
     },
     {
+        title: "Reportes IA",
+        emoji: "🤖",
+        items: [
+            { name: "Agente Avanzado", emoji: "🖥️", href: "/dashboard/agent-console" },
+            { name: "Mis Reportes", emoji: "📁", href: "/dashboard/saved" },
+        ]
+    },
+    {
         title: "Inventario",
         emoji: "📦",
         items: [
             { name: "Inventarios Tienda", emoji: "🏬", href: "/dashboard/inventory/store" },
             { name: "Auditoria por Proveedor", emoji: "🚚", href: "/dashboard/inventory/provider" },
             { name: "Auditoria por zona", emoji: "📍", href: "/dashboard/inventory/zone" },
+            { name: "Quiebres de Stock", emoji: "🚨", href: "/dashboard/inventory/stockouts" },
         ]
     },
     {

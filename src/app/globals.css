@@ -233,3 +233,18 @@ body {
 button, a, input, select, textarea {
   touch-action: manipulation;
 }
+
+/* Barra de carga indeterminada (consola del Agente Avanzado) */
+@keyframes kyk-indeterminate {
+  0%   { transform: translateX(-100%) scaleX(0.45); }
+  50%  { transform: translateX(25%)  scaleX(0.65); }
+  100% { transform: translateX(100%) scaleX(0.45); }
+}
+.kyk-loading-bar { position: relative; overflow: hidden; }
+.kyk-loading-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, #34d399 35%, #6ee7b7 50%, #34d399 65%, transparent);
+  animation: kyk-indeterminate 1.15s ease-in-out infinite;
+}

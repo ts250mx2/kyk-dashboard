@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mysqlQuery } from '@/lib/mysql';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
 
 export async function POST(request: Request) {
     try {
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
                     fileType.includes('gif') ? 'image/gif' : 'image/jpeg';
 
             const response = await anthropic.messages.create({
-                model: "claude-opus-4-6",
+                model: ANTHROPIC_MODEL,
                 max_tokens: 4096,
                 messages: [
                     {

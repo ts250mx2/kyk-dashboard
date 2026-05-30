@@ -562,7 +562,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
         setMessages((prev) => [...prev, userMsg]);
         setLoading(true);
 
-        const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-4-6' : 'claude-opus-4-6';
+        const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-4-8' : 'claude-opus-4-8';
         const useStreaming = selectedModel.includes('claude');
 
         // Aborta cualquier stream previo

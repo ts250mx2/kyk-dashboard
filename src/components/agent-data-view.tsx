@@ -17,21 +17,25 @@
 import { useMemo, useState } from 'react';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-    LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid
+    LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Treemap, LabelList
 } from 'recharts';
 import {
     Table as TableIcon, BarChart3, LineChart as LineIcon, PieChart as PieIcon,
-    ChevronRight, TrendingUp, TrendingDown, Minus, Download
+    ChevronRight, TrendingUp, TrendingDown, Minus, Download, LayoutGrid
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { utils, writeFile } from 'xlsx';
 
-type Viz = 'auto' | 'kpi' | 'table' | 'bar' | 'line' | 'area' | 'pie';
+type Viz = 'auto' | 'kpi' | 'table' | 'bar' | 'line' | 'area' | 'pie' | 'treemap';
 
 interface AgentDataViewProps {
     data: Record<string, any>[];
-    suggestedViz?: 'table' | 'bar' | 'line' | 'pie' | 'area';
+    suggestedViz?: 'table' | 'bar' | 'line' | 'pie' | 'area' | 'treemap';
     question?: string;
+    lockViz?: boolean;       // mostrar solo el tipo elegido (oculta el selector)
+    showValues?: boolean;    // etiquetas con la cantidad sobre la gráfica
+    showPercent?: boolean;   // etiquetas como % del total
+    alsoTable?: boolean;     // mostrar la tabla DEBAJO de la gráfica (juntas)
 }
 
 const PALETTE = {
@@ -114,9 +118,20 @@ function detectAutoViz(data: Record<string, any>[], suggested?: string): Exclude
     // 1 fila → KPI
     if (data.length === 1 && numKeys.length > 0) return 'kpi';
 
+    // Honrar la elección EXPLÍCITA (de la IA o del usuario) si es graficable —
+    // p. ej. si pidió 'pie', se respeta aunque haya muchas categorías.
+    if (suggested && suggested !== 'table' && numKeys.length > 0) {
+        return suggested as Exclude<Viz, 'auto'>;
+    }
+
     // Temporal explícita
     if (hasTemporal && numKeys.length > 0 && data.length >= 3 && data.length <= 50) {
         return suggested === 'area' ? 'area' : 'line';
+    }
+
+    // Treemap (rectángulos) sugerido por la IA
+    if (suggested === 'treemap' && data.length >= 2 && data.length <= 30 && numKeys.length >= 1) {
+        return 'treemap';
     }
 
     // Distribución con pocas categorías
@@ -135,6 +150,32 @@ function detectAutoViz(data: Record<string, any>[], suggested?: string): Exclude
     }
 
     return 'table';
+}
+
+/** Devuelve las visualizaciones recomendadas (mejor primero) según el shape. */
+function recommendVizs(data: Record<string, any>[], suggested?: string): Exclude<Viz, 'auto'>[] {
+    if (!data || data.length === 0) return ['table'];
+    const keys = Object.keys(data[0]);
+    const numKeys = keys.filter(k => isNumericKey(k, data[0][k]));
+    const hasTemporal = keys.some(k => isTemporalKey(k, data[0][k]));
+    const n = data.length;
+    const rec: Exclude<Viz, 'auto'>[] = [];
+
+    if (n === 1 && numKeys.length > 0) {
+        rec.push('kpi');
+    } else {
+        if (hasTemporal && numKeys.length > 0) rec.push('line', 'area');
+        if (!hasTemporal && numKeys.length >= 1 && n >= 2 && n <= 20) rec.push('bar');
+        if (numKeys.length >= 1 && n >= 2 && n <= 30) rec.push('treemap');
+        if (numKeys.length === 1 && n >= 2 && n <= 7) rec.push('pie');
+    }
+    let ordered = Array.from(new Set(rec));
+    // La sugerencia explícita de la IA manda como "más recomendada"
+    if (suggested && ordered.includes(suggested as any)) {
+        ordered = [suggested as any, ...ordered.filter(v => v !== suggested)];
+    }
+    if (ordered.length === 0) ordered = ['table'];
+    return ordered;
 }
 
 // ─── Subcomponente: KPI cards ─────────────────────────────────────────────
@@ -216,7 +257,7 @@ function KpiCards({ data }: { data: Record<string, any>[] }) {
 
 // ─── Subcomponente: Tabla elegante ────────────────────────────────────────
 
-function ElegantTable({ data, compact = false }: { data: Record<string, any>[]; compact?: boolean }) {
+function ElegantTable({ data, compact = false, onRowClick }: { data: Record<string, any>[]; compact?: boolean; onRowClick?: (row: Record<string, any>) => void }) {
     const keys = Object.keys(data[0]);
     const maxVisible = compact ? 5 : 50;
     const [showAll, setShowAll] = useState(false);
@@ -243,7 +284,7 @@ function ElegantTable({ data, compact = false }: { data: Record<string, any>[]; 
                     </thead>
                     <tbody>
                         {visibleData.map((row, i) => (
-                            <tr key={i} className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50 transition-colors">
+                            <tr key={i} onClick={() => onRowClick?.(row)} className={cn("border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50 transition-colors", onRowClick && "cursor-pointer")}>
                                 {keys.map((k) => {
                                     const isNum = isNumericKey(k, row[k]);
                                     return (
@@ -281,11 +322,36 @@ function ElegantTable({ data, compact = false }: { data: Record<string, any>[]; 
 
 // ─── Subcomponente: Gráfica minimalista ───────────────────────────────────
 
-function MinimalChart({ data, type }: { data: Record<string, any>[]; type: 'bar' | 'line' | 'area' | 'pie' }) {
-    const keys = Object.keys(data[0]);
-    const xKey = keys[0];
-    const numKeys = keys.slice(1).filter(k => isNumericKey(k, data[0][k]));
+function TreemapCell(props: any) {
+    const { x, y, width, height, index, name, value, showValues, showPercent, total } = props;
+    const fill = PALETTE.soft[index % PALETTE.soft.length];
+    const showVal = (showValues || showPercent) && width > 60 && height > 40;
+    const valText = showPercent && total
+        ? `${((Number(value) / total) * 100).toFixed(0)}%`
+        : (typeof value === 'number' ? new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 }).format(value) : '');
+    return (
+        <g>
+            <rect x={x} y={y} width={width} height={height} style={{ fill, stroke: '#fff', strokeWidth: 2 }} />
+            {width > 50 && height > 22 && (
+                <text x={x + 6} y={y + 16} fill="#fff" fontSize={11} fontWeight={700}>{name}</text>
+            )}
+            {showVal && (
+                <text x={x + 6} y={y + 32} fill="#fff" fontSize={10} opacity={0.9}>{valText}</text>
+            )}
+        </g>
+    );
+}
+
+function MinimalChart({ data, type, xKey, seriesKeys, showValues, showPercent }: { data: Record<string, any>[]; type: 'bar' | 'line' | 'area' | 'pie' | 'treemap'; xKey: string; seriesKeys: string[]; showValues?: boolean; showPercent?: boolean }) {
+    const numKeys = seriesKeys.length > 0 ? seriesKeys : Object.keys(data[0]).slice(1).filter(k => isNumericKey(k, data[0][k]));
     const isCurrency = numKeys.length > 0 && isCurrencyKey(numKeys[0]);
+    const totals: Record<string, number> = {};
+    numKeys.forEach(k => { totals[k] = data.reduce((a, r) => a + (Number(r[k]) || 0), 0); });
+    const labelFmt = (value: number, k: string) =>
+        showPercent && totals[k]
+            ? `${((value / totals[k]) * 100).toFixed(0)}%`
+            : formatNumber(value, { currency: isCurrencyKey(k), compact: true });
+    const wantLabels = !!(showValues || showPercent);
 
     const tooltipFormatter = (value: any, name: string) => {
         if (typeof value === 'number') {
@@ -345,7 +411,9 @@ function MinimalChart({ data, type }: { data: Record<string, any>[]; type: 'bar'
                                 strokeWidth={2}
                                 dot={{ r: 3, strokeWidth: 0, fill: PALETTE.soft[i % PALETTE.soft.length] }}
                                 activeDot={{ r: 5, strokeWidth: 2, stroke: 'white' }}
-                            />
+                            >
+                                {wantLabels && <LabelList dataKey={k} position="top" fontSize={10} formatter={(v: any) => labelFmt(Number(v), k)} />}
+                            </Line>
                         ))}
                     </LineChart>
                 ) : type === 'area' ? (
@@ -370,7 +438,9 @@ function MinimalChart({ data, type }: { data: Record<string, any>[]; type: 'bar'
                                 stroke={PALETTE.soft[i % PALETTE.soft.length]}
                                 fill={`url(#area-grad-${i})`}
                                 strokeWidth={2}
-                            />
+                            >
+                                {wantLabels && <LabelList dataKey={k} position="top" fontSize={10} formatter={(v: any) => labelFmt(Number(v), k)} />}
+                            </Area>
                         ))}
                     </AreaChart>
                 ) : type === 'pie' ? (
@@ -384,7 +454,11 @@ function MinimalChart({ data, type }: { data: Record<string, any>[]; type: 'bar'
                             innerRadius={60}
                             outerRadius={110}
                             paddingAngle={2}
-                            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                            label={({ name, value, percent }: any) =>
+                                showValues && !showPercent
+                                    ? `${name} ${formatNumber(Number(value), { currency: isCurrency, compact: true })}`
+                                    : `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
+                            }
                             labelLine={false}
                         >
                             {data.map((_, i) => (
@@ -393,6 +467,16 @@ function MinimalChart({ data, type }: { data: Record<string, any>[]; type: 'bar'
                         </Pie>
                         <Tooltip contentStyle={tooltipStyle} formatter={tooltipFormatter} />
                     </PieChart>
+                ) : type === 'treemap' ? (
+                    <Treemap
+                        data={data.map((r) => ({ name: String(r[xKey]), value: Number(r[numKeys[0]]) || 0 }))}
+                        dataKey="value"
+                        nameKey="name"
+                        content={<TreemapCell showValues={showValues} showPercent={showPercent} total={totals[numKeys[0]]} />}
+                        isAnimationActive={false}
+                    >
+                        <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [formatNumber(Number(v), { currency: isCurrency }), numKeys[0]]} />
+                    </Treemap>
                 ) : (
                     <BarChart {...commonChartProps}>
                         <CartesianGrid {...gridProps} />
@@ -410,7 +494,9 @@ function MinimalChart({ data, type }: { data: Record<string, any>[]; type: 'bar'
                                 fill={PALETTE.soft[i % PALETTE.soft.length]}
                                 radius={[6, 6, 0, 0]}
                                 maxBarSize={48}
-                            />
+                            >
+                                {wantLabels && <LabelList dataKey={k} position="top" fontSize={10} formatter={(v: any) => labelFmt(Number(v), k)} />}
+                            </Bar>
                         ))}
                     </BarChart>
                 )}
@@ -421,8 +507,11 @@ function MinimalChart({ data, type }: { data: Record<string, any>[]; type: 'bar'
 
 // ─── Componente principal ─────────────────────────────────────────────────
 
-export function AgentDataView({ data, suggestedViz, question }: AgentDataViewProps) {
+export function AgentDataView({ data, suggestedViz, question, lockViz, showValues, showPercent, alsoTable }: AgentDataViewProps) {
     const [overrideViz, setOverrideViz] = useState<Viz>('auto');
+    const [dimSel, setDimSel] = useState('');   // campo de categoría elegido
+    const [measSel, setMeasSel] = useState(''); // campo de valor elegido
+    const [detailRow, setDetailRow] = useState<Record<string, any> | null>(null);
 
     const autoViz = useMemo(() => detectAutoViz(data, suggestedViz), [data, suggestedViz]);
     const activeViz = overrideViz === 'auto' ? autoViz : overrideViz;
@@ -444,8 +533,24 @@ export function AgentDataView({ data, suggestedViz, question }: AgentDataViewPro
     if (data.length >= 2 && data.length <= 50 && numKeys.length > 0) {
         availableVizs.push({ id: 'bar', label: 'Barras', icon: BarChart3 });
         availableVizs.push({ id: 'line', label: 'Línea', icon: LineIcon });
+        availableVizs.push({ id: 'area', label: 'Área', icon: LineIcon });
         if (data.length <= 7) availableVizs.push({ id: 'pie', label: 'Pie', icon: PieIcon });
+        if (data.length <= 30) availableVizs.push({ id: 'treemap', label: 'Rectángulos', icon: LayoutGrid });
     }
+
+    // Recomendaciones: la primera es "la más recomendada"; el resto, también recomendadas.
+    const recommended = recommendVizs(data, suggestedViz);
+    const recommendedPrimary = recommended[0];
+    const recommendedSet = new Set<Viz>(recommended);
+
+    // Campos elegibles para graficar (categoría + valor)
+    const firstNonNum = keys.find(k => !isNumericKey(k, data[0][k])) || keys[0];
+    const dimKey = keys.includes(dimSel) ? dimSel : firstNonNum;
+    const measureKey = numKeys.includes(measSel) ? measSel : (numKeys[0] || keys[0]);
+    const isChart = activeViz === 'bar' || activeViz === 'line' || activeViz === 'area' || activeViz === 'pie' || activeViz === 'treemap';
+    const singleMeasure = activeViz === 'bar' || activeViz === 'pie' || activeViz === 'treemap';
+    const chartSeries = singleMeasure ? [measureKey] : numKeys.filter(k => k !== dimKey);
+    const showFieldPicker = singleMeasure && keys.length > 1 && numKeys.length > 0;
 
     const handleExport = () => {
         const ws = utils.json_to_sheet(data);
@@ -458,26 +563,41 @@ export function AgentDataView({ data, suggestedViz, question }: AgentDataViewPro
     return (
         <div className="space-y-2">
             {/* Selector minimalista de vista */}
-            {availableVizs.length > 1 && (
+            {(availableVizs.length > 1 || true) && (
                 <div className="flex items-center justify-between">
-                    <div className="inline-flex bg-slate-100 rounded-lg p-0.5">
+                    {availableVizs.length > 1 && !lockViz ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
                         {availableVizs.map(({ id, label, icon: Icon }) => {
                             const active = activeViz === id;
+                            const isPrimary = id === recommendedPrimary;
+                            const isRec = recommendedSet.has(id);
                             return (
                                 <button
                                     key={id}
                                     onClick={() => setOverrideViz(id)}
+                                    title={isPrimary ? 'Recomendada para estos datos' : isRec ? 'Recomendada' : undefined}
                                     className={cn(
-                                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all",
-                                        active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                        "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all",
+                                        active ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
                                     )}
                                 >
                                     <Icon className="w-3 h-3" />
                                     <span>{label}</span>
+                                    {isPrimary ? (
+                                        <span className={cn(
+                                            "ml-0.5 text-[8px] font-black uppercase tracking-wide rounded px-1 py-0.5",
+                                            active ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-700'
+                                        )}>
+                                            Recomendada
+                                        </span>
+                                    ) : isRec ? (
+                                        <span className="ml-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                                    ) : null}
                                 </button>
                             );
                         })}
                     </div>
+                    ) : <div />}
                     <button
                         onClick={handleExport}
                         className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-700 transition-colors"
@@ -489,11 +609,54 @@ export function AgentDataView({ data, suggestedViz, question }: AgentDataViewPro
                 </div>
             )}
 
+            {/* Selección de campos a graficar (pastel / barras / rectángulos) */}
+            {showFieldPicker && (
+                <div className="flex flex-wrap items-center gap-3 px-1 py-1">
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
+                        Categoría:
+                        <select value={dimKey} onChange={(e) => setDimSel(e.target.value)}
+                            className="text-[12px] font-medium bg-white border border-slate-200 rounded-md px-2 py-1 text-slate-700 outline-none focus:border-indigo-400 cursor-pointer">
+                            {keys.map((k) => (<option key={k} value={k}>{k}</option>))}
+                        </select>
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
+                        Valor:
+                        <select value={measureKey} onChange={(e) => setMeasSel(e.target.value)}
+                            className="text-[12px] font-medium bg-white border border-slate-200 rounded-md px-2 py-1 text-slate-700 outline-none focus:border-indigo-400 cursor-pointer">
+                            {(numKeys.length ? numKeys : keys).map((k) => (<option key={k} value={k}>{k}</option>))}
+                        </select>
+                    </label>
+                </div>
+            )}
+
             {/* Vista activa */}
             {activeViz === 'kpi' && <KpiCards data={data} />}
-            {activeViz === 'table' && <ElegantTable data={data} />}
-            {(activeViz === 'bar' || activeViz === 'line' || activeViz === 'area' || activeViz === 'pie') && (
-                <MinimalChart data={data} type={activeViz} />
+            {activeViz === 'table' && <ElegantTable data={data} onRowClick={setDetailRow} />}
+            {isChart && (
+                <>
+                    <MinimalChart data={data} type={activeViz as any} xKey={dimKey} seriesKeys={chartSeries} showValues={showValues} showPercent={showPercent} />
+                    {alsoTable && <ElegantTable data={data} onRowClick={setDetailRow} />}
+                </>
+            )}
+
+            {/* Modal de detalle de la fila */}
+            {detailRow && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDetailRow(null)}>
+                    <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                            <h4 className="font-black text-slate-800 text-sm uppercase tracking-wider">Detalle</h4>
+                            <button onClick={() => setDetailRow(null)} className="text-slate-400 hover:text-slate-700">✕</button>
+                        </div>
+                        <div className="p-5 max-h-[60vh] overflow-auto divide-y divide-slate-50">
+                            {Object.keys(detailRow).map((k) => (
+                                <div key={k} className="flex items-start justify-between gap-4 py-2">
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{k}</span>
+                                    <span className="text-sm font-medium text-slate-800 text-right tabular-nums">{formatCell(k, detailRow[k])}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Footer con count */}

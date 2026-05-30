@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { openai } from '@/lib/ai';
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
 
 export async function POST(req: Request) {
     try {
@@ -60,7 +60,7 @@ ${hourTxt || 'Sin datos'}`;
 
         if (isAnthropic) {
             const response = await anthropic.messages.create({
-                model: 'claude-opus-4-6',
+                model: ANTHROPIC_MODEL,
                 max_tokens: 4096,
                 system: systemPrompt,
                 messages: [{ role: 'user', content: userPrompt }],
