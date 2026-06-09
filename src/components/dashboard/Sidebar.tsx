@@ -104,6 +104,14 @@ const menuSections: MenuSection[] = [
         ]
     },
     {
+        title: "Videos",
+        emoji: "🎥",
+        items: [
+            { name: "NVR's", emoji: "📹", href: "/dashboard/videos/nvrs" },
+            { name: "Grabaciones", emoji: "📼", href: "/dashboard/videos/recordings" },
+        ]
+    },
+    {
         title: "Sistema",
         emoji: "⚙️",
         items: [

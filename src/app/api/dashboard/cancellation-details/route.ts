@@ -35,7 +35,7 @@ export async function GET(req: Request) {
         }
 
         const sql = `
-            SELECT T.Tienda, CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdApertura AS VARCHAR(6)) AS [Z],
+            SELECT T.Tienda, A.IdTienda, CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdApertura AS VARCHAR(6)) AS [Z],
             CAST(A.IdComputadora AS VARCHAR(2)) + '-' + CAST(A.IdCancelacion AS VARCHAR(6)) AS [Folio Cancelacion], 
             A.FechaCancelacion, B.Cantidad, F.CodigoBarras AS [Codigo Barras], F.Descripcion, B.PrecioVenta AS [Precio Venta], B.Cantidad*B.PrecioVenta AS Total,
             D.Usuario AS Cajero, E.Usuario AS Supervisor

@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 import { LoadingScreen } from './ui/loading-screen';
+import { CancellationRecordingModal } from './cancellation-recording-modal';
 
 interface CancellationDetailModalProps {
     isOpen: boolean;
@@ -38,6 +39,10 @@ function CancellationDetailModalComponent({
 }: CancellationDetailModalProps) {
     const [details, setDetails] = useState<any[]>([]);
     const [loading, setLoading] = useState(isOpen);
+    const [recordingCtx, setRecordingCtx] = useState<{
+        idTienda: number | string; storeName: string; fecha: string; folio: string;
+        producto: string; cantidad: number; precio: number; total: number; cajero: string; supervisor: string;
+    } | null>(null);
     const prevParams = useRef<string>('');
     const [isMaximized, setIsMaximized] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -305,6 +310,7 @@ function CancellationDetailModalComponent({
                                         <th onClick={() => handleSort('Supervisor')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
                                             <div className="flex items-center">Supervisor {renderSortIcon('Supervisor')}</div>
                                         </th>
+                                        <th className="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-wider">Video</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -343,11 +349,31 @@ function CancellationDetailModalComponent({
                                                 <td className="px-4 py-3 whitespace-nowrap text-rose-700/80 font-black italic text-[11px]">
                                                     {item.Supervisor}
                                                 </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                                    <button
+                                                        onClick={() => setRecordingCtx({
+                                                            idTienda: item.IdTienda ?? idTienda ?? '',
+                                                            storeName: item.Tienda || storeName || '',
+                                                            fecha: item.FechaCancelacion,
+                                                            folio: item['Folio Cancelacion'],
+                                                            producto: item.Descripcion,
+                                                            cantidad: item.Cantidad,
+                                                            precio: item['Precio Venta'],
+                                                            total: item.Total,
+                                                            cajero: item.Cajero,
+                                                            supervisor: item.Supervisor,
+                                                        })}
+                                                        title="Ver grabación (±2 min del evento)"
+                                                        className="text-lg leading-none hover:scale-125 transition-transform"
+                                                    >
+                                                        🎥
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))
                                     ) : !loading ? (
                                         <tr>
-                                            <td colSpan={!idTienda ? 9 : 8} className="px-4 py-12 text-center bg-white">
+                                            <td colSpan={!idTienda ? 10 : 9} className="px-4 py-12 text-center bg-white">
                                                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">No se encontraron cancelaciones</p>
                                             </td>
                                         </tr>
@@ -378,6 +404,22 @@ function CancellationDetailModalComponent({
                     </button>
                 </div>
             </div>
+
+            <CancellationRecordingModal
+                isOpen={!!recordingCtx}
+                onClose={() => setRecordingCtx(null)}
+                idTienda={recordingCtx?.idTienda}
+                storeName={recordingCtx?.storeName}
+                fechaCancelacion={recordingCtx?.fecha}
+                folio={recordingCtx?.folio}
+                producto={recordingCtx?.producto}
+                cantidad={recordingCtx?.cantidad}
+                precio={recordingCtx?.precio}
+                total={recordingCtx?.total}
+                cajero={recordingCtx?.cajero}
+                supervisor={recordingCtx?.supervisor}
+                windowMinutes={2}
+            />
         </div>
     );
 }
