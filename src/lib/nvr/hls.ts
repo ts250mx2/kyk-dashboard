@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execFileSync, ChildProcess } from 'child_process';
 import { mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
@@ -47,6 +47,22 @@ const FONT_CANDIDATES = [
 ];
 const FONT = FONT_CANDIDATES.find((f) => existsSync(f));
 
+// No todos los builds de ffmpeg traen el filtro drawtext (libfreetype). El binario
+// estático de Linux suele venir sin él, así que lo detectamos y, si falta, omitimos
+// el sello (el NVR ya quema su propia fecha/hora). Se cachea tras la 1ª comprobación.
+let _drawtext: boolean | null = null;
+function hasDrawtext(): boolean {
+    if (_drawtext !== null) return _drawtext;
+    try {
+        const out = execFileSync(FFMPEG as string, ['-hide_banner', '-filters'], { encoding: 'utf8', timeout: 5000 });
+        _drawtext = /\sdrawtext\s/.test(out);
+    } catch {
+        _drawtext = false;
+    }
+    if (!_drawtext) console.warn('[nvr/hls] ffmpeg sin filtro drawtext: no se quemará la fecha/hora (se usa el OSD del NVR).');
+    return _drawtext;
+}
+
 /** Epoch (s) del reloj de pared "YYYY-MM-DD HH:MM:SS", tz-safe vía UTC + gmtime. */
 function epochFromWallClock(s: string): number {
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
@@ -58,7 +74,7 @@ function epochFromWallClock(s: string): number {
 function buildVideoFilter(start: string): string {
     let vf = "scale='min(1280,iw)':-2";
     const epoch = epochFromWallClock(start);
-    if (FONT && epoch) {
+    if (FONT && epoch && hasDrawtext()) {
         const fontEsc = FONT.replace(/\\/g, '/').replace(/:/g, '\\:');
         vf += `,drawtext=fontfile='${fontEsc}':text='%{pts\\:gmtime\\:${epoch}}':x=12:y=12:fontsize=22:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=8`;
     }
