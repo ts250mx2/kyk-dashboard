@@ -22,6 +22,13 @@ export interface ModelInfo {
 export const MODEL_REGISTRY: ModelInfo[] = [
     // --- Anthropic (Claude) ---
     {
+        id: 'claude-fable-5',
+        label: 'Claude Fable 5 (máxima inteligencia)',
+        provider: 'anthropic',
+        inputUsdPerMTok: Number(process.env.ANTHROPIC_FABLE_INPUT_USD_PER_MTOK || 10),
+        outputUsdPerMTok: Number(process.env.ANTHROPIC_FABLE_OUTPUT_USD_PER_MTOK || 50),
+    },
+    {
         id: 'claude-opus-4-8',
         label: 'Claude Opus 4.8 (máxima potencia)',
         provider: 'anthropic',

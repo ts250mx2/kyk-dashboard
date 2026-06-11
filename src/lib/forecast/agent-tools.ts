@@ -96,8 +96,10 @@ export async function runForecastForAgent(opts: {
     storeIds?: number[];
     storeNames?: string[];
     horizonDays?: number;
+    sampleSize?: number;   // cuántos puntos de la serie devolver en forecastSample (default 14)
 }): Promise<AgentForecastSummary> {
     const horizonDays = Math.max(1, Math.min(180, Number(opts.horizonDays) || 30));
+    const sampleSize = Math.max(1, Math.min(180, Number(opts.sampleSize) || 14));
     const historyDays = Math.max(400, horizonDays * 4);
     const resolved = await resolveStores({ storeIds: opts.storeIds, storeNames: opts.storeNames });
 
@@ -209,7 +211,7 @@ export async function runForecastForAgent(opts: {
         trend: result.trend,
         confidence: result.confidence,
         mape: result.mape,
-        forecastSample: result.forecast.slice(0, 14).map(p => ({
+        forecastSample: result.forecast.slice(0, sampleSize).map(p => ({
             fecha: p.fecha,
             predicted: p.predicted,
             lower: p.lower,

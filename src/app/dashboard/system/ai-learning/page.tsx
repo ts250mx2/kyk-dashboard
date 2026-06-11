@@ -369,7 +369,8 @@ export default function AILearningPage() {
                 <div className="flex items-center gap-2 bg-slate-50 p-1 border border-slate-200">
                     {[
                         { id: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', icon: '⚡' },
-                        { id: 'claude-opus-4-8', label: 'Claude-Opus-4-8', provider: 'Anthropic', icon: '🧠' }
+                        { id: 'claude-opus-4-8', label: 'Claude-Opus-4-8', provider: 'Anthropic', icon: '🧠' },
+                        { id: 'claude-fable-5', label: 'Claude-Fable-5', provider: 'Anthropic', icon: '✨' }
                     ].map((model) => {
                         const isSelected = (typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'gpt-4o' : 'gpt-4o') === model.id;
                         return (

@@ -160,6 +160,16 @@ const DEFAULT_FALLBACK = [
     'Oportunidades de optimización identificadas'
 ];
 
+/** Modelos seleccionables en Kesito. El backend respeta los Claude permitidos
+ *  y cae a GPT-4o para cualquier otro. Se persiste en localStorage 'ai_query_model'. */
+const CHAT_MODELS = [
+    { id: 'claude-fable-5', label: 'Fable 5' },
+    { id: 'claude-opus-4-8', label: 'Opus 4.8' },
+    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+    { id: 'gpt-4o', label: 'GPT-4o' },
+];
+const DEFAULT_CHAT_MODEL = 'claude-opus-4-8';
+
 interface ChatAgentProps {
     /**
      * - 'floating': widget flotante (botón en esquina inferior derecha)
@@ -185,6 +195,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
     const [expandedData, setExpandedData] = useState<Record<number, boolean>>({});
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
     const [conversationsRefreshKey, setConversationsRefreshKey] = useState(0);
+    const [chatModel, setChatModel] = useState(DEFAULT_CHAT_MODEL);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const streamControllerRef = useRef<AbortController | null>(null);
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -523,6 +534,11 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
             }
         }
 
+        const savedModel = localStorage.getItem('ai_query_model');
+        if (savedModel && CHAT_MODELS.some(m => m.id === savedModel)) {
+            setChatModel(savedModel);
+        }
+
         setIsHistoryLoaded(true);
     }, []);
 
@@ -786,6 +802,20 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                             </div>
                         </div>
                         <div className="flex items-center gap-0.5">
+                            <select
+                                value={chatModel}
+                                onChange={(e) => {
+                                    const v = e.target.value;
+                                    setChatModel(v);
+                                    try { localStorage.setItem('ai_query_model', v); } catch { }
+                                }}
+                                title="Modelo de IA que responde"
+                                className="mr-0.5 text-[11px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 outline-none hover:bg-slate-100 focus:border-indigo-300 cursor-pointer"
+                            >
+                                {CHAT_MODELS.map(m => (
+                                    <option key={m.id} value={m.id}>{m.label}</option>
+                                ))}
+                            </select>
                             <AlertsPanel
                                 compact
                                 onCreateFromChat={() => {

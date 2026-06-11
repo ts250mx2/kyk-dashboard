@@ -4,6 +4,7 @@ import { getReportById } from '@/lib/advanced-reports/reports-store';
 import { substituteParams } from '@/lib/advanced-reports/params';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import { query } from '@/lib/db';
+import { runForecastForAgent } from '@/lib/forecast/agent-tools';
 
 export const runtime = 'nodejs';
 
@@ -28,16 +29,87 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const def = report.definition;
-    try {
-        // Sustituye los tokens {{...}} con los valores del usuario (o defaults).
-        const url = new URL(req.url);
-        const values: Record<string, string> = {};
-        if (Array.isArray(def.params)) {
-            for (const p of def.params) {
-                const v = url.searchParams.get(p.token);
-                if (v !== null) values[p.token] = v;
-            }
+    const cost = {
+        realCostoUsd: report.realCostoUsd,
+        realCostoMxn: report.realCostoMxn,
+        estCostoMxn: report.estCostoMxn,
+        tokensInput: report.realTokensInput,
+        tokensOutput: report.realTokensOutput,
+    };
+    const meta = {
+        title: report.titulo,
+        descripcion: report.descripcion,
+        modelo: report.modelo,
+        cost,
+        fechaCreacion: report.fechaCreacion,
+    };
+
+    // Los params son GLOBALES: un solo set de valores alimenta todos los bloques.
+    const url = new URL(req.url);
+    const values: Record<string, string> = {};
+    if (Array.isArray(def.params)) {
+        for (const p of def.params) {
+            const v = url.searchParams.get(p.token);
+            if (v !== null) values[p.token] = v;
         }
+    }
+
+    // ── Camino multi-bloque (tablero): resuelve cada bloque ───────────────────
+    // Un bloque que falla NO tumba el reporte: devuelve su error y los demás
+    // se renderizan igual.
+    if (Array.isArray(def.blocks) && def.blocks.length > 0) {
+        // El filtro GLOBAL de sucursales (param storeList) alimenta también los
+        // bloques 'forecast', que no usan SQL sino el motor de proyección.
+        let globalStoreIds: number[] | undefined;
+        const storeParam = (def.params || []).find((p) => p.kind === 'storeList');
+        if (storeParam) {
+            const raw = (values[storeParam.token] ?? storeParam.defaultValue ?? '').toString();
+            const ids = raw.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
+            if (ids.length) globalStoreIds = ids;
+        }
+
+        const blocks = await Promise.all(
+            def.blocks.map(async (b) => {
+                // Bloque de proyección: corre el motor de forecast del dashboard.
+                if (b.type === 'forecast') {
+                    try {
+                        const fc = b.forecast || {};
+                        const horizonDays = Math.max(1, Math.min(180, Number(fc.horizonDays) || 30));
+                        const summary = await runForecastForAgent({
+                            horizonDays,
+                            sampleSize: horizonDays,
+                            storeIds: globalStoreIds,
+                            storeNames: globalStoreIds ? undefined : fc.storeNames,
+                        });
+                        const rows = summary.forecastSample.map((p) => ({
+                            Fecha: p.fecha,
+                            'Venta proyectada': Math.round(p.predicted),
+                            'Venta mínima': Math.round(p.lower),
+                            'Venta máxima': Math.round(p.upper),
+                        }));
+                        return { ...b, rows, rowCount: rows.length };
+                    } catch (e: any) {
+                        return { ...b, rows: [], rowCount: 0, error: e?.message || 'Error en la proyección' };
+                    }
+                }
+                if (b.type === 'narrative' || !b.sql) {
+                    return { ...b, rows: [], rowCount: 0 };
+                }
+                try {
+                    const sql = assertReadOnly(substituteParams(b.sql, def.params, values));
+                    const rows = (await query(sql)) as any[];
+                    const rowLimit = typeof b.rowLimit === 'number' ? b.rowLimit : 500;
+                    return { ...b, rows: rows.slice(0, rowLimit), rowCount: rows.length };
+                } catch (e: any) {
+                    return { ...b, rows: [], rowCount: 0, error: e?.message || 'Error ejecutando el bloque' };
+                }
+            })
+        );
+        return NextResponse.json({ definition: def, blocks, ...meta });
+    }
+
+    // ── Camino single (v1): un SQL + una visualización ───────────────────────
+    try {
         const sql = assertReadOnly(substituteParams(def.sql, def.params, values));
         const rows = (await query(sql)) as any[];
         const rowLimit = typeof def.rowLimit === 'number' ? def.rowLimit : 500;
@@ -47,17 +119,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             definition: def,
             rows: limited,
             rowCount: rows.length,
-            title: report.titulo,
-            descripcion: report.descripcion,
-            modelo: report.modelo,
-            cost: {
-                realCostoUsd: report.realCostoUsd,
-                realCostoMxn: report.realCostoMxn,
-                estCostoMxn: report.estCostoMxn,
-                tokensInput: report.realTokensInput,
-                tokensOutput: report.realTokensOutput,
-            },
-            fechaCreacion: report.fechaCreacion,
+            ...meta,
         });
     } catch (e: any) {
         return NextResponse.json(

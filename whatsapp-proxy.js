@@ -4,8 +4,15 @@ const PORT = process.env.PORT || 8093;
 const TARGET_PORT = process.env.TARGET_PORT || 3001;
 
 const server = http.createServer((req, res) => {
-    // Solo permitimos peticiones destinadas a las APIs de WhatsApp
-    if (req.url.startsWith('/api/whatsapp')) {
+    // Permitimos las APIs de WhatsApp y los enlaces públicos compartibles
+    // (página /r/<uuid> + su API /api/share/<uuid>), que son de solo lectura por UUID.
+    // También /_next/ y favicon para que la página pública cargue sus assets y se hidrate.
+    const allowed = req.url.startsWith('/api/whatsapp')
+        || req.url.startsWith('/api/share')
+        || req.url.startsWith('/r/')
+        || req.url.startsWith('/_next/')
+        || req.url.startsWith('/favicon');
+    if (allowed) {
         console.log(`[Proxy] Reenviando ${req.method} ${req.url} al puerto ${TARGET_PORT}...`);
         
         const options = {

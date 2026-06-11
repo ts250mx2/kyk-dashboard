@@ -167,6 +167,7 @@ export interface SavedReportListItem {
     titulo: string;
     descripcion: string | null;
     visualization: string | null;
+    blockCount: number;            // > 1 = tablero multi-bloque
     realCostoUsd: number | null;
     realCostoMxn: number | null;
     estCostoMxn: number | null;
@@ -225,6 +226,7 @@ export async function listReportsByUser(userId: string): Promise<SavedReportList
             titulo: r.Titulo,
             descripcion: r.Descripcion ?? null,
             visualization: def?.visualization ?? null,
+            blockCount: Array.isArray(def?.blocks) ? def!.blocks.length : 0,
             realCostoUsd: r.RealCostoUsd != null ? Number(r.RealCostoUsd) : null,
             realCostoMxn: r.RealCostoMxn != null ? Number(r.RealCostoMxn) : null,
             estCostoMxn: r.EstCostoMxn != null ? Number(r.EstCostoMxn) : null,

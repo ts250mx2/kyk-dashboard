@@ -36,6 +36,7 @@ interface AgentDataViewProps {
     showValues?: boolean;    // etiquetas con la cantidad sobre la gráfica
     showPercent?: boolean;   // etiquetas como % del total
     alsoTable?: boolean;     // mostrar la tabla DEBAJO de la gráfica (juntas)
+    onDrill?: (value: string) => void;  // si se define, clic en una categoría (barra/rebanada/fila) hace drill-down
 }
 
 const PALETTE = {
@@ -323,14 +324,14 @@ function ElegantTable({ data, compact = false, onRowClick }: { data: Record<stri
 // ─── Subcomponente: Gráfica minimalista ───────────────────────────────────
 
 function TreemapCell(props: any) {
-    const { x, y, width, height, index, name, value, showValues, showPercent, total } = props;
+    const { x, y, width, height, index, name, value, showValues, showPercent, total, onDrill } = props;
     const fill = PALETTE.soft[index % PALETTE.soft.length];
     const showVal = (showValues || showPercent) && width > 60 && height > 40;
     const valText = showPercent && total
         ? `${((Number(value) / total) * 100).toFixed(0)}%`
         : (typeof value === 'number' ? new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 }).format(value) : '');
     return (
-        <g>
+        <g onClick={onDrill ? () => onDrill(String(name ?? '')) : undefined} style={onDrill ? { cursor: 'pointer' } : undefined}>
             <rect x={x} y={y} width={width} height={height} style={{ fill, stroke: '#fff', strokeWidth: 2 }} />
             {width > 50 && height > 22 && (
                 <text x={x + 6} y={y + 16} fill="#fff" fontSize={11} fontWeight={700}>{name}</text>
@@ -342,7 +343,7 @@ function TreemapCell(props: any) {
     );
 }
 
-function MinimalChart({ data, type, xKey, seriesKeys, showValues, showPercent }: { data: Record<string, any>[]; type: 'bar' | 'line' | 'area' | 'pie' | 'treemap'; xKey: string; seriesKeys: string[]; showValues?: boolean; showPercent?: boolean }) {
+function MinimalChart({ data, type, xKey, seriesKeys, showValues, showPercent, onDrill }: { data: Record<string, any>[]; type: 'bar' | 'line' | 'area' | 'pie' | 'treemap'; xKey: string; seriesKeys: string[]; showValues?: boolean; showPercent?: boolean; onDrill?: (value: string) => void }) {
     const numKeys = seriesKeys.length > 0 ? seriesKeys : Object.keys(data[0]).slice(1).filter(k => isNumericKey(k, data[0][k]));
     const isCurrency = numKeys.length > 0 && isCurrencyKey(numKeys[0]);
     const totals: Record<string, number> = {};
@@ -367,7 +368,9 @@ function MinimalChart({ data, type, xKey, seriesKeys, showValues, showPercent }:
 
     const commonChartProps = {
         data,
-        margin: { top: 12, right: 16, left: 0, bottom: 24 }
+        margin: { top: 12, right: 16, left: 0, bottom: 24 },
+        // Drill-down: el clic a nivel gráfica entrega la categoría del eje X (activeLabel).
+        ...(onDrill ? { onClick: (s: any) => { if (s?.activeLabel != null) onDrill(String(s.activeLabel)); } } : {}),
     };
 
     const axisProps = {
@@ -390,7 +393,7 @@ function MinimalChart({ data, type, xKey, seriesKeys, showValues, showPercent }:
     };
 
     return (
-        <div className="bg-white rounded-2xl border border-slate-100 p-5 h-[320px]">
+        <div className={cn("bg-white rounded-2xl border border-slate-100 p-5 h-[320px]", onDrill && "cursor-pointer")}>
             <ResponsiveContainer width="100%" height="100%">
                 {type === 'line' ? (
                     <LineChart {...commonChartProps}>
@@ -454,6 +457,7 @@ function MinimalChart({ data, type, xKey, seriesKeys, showValues, showPercent }:
                             innerRadius={60}
                             outerRadius={110}
                             paddingAngle={2}
+                            onClick={onDrill ? (d: any) => onDrill(String(d?.name ?? d?.payload?.[xKey] ?? '')) : undefined}
                             label={({ name, value, percent }: any) =>
                                 showValues && !showPercent
                                     ? `${name} ${formatNumber(Number(value), { currency: isCurrency, compact: true })}`
@@ -472,7 +476,7 @@ function MinimalChart({ data, type, xKey, seriesKeys, showValues, showPercent }:
                         data={data.map((r) => ({ name: String(r[xKey]), value: Number(r[numKeys[0]]) || 0 }))}
                         dataKey="value"
                         nameKey="name"
-                        content={<TreemapCell showValues={showValues} showPercent={showPercent} total={totals[numKeys[0]]} />}
+                        content={<TreemapCell showValues={showValues} showPercent={showPercent} total={totals[numKeys[0]]} onDrill={onDrill} />}
                         isAnimationActive={false}
                     >
                         <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [formatNumber(Number(v), { currency: isCurrency }), numKeys[0]]} />
@@ -507,7 +511,7 @@ function MinimalChart({ data, type, xKey, seriesKeys, showValues, showPercent }:
 
 // ─── Componente principal ─────────────────────────────────────────────────
 
-export function AgentDataView({ data, suggestedViz, question, lockViz, showValues, showPercent, alsoTable }: AgentDataViewProps) {
+export function AgentDataView({ data, suggestedViz, question, lockViz, showValues, showPercent, alsoTable, onDrill }: AgentDataViewProps) {
     const [overrideViz, setOverrideViz] = useState<Viz>('auto');
     const [dimSel, setDimSel] = useState('');   // campo de categoría elegido
     const [measSel, setMeasSel] = useState(''); // campo de valor elegido
@@ -629,13 +633,18 @@ export function AgentDataView({ data, suggestedViz, question, lockViz, showValue
                 </div>
             )}
 
+            {/* Pista de drill-down */}
+            {onDrill && (activeViz === 'table' || isChart) && (
+                <p className="text-[11px] text-indigo-500 font-medium px-1">Haz clic en una categoría para ver el detalle</p>
+            )}
+
             {/* Vista activa */}
             {activeViz === 'kpi' && <KpiCards data={data} />}
-            {activeViz === 'table' && <ElegantTable data={data} onRowClick={setDetailRow} />}
+            {activeViz === 'table' && <ElegantTable data={data} onRowClick={onDrill ? (row) => onDrill(String(row[dimKey] ?? '')) : setDetailRow} />}
             {isChart && (
                 <>
-                    <MinimalChart data={data} type={activeViz as any} xKey={dimKey} seriesKeys={chartSeries} showValues={showValues} showPercent={showPercent} />
-                    {alsoTable && <ElegantTable data={data} onRowClick={setDetailRow} />}
+                    <MinimalChart data={data} type={activeViz as any} xKey={dimKey} seriesKeys={chartSeries} showValues={showValues} showPercent={showPercent} onDrill={onDrill} />
+                    {alsoTable && <ElegantTable data={data} onRowClick={onDrill ? (row) => onDrill(String(row[dimKey] ?? '')) : setDetailRow} />}
                 </>
             )}
 

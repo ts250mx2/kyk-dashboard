@@ -9,9 +9,13 @@ export async function middleware(request: NextRequest) {
     const session = request.cookies.get('session');
     const { pathname } = request.nextUrl;
 
-    // 1. Si está activa la variable ONLY_WHATSAPP, bloqueamos todo excepto las APIs de WhatsApp
+    // 1. Si está activa la variable ONLY_WHATSAPP, bloqueamos todo excepto las APIs de
+    //    WhatsApp y los enlaces públicos compartibles (página /r/<uuid> + su API /api/share).
     if (process.env.ONLY_WHATSAPP === 'true') {
-        if (!pathname.startsWith('/api/whatsapp')) {
+        const isPublicShare = pathname.startsWith('/api/whatsapp')
+            || pathname.startsWith('/api/share')
+            || pathname.startsWith('/r/');
+        if (!isPublicShare) {
             console.log(`🔒 ONLY_WHATSAPP activo: Bloqueando acceso a ${pathname}`);
             return new NextResponse(
                 JSON.stringify({ error: 'Acceso denegado. Este puerto solo atiende servicios de WhatsApp.' }),
@@ -24,8 +28,9 @@ export async function middleware(request: NextRequest) {
     const allCookies = request.cookies.getAll().map(c => c.name).join(', ');
     console.log(`🔍 Middleware [${pathname}]: Session set: ${!!session}. All cookies: [${allCookies}]`);
 
-    // 2. Permitir acceso a la página de login y a las APIs en modo normal sin protección de sesión general
-    if (pathname === '/login' || pathname.startsWith('/api')) {
+    // 2. Permitir acceso a la página de login, a las APIs y a los enlaces públicos
+    //    compartibles (/r/<uuid>) en modo normal sin protección de sesión general
+    if (pathname === '/login' || pathname.startsWith('/api') || pathname.startsWith('/r/')) {
         // Si el usuario ya tiene sesión activa e intenta ir a login, redirigir a dashboard
         if (session && pathname === '/login') {
             try {

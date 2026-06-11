@@ -6,9 +6,10 @@ import { assertReadOnly } from '@/lib/sql-sandbox';
 import { query } from '@/lib/db';
 import { getModel } from '@/lib/advanced-reports/models';
 import { normalizeViz } from '@/lib/advanced-reports/tools';
-import { ADVANCED_REPORT_SCHEMA_VERSION, type AdvancedReportDefinition } from '@/lib/advanced-reports/types';
+import { ADVANCED_REPORT_SCHEMA_VERSION, type AdvancedReportDefinition, type ReportBlock, type ReportBlockType } from '@/lib/advanced-reports/types';
 import { createReport, updateReport, insertReportRun, getReportById } from '@/lib/advanced-reports/reports-store';
 import { substituteParams } from '@/lib/advanced-reports/params';
+import { runForecastForAgent } from '@/lib/forecast/agent-tools';
 import { costUsd, costMxn, USD_MXN_RATE } from '@/lib/pricing';
 import { recordMetric } from '@/lib/metrics';
 
@@ -46,7 +47,176 @@ export async function POST(req: Request) {
     const editId = Number(body?.idReporte);
     const overwrite = body?.mode === 'overwrite' && Number.isFinite(editId) && editId > 0;
 
+    const proposalBlocks: any[] | null = Array.isArray(proposal?.blocks) && proposal.blocks.length > 0 ? proposal.blocks : null;
+
     try {
+        // ════════════════════════════════════════════════════════════════════
+        // CAMINO MULTI-BLOQUE (tablero). Ejecuta el SQL de cada bloque, genera UNA
+        // narrativa del conjunto y guarda la definición con `blocks`.
+        // ════════════════════════════════════════════════════════════════════
+        if (proposalBlocks) {
+            const norm = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const blocksSig = (bs: any[]) => JSON.stringify((bs || []).map((b: any) => ({ t: b?.type, sql: norm(b?.sql || ''), kpis: b?.kpis || null })));
+
+            // Atajo solo-presentación al editar: si el SQL de los bloques y los params
+            // no cambian, solo redibuja (sin correr consultas ni IA → sin costo).
+            if (overwrite) {
+                const existing = await getReportById(userId, editId);
+                if (existing?.definition?.blocks?.length) {
+                    const sameBlocks = blocksSig(existing.definition.blocks) === blocksSig(proposalBlocks);
+                    const sameParams = JSON.stringify(existing.definition.params || []) === JSON.stringify(proposal.params || existing.definition.params || []);
+                    if (sameBlocks && sameParams) {
+                        // Mezcla SOLO presentación (title/visualization/chartConfig/kpis) por id; conserva el SQL.
+                        const byId = new Map<string, any>((proposalBlocks).map((b: any, i: number) => [String(b?.id || `b${i + 1}`), b]));
+                        const merged: ReportBlock[] = existing.definition.blocks.map((eb, i) => {
+                            const nb = byId.get(String(eb.id || `b${i + 1}`));
+                            if (!nb) return eb;
+                            return {
+                                ...eb,
+                                title: nb.title ?? eb.title,
+                                visualization: eb.type === 'chart' ? normalizeViz(nb.visualization || eb.visualization) : eb.visualization,
+                                chartConfig: nb.chartConfig ?? eb.chartConfig,
+                                kpis: eb.type === 'kpis' && Array.isArray(nb.kpis) ? nb.kpis : eb.kpis,
+                            };
+                        });
+                        const definition: AdvancedReportDefinition = {
+                            ...existing.definition,
+                            title: name,
+                            description: proposal.description ?? existing.definition.description,
+                            blocks: merged,
+                        };
+                        await updateReport(userId, editId, definition, undefined, existing.modelo || undefined, USD_MXN_RATE);
+                        return NextResponse.json({
+                            idReporte: editId, url: `/dashboard/saved/${editId}`, title: name, overwrite: true, presentationOnly: true,
+                            cost: { tokensInput: 0, tokensOutput: 0, costUsd: 0, costMxn: 0, usdMxnRate: USD_MXN_RATE },
+                        });
+                    }
+                }
+            }
+
+            // Valida + corre cada bloque (con los defaults de los params) y arma un digest para la narrativa.
+            const normalizedBlocks: ReportBlock[] = [];
+            const digest: Array<{ title: string; type: string; rowCount: number; sample: any[] }> = [];
+            for (let i = 0; i < proposalBlocks.length; i++) {
+                const b = proposalBlocks[i];
+                const allowed: ReportBlockType[] = ['kpis', 'chart', 'table', 'narrative', 'forecast'];
+                const type: ReportBlockType = allowed.includes(b?.type) ? b.type : 'chart';
+                const id = String(b?.id || `b${i + 1}`);
+                if (type === 'narrative') {
+                    normalizedBlocks.push({ id, type, title: b?.title, narrative: { source: b?.narrative?.source === 'static' ? 'static' : 'ai', text: b?.narrative?.text } });
+                    continue;
+                }
+                if (type === 'forecast') {
+                    const fc = b?.forecast || {};
+                    const horizonDays = Math.max(1, Math.min(180, Number(fc.horizonDays) || 30));
+                    const storeNames = Array.isArray(fc.storeNames) ? fc.storeNames.filter((s: any) => typeof s === 'string' && s.trim()) : undefined;
+                    normalizedBlocks.push({
+                        id, type, title: b?.title,
+                        visualization: normalizeViz(b?.visualization || 'area'),
+                        chartConfig: b?.chartConfig,
+                        forecast: { horizonDays, storeNames },
+                    });
+                    // Corre la proyección para el digest (no bloquea el guardado si falla).
+                    try {
+                        const s = await runForecastForAgent({ horizonDays, sampleSize: Math.min(horizonDays, 14), storeNames });
+                        digest.push({ title: String(b?.title || `Proyección ${i + 1}`), type, rowCount: s.forecastSample.length, sample: [{ totalForecast: Math.round(s.totalForecast), avgDaily: Math.round(s.avgDaily), trendPct: s.trend, vsHistoryPct: s.projectedVsHistoryPct, mape: s.mape }] });
+                    } catch { /* noop */ }
+                    continue;
+                }
+                const rawBlockSql = String(b?.sql || '');
+                if (!rawBlockSql.trim()) continue; // bloque sin SQL → se omite
+                const runSql = assertReadOnly(substituteParams(rawBlockSql, params));
+                const rows = (await query(runSql)) as any[];
+                normalizedBlocks.push({
+                    id, type, title: b?.title,
+                    sql: rawBlockSql, // se guarda CON tokens {{...}}; el visor los sustituye al ver
+                    visualization: type === 'chart' ? normalizeViz(b?.visualization) : undefined,
+                    chartConfig: b?.chartConfig,
+                    kpis: type === 'kpis' && Array.isArray(b?.kpis) ? b.kpis : undefined,
+                    expectedColumns: Array.isArray(b?.expectedColumns) ? b.expectedColumns : undefined,
+                    drill: b?.drill?.sql ? { sql: String(b.drill.sql), title: b.drill.title, visualization: b.drill.visualization ? normalizeViz(b.drill.visualization) : undefined } : undefined,
+                });
+                digest.push({ title: String(b?.title || `Bloque ${i + 1}`), type, rowCount: rows.length, sample: rows.slice(0, 12) });
+            }
+
+            if (normalizedBlocks.length === 0) {
+                return NextResponse.json({ error: 'La propuesta no incluye bloques con SQL válido' }, { status: 400 });
+            }
+
+            // UNA sola llamada de IA: lectura accionable del tablero completo.
+            const prompt = `Eres un consultor senior de retail. Analiza este TABLERO ("${name}") compuesto por varios bloques y entrega una lectura accionable del CONJUNTO.
+BLOQUES: ${JSON.stringify(digest).slice(0, 8000)}
+
+Responde SOLO con JSON válido (sin markdown), en español:
+{
+  "insights": ["3-4 hallazgos concretos con cifras (usa **negritas** Markdown)"],
+  "recommendations": ["1-3 acciones recomendadas"]
+}`;
+            let text = '';
+            let inTok = 0;
+            let outTok = 0;
+            if (digest.some((d) => d.rowCount > 0)) {
+                if (model.provider === 'anthropic') {
+                    const resp = await anthropic.messages.create({ model: model.id, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] });
+                    text = (resp.content.find((c: any) => c.type === 'text') as any)?.text || '';
+                    inTok = resp.usage?.input_tokens || 0;
+                    outTok = resp.usage?.output_tokens || 0;
+                } else {
+                    const resp = await openai.chat.completions.create({ model: model.id, max_tokens: 1200, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } });
+                    text = resp.choices[0]?.message?.content || '';
+                    inTok = resp.usage?.prompt_tokens || 0;
+                    outTok = resp.usage?.completion_tokens || 0;
+                }
+            }
+            const parsed = parseJsonLoose(text);
+            const insights = Array.isArray(parsed.insights) && parsed.insights.length ? parsed.insights : (Array.isArray(proposal.insights) ? proposal.insights : []);
+            const recommendations = Array.isArray(parsed.recommendations) && parsed.recommendations.length ? parsed.recommendations : (Array.isArray(proposal.recommendations) ? proposal.recommendations : []);
+            const usd = costUsd(inTok, outTok, model.inputUsdPerMTok, model.outputUsdPerMTok);
+            const mxn = costMxn(usd);
+
+            // sql/visualization de raíz: representativos (primer bloque con SQL / primer chart) para
+            // consumidores legacy (galería, Modo IA del visor) que aún leen el formato single.
+            const firstWithSql = normalizedBlocks.find((b) => b.sql);
+            const firstChart = normalizedBlocks.find((b) => b.type === 'chart' && b.visualization);
+
+            const definition: AdvancedReportDefinition = {
+                schemaVersion: ADVANCED_REPORT_SCHEMA_VERSION,
+                title: name,
+                description: proposal.description ? String(proposal.description).slice(0, 1000) : undefined,
+                sql: firstWithSql?.sql || '',
+                expectedColumns: firstWithSql?.expectedColumns || [],
+                visualization: normalizeViz(firstChart?.visualization || 'table'),
+                blocks: normalizedBlocks,
+                drill: proposal.drill?.sql ? { sql: String(proposal.drill.sql), title: proposal.drill.title, visualization: proposal.drill.visualization ? normalizeViz(proposal.drill.visualization) : undefined } : undefined,
+                params,
+                insights,
+                recommendations,
+                suggestedQuestions: Array.isArray(proposal.suggestedQuestions) ? proposal.suggestedQuestions : [],
+                createdWith: { model: model.id, createdAt: new Date().toISOString() },
+            };
+
+            const real = { tokensInput: inTok, tokensOutput: outTok, costoUsd: usd, costoMxn: mxn };
+            const idReporte = overwrite
+                ? await updateReport(userId, editId, definition, real, model.id, USD_MXN_RATE)
+                : await createReport({ userId, definition, real, usdMxnRate: USD_MXN_RATE, model: model.id });
+
+            await insertReportRun({
+                userId, idReporte, prompt: `BUILD (tablero ${normalizedBlocks.length} bloques): ${name}`,
+                model: model.id, turnos: 1, tokensInput: inTok, tokensOutput: outTok,
+                costoUsd: usd, costoMxn: mxn, usdMxnRate: USD_MXN_RATE, status: 'ok', latenciaMs: Date.now() - startTime,
+            });
+            void recordMetric({
+                userId, endpoint: '/api/agent/advanced/build', model: model.id,
+                tokensInput: inTok, tokensOutput: outTok, latencyMs: Date.now() - startTime, status: 'ok',
+                extra: { idReporte, costoUsd: usd, costoMxn: mxn, blocks: normalizedBlocks.length },
+            });
+
+            return NextResponse.json({
+                idReporte, url: `/dashboard/saved/${idReporte}`, title: name, overwrite,
+                cost: { tokensInput: inTok, tokensOutput: outTok, costUsd: usd, costMxn: mxn, usdMxnRate: USD_MXN_RATE },
+            });
+        }
+
         // ── SOLO PRESENTACIÓN: si editamos y el SQL/params NO cambian, no recalcular
         //    (sin correr la consulta ni llamar a la IA → sin costo). Solo redibuja.
         if (overwrite) {
@@ -142,6 +312,7 @@ Responde SOLO con JSON válido (sin markdown), en español:
             visualization: normalizeViz(proposal.visualization),
             chartConfig: proposal.chartConfig,
             kpis: Array.isArray(proposal.kpis) ? proposal.kpis : undefined,
+            drill: proposal.drill?.sql ? { sql: String(proposal.drill.sql), title: proposal.drill.title, visualization: proposal.drill.visualization ? normalizeViz(proposal.drill.visualization) : undefined } : undefined,
             params: params,
             insights,
             recommendations,

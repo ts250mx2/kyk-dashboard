@@ -119,6 +119,76 @@ export const ADVANCED_TOOLS: any[] = [
                 description: { type: 'string', description: 'Descripción corta de qué muestra el reporte.' },
                 sql: { type: 'string', description: 'El MISMO SQL validado con build_report (SELECT/WITH, un statement, sin ; final).' },
                 visualization: { type: 'string', enum: ['table', 'bar', 'line', 'pie', 'area', 'treemap'], description: 'Cómo se grafica: bar=comparativas · line/area=series temporales · pie=distribución · treemap=rectángulos proporcionales (cuando el usuario pida "rectángulos", "treemap" o "mapa de árbol") · table=detalle.' },
+                blocks: {
+                    type: 'array',
+                    description: 'OPCIONAL — SOLO para reportes AVANZADOS tipo TABLERO con varias vistas. Cada bloque tiene su PROPIA consulta y visualización; los "params" del reporte son GLOBALES (un solo control de período/sucursal mueve TODOS los bloques, usando los mismos {{token}} en cada SQL). VALIDA CADA bloque con build_report antes de proponer (puedes encadenar varios build_report en el mismo turno). Orden recomendado: kpis arriba → chart de tendencia → chart de ranking → table de detalle → narrative. Máx 6 bloques. Si una sola vista basta, NO uses blocks: usa sql + visualization.',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: { type: 'string', description: 'identificador corto y estable del bloque (ej. "kpis", "tendencia", "top", "detalle", "proyeccion").' },
+                            type: { type: 'string', enum: ['kpis', 'chart', 'table', 'narrative', 'forecast'], description: 'kpis=tarjetas de indicadores · chart=gráfica · table=tabla de detalle · narrative=comentario del analista · forecast=proyección de ventas a futuro (motor del dashboard; NO lleva sql).' },
+                            title: { type: 'string', description: 'Título del bloque (ej. "Tendencia diaria", "Top 10 productos", "Proyección próximos 30 días").' },
+                            sql: { type: 'string', description: 'SELECT/WITH del bloque (un statement, sin ; final). Usa los {{token}} de los params globales. No aplica a type narrative ni forecast.' },
+                            visualization: { type: 'string', enum: ['table', 'bar', 'line', 'pie', 'area', 'treemap'], description: 'Para type chart (y forecast; default area).' },
+                            forecast: {
+                                type: 'object',
+                                description: 'SOLO para type forecast: proyección de ventas a futuro (no usa SQL; el sistema corre el modelo). No requiere build_report.',
+                                properties: {
+                                    horizonDays: { type: 'number', description: 'Días a proyectar (1-180). "semana"=7, "quincena"=15, "mes"=30, "trimestre"=90. Default 30.' },
+                                    storeNames: { type: 'array', items: { type: 'string' }, description: 'Nombres parciales de sucursales (LIKE). Omite para usar el filtro global de sucursales del tablero.' },
+                                },
+                            },
+                            chartConfig: {
+                                type: 'object',
+                                description: 'Opciones de presentación del bloque.',
+                                properties: {
+                                    showValues: { type: 'boolean' },
+                                    showPercent: { type: 'boolean' },
+                                    lockViz: { type: 'boolean' },
+                                    withTable: { type: 'boolean' },
+                                },
+                            },
+                            kpis: {
+                                type: 'array',
+                                description: 'Para type kpis: tarjetas calculadas sobre las filas del bloque.',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        label: { type: 'string' },
+                                        column: { type: 'string' },
+                                        agg: { type: 'string', enum: ['sum', 'avg', 'min', 'max', 'count'] },
+                                        format: { type: 'string', enum: ['currency', 'number', 'percent'] },
+                                    },
+                                    required: ['label', 'column', 'agg'],
+                                },
+                            },
+                            expectedColumns: {
+                                type: 'array',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        key: { type: 'string' },
+                                        label: { type: 'string' },
+                                        role: { type: 'string', enum: ['dimension', 'measure', 'temporal'] },
+                                        format: { type: 'string', enum: ['currency', 'number', 'percent', 'date', 'text'] },
+                                    },
+                                    required: ['key', 'role'],
+                                },
+                            },
+                            drill: {
+                                type: 'object',
+                                description: 'OPCIONAL — DRILL-DOWN del bloque: al hacer clic en una categoría (barra/rebanada/fila) abre el detalle. "sql" usa el token {{clicked}} (valor clickeado; el sistema lo entrecomilla) y puede usar los {{token}} de los params globales. Filtra por la MISMA columna que es la dimensión/eje del bloque (ej. si agrupa por Tienda: ...WHERE Tienda = {{clicked}}).',
+                                properties: {
+                                    sql: { type: 'string', description: 'SELECT/WITH de detalle (un statement, sin ; final) con {{clicked}}.' },
+                                    title: { type: 'string', description: 'Título del panel; puede incluir {{clicked}} (ej. "Ventas de {{clicked}}").' },
+                                    visualization: { type: 'string', enum: ['table', 'bar', 'line', 'pie', 'area', 'treemap'], description: 'Cómo mostrar el detalle (default table).' },
+                                },
+                                required: ['sql'],
+                            },
+                        },
+                        required: ['id', 'type'],
+                    },
+                },
                 expectedColumns: {
                     type: 'array',
                     description: 'Columnas del SELECT en ORDEN (la primera suele ser la dimensión/eje X; las numéricas, las series).',
@@ -160,6 +230,16 @@ export const ADVANCED_TOOLS: any[] = [
                         },
                         required: ['label', 'column', 'agg'],
                     },
+                },
+                drill: {
+                    type: 'object',
+                    description: 'OPCIONAL — DRILL-DOWN del reporte (single, sin blocks): al hacer clic en una categoría (barra/rebanada/fila) abre el detalle. "sql" usa el token {{clicked}} (valor clickeado; el sistema lo entrecomilla) y puede usar los {{token}} de los params. Filtra por la MISMA columna que es la dimensión/eje (ej. ...WHERE Tienda = {{clicked}}).',
+                    properties: {
+                        sql: { type: 'string', description: 'SELECT/WITH de detalle (un statement, sin ; final) con {{clicked}}.' },
+                        title: { type: 'string', description: 'Título del panel; puede incluir {{clicked}} (ej. "Ventas de {{clicked}}").' },
+                        visualization: { type: 'string', enum: ['table', 'bar', 'line', 'pie', 'area', 'treemap'], description: 'Cómo mostrar el detalle (default table).' },
+                    },
+                    required: ['sql'],
                 },
                 complexity: {
                     type: 'string',
@@ -288,6 +368,37 @@ COMPONENTES que puedes agregar al reporte (eres una extensión de Claude que dis
   AUTOMÁTICAMENTE botones con los departamentos reales (un clic filtra; "Todos" limpia).
 - MODAL DE DETALLE: ya es automático — al hacer clic en una fila de la tabla se abre un modal con su
   detalle. Si el usuario quiere ver detalle por fila, asegúrate de incluir la tabla (withTable o viz table).
+
+REPORTES MULTI-BLOQUE (TABLEROS) — cuando una sola gráfica NO alcanza:
+- Úsalos para peticiones tipo "reporte completo", "tablero", "dashboard", "panorama general", o
+  cuando el usuario hace VARIAS preguntas que conviene responder juntas en una sola pantalla.
+- En propose_report llena el arreglo "blocks": cada bloque es una vista con su PROPIO sql y su
+  propia visualization. Los "params" siguen siendo GLOBALES: declara período/sucursal/etc. UNA vez a
+  nivel reporte y usa los MISMOS {{token}} en el SQL de cada bloque → un solo control mueve todo.
+- Estructura recomendada (de arriba hacia abajo):
+    1) type 'kpis'  → totales del período (venta total, ticket promedio, # tickets) con sus "kpis".
+    2) type 'chart' → tendencia temporal (line/area).
+    3) type 'chart' → ranking/comparativa (bar o treemap; ej. top sucursales o productos).
+    4) type 'table' → detalle.
+    5) type 'narrative' (opcional) → comentario corto del analista.
+- BLOQUE DE PROYECCIÓN: usa type 'forecast' (con "forecast": {horizonDays, storeNames}) para incluir la
+  PROYECCIÓN DE VENTAS A FUTURO del dashboard dentro del tablero (ej. "y agrégame la proyección del
+  próximo mes"). NO lleva sql y NO requiere build_report; el sistema corre el modelo. Si omites
+  storeNames, usa el filtro global de sucursales del tablero.
+- VALIDA CADA bloque CON SQL con build_report (uno por bloque) antes de proponer; puedes encadenar
+  varios build_report en el MISMO turno. Los bloques 'forecast' y 'narrative' no se validan. Máximo 6 bloques.
+- Si una sola vista responde la pregunta, NO uses blocks: usa el sql + visualization de siempre.
+
+DRILL-DOWN (detalle al hacer clic): cuando un gráfico/tabla muestre categorías AGREGADAS (por
+sucursal, producto, departamento, día…) y aporte poder hacer clic para ver el desglose, declara
+"drill" en ESE bloque (o en el reporte single):
+- "drill.sql": SELECT de detalle que filtra por la categoría clickeada usando el token {{clicked}}
+  en la MISMA columna que es la dimensión/eje del gráfico. Ej. si el bloque agrupa ventas por Tienda:
+  SELECT [Fecha Venta], [Folio Venta], Total FROM Ventas WHERE Tienda = {{clicked}}
+  AND [Fecha Venta] >= {{desde}} AND [Fecha Venta] <= {{hasta}}  (puede reusar los params globales).
+- NO pongas comillas alrededor de {{clicked}} (el sistema lo sustituye por el valor entrecomillado y seguro).
+- "drill.title" puede incluir {{clicked}} (ej. "Tickets de {{clicked}}"). "drill.visualization": table por defecto.
+- El drill NO se valida con build_report; asegúrate de que la columna del WHERE exista y empate la dimensión del bloque.
 
 ¿RECALCULAR O SOLO REDISEÑAR? (tú lo decides):
 - Si el cambio toca los DATOS (nuevo filtro, otra dimensión/agrupación, otro período, otra métrica o

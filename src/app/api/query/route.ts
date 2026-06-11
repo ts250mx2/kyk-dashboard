@@ -481,7 +481,17 @@ algún incidente operativo."
 `;
 
         let isAnthropic = selectedModel.includes('claude');
-        const anthropicModel = ANTHROPIC_MODEL; // configurable vía .env (ANTHROPIC_MODEL)
+        // Modelos Claude que el cliente puede elegir. Si pide uno válido lo respetamos;
+        // si no, caemos al default configurable por .env (ANTHROPIC_MODEL).
+        const ALLOWED_ANTHROPIC_MODELS = new Set([
+            'claude-fable-5',
+            'claude-opus-4-8',
+            'claude-sonnet-4-6',
+            'claude-haiku-4-5-20251001',
+        ]);
+        const anthropicModel = (isAnthropic && ALLOWED_ANTHROPIC_MODELS.has(selectedModel))
+            ? selectedModel
+            : ANTHROPIC_MODEL;
         // Reportar el modelo REAL que corre (no el default del cliente en localStorage).
         // En el fallback a OpenAI (catch más abajo) se sobreescribe a 'gpt-4o'.
         if (isAnthropic) selectedModel = anthropicModel;

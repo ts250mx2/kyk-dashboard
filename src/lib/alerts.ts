@@ -53,6 +53,35 @@ export async function ensureAlertTables(): Promise<void> {
                 INDEX IX_AlertHist_Alerta (IdAlerta, FechaDisparo DESC)
             )
         `);
+        // Migración: teléfono para notificar la alerta por WhatsApp (push proactivo).
+        await query(`IF COL_LENGTH('tblAgentAlertas', 'Telefono') IS NULL ALTER TABLE tblAgentAlertas ADD Telefono VARCHAR(40) NULL`);
+        // Multi-número: ensanchar Telefono para guardar varios separados por coma.
+        await query(`IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='tblAgentAlertas' AND COLUMN_NAME='Telefono' AND CHARACTER_MAXIMUM_LENGTH < 500)
+                     ALTER TABLE tblAgentAlertas ALTER COLUMN Telefono NVARCHAR(500) NULL`);
+        // Clave: identifica alertas de sistema (inicio_operaciones, resumen_dia, hallazgos_dia).
+        await query(`IF COL_LENGTH('tblAgentAlertas', 'Clave') IS NULL ALTER TABLE tblAgentAlertas ADD Clave VARCHAR(50) NULL`);
+        // Destinatarios COMPARTIDOS de las alertas de sistema (una lista por usuario).
+        await query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tblAgentAlertConfig' AND xtype='U')
+            CREATE TABLE tblAgentAlertConfig (
+                IdUsuario VARCHAR(64) NOT NULL PRIMARY KEY,
+                TelefonosSistema NVARCHAR(1000) NULL,
+                FechaActualizacion DATETIME NOT NULL DEFAULT GETDATE()
+            )
+        `);
+        // Modelo de IA para narrar las alertas de sistema (NULL = default del server).
+        await query(`IF COL_LENGTH('tblAgentAlertConfig', 'Modelo') IS NULL ALTER TABLE tblAgentAlertConfig ADD Modelo VARCHAR(64) NULL`);
+        // Dedup de "inicio de operaciones": una fila por usuario + sucursal + día.
+        await query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tblAgentInicioLog' AND xtype='U')
+            CREATE TABLE tblAgentInicioLog (
+                IdUsuario VARCHAR(64) NOT NULL,
+                IdTienda INT NOT NULL,
+                Fecha DATE NOT NULL,
+                FechaAviso DATETIME NOT NULL DEFAULT GETDATE(),
+                PRIMARY KEY (IdUsuario, IdTienda, Fecha)
+            )
+        `);
         tablesEnsured = true;
     } catch (e) {
         console.error('No se pudo asegurar tablas de alertas:', e);
@@ -61,7 +90,7 @@ export async function ensureAlertTables(): Promise<void> {
 }
 
 export type CondicionTipo = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'neq' | 'has_rows';
-export type Frecuencia = 'hourly' | 'daily' | 'weekly';
+export type Frecuencia = '5min' | 'hourly' | 'daily' | 'weekly';
 
 export interface AlertRule {
     id: string;
@@ -74,6 +103,8 @@ export interface AlertRule {
     targetColumn: string | null;
     frequency: Frecuencia;
     active: boolean;
+    telefono?: string | null;     // uno o varios números separados por coma; WhatsApp al dispararse
+    clave?: string | null;        // si está, es una alerta de SISTEMA (no editable salvo destinatarios)
     createdAt: string;
     lastEvaluatedAt: string | null;
 }
@@ -102,6 +133,8 @@ function mapAlertRow(r: any): AlertRule {
         targetColumn: r.ColumnaObjetivo,
         frequency: r.Frecuencia as Frecuencia,
         active: !!r.Activa,
+        telefono: r.Telefono ?? null,
+        clave: r.Clave ?? null,
         createdAt: r.FechaCreacion?.toISOString?.() || String(r.FechaCreacion),
         lastEvaluatedAt: r.FechaUltimaEvaluacion
             ? (r.FechaUltimaEvaluacion?.toISOString?.() || String(r.FechaUltimaEvaluacion))
@@ -111,11 +144,127 @@ function mapAlertRow(r: any): AlertRule {
 
 export async function listAlerts(userId: string): Promise<AlertRule[]> {
     await ensureAlertTables();
+    await ensureSystemAlerts(userId);
     const rows = await query(
-        `SELECT * FROM tblAgentAlertas WHERE IdUsuario = ? ORDER BY FechaCreacion DESC`,
+        `SELECT * FROM tblAgentAlertas WHERE IdUsuario = ? ORDER BY (CASE WHEN Clave IS NULL THEN 1 ELSE 0 END), FechaCreacion DESC`,
         [userId]
     );
     return (rows as any[]).map(mapAlertRow);
+}
+
+// ─── Alertas de SISTEMA (sembradas por default) ───────────────────────────
+// El cron las atiende por su Clave (no por SQL/condición). El usuario solo
+// puede editar la lista COMPARTIDA de números (tblAgentAlertConfig).
+
+export const SYSTEM_ALERT_CLAVES = ['inicio_operaciones', 'resumen_dia', 'hallazgos_dia'] as const;
+
+const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; frequency: Frecuencia }> = [
+    {
+        clave: 'inicio_operaciones',
+        name: 'Inicio de operaciones por sucursal',
+        description: 'Avisa por WhatsApp cuando cada sucursal registra su primera venta del día.',
+        frequency: '5min',
+    },
+    {
+        clave: 'resumen_dia',
+        name: 'Resumen de operaciones del día',
+        description: 'Resumen del día por WhatsApp a las 11:00 PM.',
+        frequency: 'daily',
+    },
+    {
+        clave: 'hallazgos_dia',
+        name: 'Hallazgos más importantes del día',
+        description: 'Los hallazgos más relevantes del día por WhatsApp a las 11:00 PM.',
+        frequency: 'daily',
+    },
+];
+
+/**
+ * Crea (si faltan) las 3 alertas de sistema para el usuario. Idempotente.
+ *
+ * Los destinatarios viven POR ALERTA (columna Telefono). La lista compartida
+ * vieja (tblAgentAlertConfig.TelefonosSistema) solo se usa para sembrar las
+ * alertas nuevas y migrar una vez las que quedaron con Telefono NULL; vaciar
+ * los números de una alerta guarda '' (no NULL) para que no se re-migre.
+ */
+export async function ensureSystemAlerts(userId: string): Promise<void> {
+    await ensureAlertTables();
+    const sharedRows = await query(
+        `SELECT TOP 1 TelefonosSistema FROM tblAgentAlertConfig WHERE IdUsuario = ?`,
+        [userId]
+    );
+    const shared = ((sharedRows as any[])[0]?.TelefonosSistema || '') as string;
+
+    for (const sa of SYSTEM_ALERTS) {
+        const rows = await query(
+            `SELECT TOP 1 IdAlerta, Telefono FROM tblAgentAlertas WHERE IdUsuario = ? AND Clave = ?`,
+            [userId, sa.clave]
+        );
+        const existing = (rows as any[])[0];
+        if (existing) {
+            if (existing.Telefono == null && shared) {
+                await query(`UPDATE tblAgentAlertas SET Telefono = ? WHERE IdAlerta = ?`, [shared, existing.IdAlerta]);
+            }
+            continue;
+        }
+        await query(
+            `INSERT INTO tblAgentAlertas (IdAlerta, IdUsuario, Nombre, Descripcion, SqlConsulta,
+                CondicionTipo, CondicionValor, ColumnaObjetivo, Frecuencia, Activa, Telefono, Clave)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+            [
+                generateAlertId(), userId, sa.name, sa.description, 'SELECT 1 AS Sistema',
+                'has_rows', null, null, sa.frequency, shared || null, sa.clave
+            ]
+        );
+    }
+}
+
+/** Separa una cadena "+52...,+52..." en números individuales. */
+export function splitPhones(raw: string | null | undefined): string[] {
+    return (raw || '').split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+/** Lista COMPARTIDA de números para las alertas de sistema (por usuario). */
+export async function getSystemRecipients(userId: string): Promise<string[]> {
+    await ensureAlertTables();
+    const rows = await query(
+        `SELECT TOP 1 TelefonosSistema FROM tblAgentAlertConfig WHERE IdUsuario = ?`,
+        [userId]
+    );
+    return splitPhones((rows as any[])[0]?.TelefonosSistema);
+}
+
+export async function setSystemRecipients(userId: string, phones: string[]): Promise<void> {
+    await ensureAlertTables();
+    const joined = phones.map((p) => p.trim()).filter(Boolean).join(',').slice(0, 1000);
+    await query(
+        `MERGE tblAgentAlertConfig AS t
+         USING (SELECT ? AS IdUsuario) AS s ON t.IdUsuario = s.IdUsuario
+         WHEN MATCHED THEN UPDATE SET TelefonosSistema = ?, FechaActualizacion = GETDATE()
+         WHEN NOT MATCHED THEN INSERT (IdUsuario, TelefonosSistema) VALUES (?, ?);`,
+        [userId, joined, userId, joined]
+    );
+}
+
+/** Modelo de IA elegido para narrar las alertas de sistema (null = default del server). */
+export async function getSystemAlertModel(userId: string): Promise<string | null> {
+    await ensureAlertTables();
+    const rows = await query(
+        `SELECT TOP 1 Modelo FROM tblAgentAlertConfig WHERE IdUsuario = ?`,
+        [userId]
+    );
+    return (rows as any[])[0]?.Modelo || null;
+}
+
+export async function setSystemAlertModel(userId: string, model: string | null): Promise<void> {
+    await ensureAlertTables();
+    await query(
+        `MERGE tblAgentAlertConfig AS t
+         USING (SELECT ? AS IdUsuario) AS s ON t.IdUsuario = s.IdUsuario
+         WHEN MATCHED THEN UPDATE SET Modelo = ?, FechaActualizacion = GETDATE()
+         WHEN NOT MATCHED THEN INSERT (IdUsuario, Modelo) VALUES (?, ?);`,
+        [userId, model, userId, model]
+    );
 }
 
 export async function getAlert(userId: string, id: string): Promise<AlertRule | null> {
@@ -135,12 +284,12 @@ export async function createAlert(rule: Omit<AlertRule, 'createdAt' | 'lastEvalu
 
     await query(
         `INSERT INTO tblAgentAlertas (IdAlerta, IdUsuario, Nombre, Descripcion, SqlConsulta,
-            CondicionTipo, CondicionValor, ColumnaObjetivo, Frecuencia, Activa)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            CondicionTipo, CondicionValor, ColumnaObjetivo, Frecuencia, Activa, Telefono)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             rule.id, rule.userId, rule.name, rule.description, rule.sql,
             rule.conditionType, rule.conditionValue, rule.targetColumn,
-            rule.frequency, rule.active ? 1 : 0
+            rule.frequency, rule.active ? 1 : 0, rule.telefono ?? null
         ]
     );
 }
@@ -150,6 +299,47 @@ export async function updateAlertActive(userId: string, id: string, active: bool
     await query(
         `UPDATE tblAgentAlertas SET Activa = ? WHERE IdAlerta = ? AND IdUsuario = ?`,
         [active ? 1 : 0, id, userId]
+    );
+}
+
+/** Edita los campos de una alerta existente (no toca Activa ni fechas). */
+export async function updateAlert(
+    userId: string,
+    id: string,
+    fields: {
+        name: string;
+        description: string | null;
+        sql: string;
+        conditionType: CondicionTipo;
+        conditionValue: number | null;
+        targetColumn: string | null;
+        frequency: Frecuencia;
+        telefono: string | null;
+    }
+): Promise<void> {
+    await ensureAlertTables();
+    // Misma defensa que en createAlert: el SQL debe ser read-only.
+    assertReadOnly(fields.sql);
+
+    await query(
+        `UPDATE tblAgentAlertas
+         SET Nombre = ?, Descripcion = ?, SqlConsulta = ?, CondicionTipo = ?,
+             CondicionValor = ?, ColumnaObjetivo = ?, Frecuencia = ?, Telefono = ?
+         WHERE IdAlerta = ? AND IdUsuario = ?`,
+        [
+            fields.name, fields.description, fields.sql, fields.conditionType,
+            fields.conditionValue, fields.targetColumn, fields.frequency, fields.telefono,
+            id, userId
+        ]
+    );
+}
+
+/** Edita SOLO los números de WhatsApp de una alerta ('' = sin destinatarios). */
+export async function updateAlertPhones(userId: string, id: string, telefono: string): Promise<void> {
+    await ensureAlertTables();
+    await query(
+        `UPDATE tblAgentAlertas SET Telefono = ? WHERE IdAlerta = ? AND IdUsuario = ?`,
+        [telefono.slice(0, 500), id, userId]
     );
 }
 
@@ -211,6 +401,8 @@ export async function recordAlertEvent(opts: {
     observedValue: number | null;
     message: string;
     resultsJson: string;
+    /** false en envíos manuales: no debe contar como evaluación del cron. */
+    touchLastEvaluation?: boolean;
 }): Promise<void> {
     await ensureAlertTables();
     const eventId = 'evt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
@@ -220,6 +412,7 @@ export async function recordAlertEvent(opts: {
         [eventId, opts.alertId, opts.userId, opts.observedValue, opts.message, opts.resultsJson.slice(0, 50000)]
     );
 
+    if (opts.touchLastEvaluation === false) return;
     await query(
         `UPDATE tblAgentAlertas SET FechaUltimaEvaluacion = GETDATE() WHERE IdAlerta = ?`,
         [opts.alertId]

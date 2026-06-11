@@ -68,3 +68,13 @@ export function substituteParams(
     }
     return out;
 }
+
+/**
+ * Sustituye el token `{{clicked}}` del SQL de drill-down por el valor clickeado,
+ * como literal SQL seguro (comillas escapadas, longitud acotada). El valor llega
+ * del cliente, por eso se escapa SIEMPRE; el resultado pasa luego por assertReadOnly.
+ */
+export function substituteClicked(sql: string, clicked: string): string {
+    const safe = String(clicked ?? '').slice(0, 200).replace(/'/g, "''");
+    return sql.split('{{clicked}}').join(`'${safe}'`);
+}

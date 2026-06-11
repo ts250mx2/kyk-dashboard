@@ -22,6 +22,8 @@ export interface PdfExportOptions {
     keyInsights?: string[];
     recommendations?: string[];
     data?: Record<string, any>[];
+    /** Varias tablas (tableros multi-bloque): una sección por bloque con datos. Si se pasa, tiene prioridad sobre `data`. */
+    tables?: Array<{ title?: string; rows: Record<string, any>[] }>;
     sql?: string;
     aiModel?: string;
     suggestedReports?: Array<{ report_name: string; reason: string }>;
@@ -160,37 +162,39 @@ export function generateAnalysisPdf(opts: PdfExportOptions): jsPDF {
         y += 8;
     }
 
-    // === TABLA DE DATOS ===
-    if (opts.data && opts.data.length > 0) {
+    // === TABLAS DE DATOS ===
+    // Tableros multi-bloque → una sección por bloque (opts.tables). Reporte simple → una tabla (opts.data).
+    const tableList: Array<{ title?: string; rows: Record<string, any>[] }> =
+        (opts.tables && opts.tables.length > 0)
+            ? opts.tables.filter((t) => Array.isArray(t.rows) && t.rows.length > 0)
+            : (opts.data && opts.data.length > 0 ? [{ rows: opts.data }] : []);
+
+    for (const tbl of tableList) {
         checkPageBreak(120);
+        if (tbl.title) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.setTextColor(...COLOR_DARK);
+            const tLines = doc.splitTextToSize(safe(tbl.title), usableWidth);
+            doc.text(tLines, margin, y);
+            y += tLines.length * 15 + 2;
+        }
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
+        doc.setFontSize(9);
         doc.setTextColor(...COLOR_MUTED);
-        doc.text(`DATOS (${opts.data.length} ${opts.data.length === 1 ? 'registro' : 'registros'})`, margin, y);
+        doc.text(`${tbl.rows.length} ${tbl.rows.length === 1 ? 'registro' : 'registros'}`, margin, y);
         y += 14;
 
-        const keys = Object.keys(opts.data[0]);
-        const rows = opts.data.slice(0, 100).map(row => keys.map(k => formatCell(k, row[k])));
+        const keys = Object.keys(tbl.rows[0]);
+        const body = tbl.rows.slice(0, 100).map(row => keys.map(k => formatCell(k, row[k])));
 
         autoTable(doc, {
             startY: y,
             head: [keys],
-            body: rows,
+            body,
             theme: 'plain',
-            styles: {
-                fontSize: 8,
-                cellPadding: 6,
-                textColor: COLOR_DARK,
-                lineColor: COLOR_LIGHT,
-                lineWidth: 0.5
-            },
-            headStyles: {
-                fillColor: COLOR_LIGHT,
-                textColor: COLOR_MUTED,
-                fontStyle: 'bold',
-                fontSize: 8,
-                cellPadding: 6
-            },
+            styles: { fontSize: 8, cellPadding: 6, textColor: COLOR_DARK, lineColor: COLOR_LIGHT, lineWidth: 0.5 },
+            headStyles: { fillColor: COLOR_LIGHT, textColor: COLOR_MUTED, fontStyle: 'bold', fontSize: 8, cellPadding: 6 },
             alternateRowStyles: { fillColor: [250, 251, 253] },
             margin: { left: margin, right: margin },
             didDrawPage: () => { /* el AutoTable maneja sus propios saltos */ }
@@ -199,11 +203,11 @@ export function generateAnalysisPdf(opts: PdfExportOptions): jsPDF {
         // @ts-expect-error -- lastAutoTable existe pero no está en el tipo
         y = doc.lastAutoTable.finalY + 16;
 
-        if (opts.data.length > 100) {
+        if (tbl.rows.length > 100) {
             doc.setFont('helvetica', 'italic');
             doc.setFontSize(8);
             doc.setTextColor(...COLOR_MUTED);
-            doc.text(`Mostrando primeras 100 filas de ${opts.data.length}. Descarga el Excel para el dataset completo.`, margin, y);
+            doc.text(`Mostrando primeras 100 filas de ${tbl.rows.length}. Descarga el Excel para el dataset completo.`, margin, y);
             y += 16;
         }
     }

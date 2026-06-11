@@ -28,12 +28,23 @@ const DEFAULT_SUGGESTIONS = [
     'Resumen de cancelaciones'
 ];
 
+/** Modelos seleccionables. El backend respeta los Claude permitidos y cae a
+ *  GPT-4o para cualquier otro. Se persiste en localStorage 'ai_query_model'. */
+const CHAT_MODELS = [
+    { id: 'claude-fable-5', label: 'Fable 5' },
+    { id: 'claude-opus-4-8', label: 'Opus 4.8' },
+    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+    { id: 'gpt-4o', label: 'GPT-4o' },
+];
+const DEFAULT_CHAT_MODEL = 'claude-opus-4-8';
+
 export default function ChatFullPage() {
     const router = useRouter();
     const [messages, setMessages] = useState<Message[]>([]);
     const [defaultSuggestions, setDefaultSuggestions] = useState<string[]>([]);
     const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [chatModel, setChatModel] = useState(DEFAULT_CHAT_MODEL);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const loadDefaultSuggestions = useCallback(async () => {
@@ -65,6 +76,10 @@ export default function ChatFullPage() {
             } catch {
                 setMessages([]);
             }
+        }
+        const savedModel = localStorage.getItem('ai_query_model');
+        if (savedModel && CHAT_MODELS.some(m => m.id === savedModel)) {
+            setChatModel(savedModel);
         }
         setIsHistoryLoaded(true);
     }, []);
@@ -160,6 +175,20 @@ export default function ChatFullPage() {
                     </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                    <select
+                        value={chatModel}
+                        onChange={(e) => {
+                            const v = e.target.value;
+                            setChatModel(v);
+                            try { localStorage.setItem('ai_query_model', v); } catch { }
+                        }}
+                        title="Modelo de IA que responde"
+                        className="text-[11px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 outline-none hover:bg-slate-100 focus:border-indigo-300 cursor-pointer"
+                    >
+                        {CHAT_MODELS.map(m => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                        ))}
+                    </select>
                     <button onClick={handleClear} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400" title="Limpiar chat">
                         <Trash2 className="w-5 h-5" />
                     </button>

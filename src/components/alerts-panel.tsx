@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, BellRing, Plus, X, Trash2, Loader2, Power } from 'lucide-react';
+import { Bell, BellRing, Plus, X, Trash2, Loader2, Power, MessageCircle, Sparkles, ChevronDown, ArrowLeft, Code2, CheckCircle2, Pencil, Lock, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AlertEvent {
@@ -24,12 +24,31 @@ interface AlertRule {
     targetColumn: string | null;
     frequency: string;
     active: boolean;
+    telefono?: string | null;
+    clave?: string | null;
     createdAt: string;
     lastEvaluatedAt: string | null;
 }
 
+/** Separa "+52...,+52..." en números individuales (frontend). */
+function splitPhones(raw: string | null | undefined): string[] {
+    return (raw || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/** Normaliza a +52 por default (mismo criterio que el backend). */
+function normalizePhoneLocal(raw: string): string {
+    const t = (raw || '').trim();
+    const hadPlus = t.startsWith('+');
+    const digits = t.replace(/\D/g, '');
+    if (!digits) return '';
+    if (hadPlus) return '+' + digits;
+    if (digits.length === 10) return '+52' + digits;
+    if (digits.length === 12 && digits.startsWith('52')) return '+' + digits;
+    return '+' + digits;
+}
+
 interface AlertsPanelProps {
-    /** Cuando el usuario quiere crear una alerta desde el chat actual */
+    /** @deprecated Ya no se auto-aplica: toda alerta nueva arranca en el modo "describe". */
     onCreateFromChat?: () => CreateAlertDraft | null;
     /** Trigger externo para refrescar la lista (cuando se crea una alerta nueva) */
     refreshKey?: number;
@@ -44,7 +63,9 @@ export interface CreateAlertDraft {
     conditionType: 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'neq' | 'has_rows';
     conditionValue?: number;
     targetColumn?: string;
-    frequency: 'hourly' | 'daily' | 'weekly';
+    frequency: '5min' | 'hourly' | 'daily' | 'weekly';
+    /** Si se captura, la alerta también se envía por WhatsApp al dispararse. */
+    telefono?: string;
 }
 
 function formatRelative(iso: string): string {
@@ -67,10 +88,10 @@ const CONDITION_LABELS: Record<string, string> = {
 };
 
 const FREQUENCY_LABELS: Record<string, string> = {
-    hourly: 'Cada hora', daily: 'Diario', weekly: 'Semanal'
+    '5min': 'Cada 5 min', hourly: 'Cada hora', daily: 'Diario', weekly: 'Semanal'
 };
 
-export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: AlertsPanelProps) {
+export function AlertsPanel({ refreshKey, compact = false }: AlertsPanelProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [tab, setTab] = useState<'events' | 'rules'>('events');
     const [events, setEvents] = useState<AlertEvent[]>([]);
@@ -79,7 +100,12 @@ export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: A
     const [unreadCount, setUnreadCount] = useState(0);
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [draft, setDraft] = useState<CreateAlertDraft | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+    const [alertModel, setAlertModel] = useState<string>('');
+    const [models, setModels] = useState<Array<{ id: string; label: string }>>([]);
+    const [editingModel, setEditingModel] = useState(false);
+    const [editingPhonesRule, setEditingPhonesRule] = useState<AlertRule | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const fetchUnreadCount = useCallback(async () => {
@@ -95,9 +121,10 @@ export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: A
     const fetchAll = useCallback(async () => {
         setLoading(true);
         try {
-            const [eventsRes, rulesRes] = await Promise.all([
+            const [eventsRes, rulesRes, recipientsRes] = await Promise.all([
                 fetch('/api/agent/alerts/events?limit=20').then(r => r.json()),
-                fetch('/api/agent/alerts').then(r => r.json())
+                fetch('/api/agent/alerts').then(r => r.json()),
+                fetch('/api/agent/alerts/recipients').then(r => r.json()).catch(() => ({ phones: [] }))
             ]);
             if (Array.isArray(eventsRes.events)) {
                 setEvents(eventsRes.events);
@@ -105,6 +132,10 @@ export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: A
             }
             if (Array.isArray(rulesRes.alerts)) {
                 setRules(rulesRes.alerts);
+            }
+            setAlertModel(recipientsRes.model || '');
+            if (Array.isArray(recipientsRes.models)) {
+                setModels(recipientsRes.models);
             }
         } catch (e) {
             console.error('Error cargando panel de alertas:', e);
@@ -133,6 +164,8 @@ export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: A
             if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
                 setIsOpen(false);
                 setShowCreateForm(false);
+                setEditingModel(false);
+                setEditingPhonesRule(null);
             }
         }
         if (isOpen) document.addEventListener('mousedown', handleClickOutside);
@@ -173,14 +206,34 @@ export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: A
     };
 
     const openCreateForm = () => {
-        // Si tenemos contexto del chat actual, lo usamos
-        const fromChat = onCreateFromChat?.() ?? null;
-        setDraft(fromChat || {
+        // Toda alerta nueva arranca en el modo "describe" (conversacional).
+        setEditingId(null);
+        setDraft({
             name: '',
-            sql: 'SELECT COUNT(*) AS Total FROM Ventas WHERE CAST([Fecha Venta] AS DATE) = CAST(GETDATE() AS DATE)',
+            sql: '',
             conditionType: 'gt',
             conditionValue: 0,
-            frequency: 'hourly'
+            frequency: 'daily'
+        });
+        setShowCreateForm(true);
+    };
+
+    const openEditForm = (rule: AlertRule) => {
+        // Las alertas de sistema solo permiten editar SUS números de WhatsApp.
+        if (rule.clave) {
+            setEditingPhonesRule(rule);
+            return;
+        }
+        setEditingId(rule.id);
+        setDraft({
+            name: rule.name,
+            description: rule.description ?? undefined,
+            sql: rule.sql,
+            conditionType: rule.conditionType as CreateAlertDraft['conditionType'],
+            conditionValue: rule.conditionValue ?? undefined,
+            targetColumn: rule.targetColumn ?? undefined,
+            frequency: rule.frequency as CreateAlertDraft['frequency'],
+            telefono: rule.telefono ?? undefined,
         });
         setShowCreateForm(true);
     };
@@ -192,21 +245,98 @@ export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: A
         }
         setSaving(true);
         try {
-            const r = await fetch('/api/agent/alerts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(draft)
-            });
+            const r = await fetch(
+                editingId ? `/api/agent/alerts/${editingId}` : '/api/agent/alerts',
+                {
+                    method: editingId ? 'PATCH' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(draft)
+                }
+            );
             const data = await r.json();
             if (r.ok) {
                 setShowCreateForm(false);
                 setDraft(null);
+                setEditingId(null);
                 await fetchAll();
             } else {
-                alert(data.error || 'Error creando alerta');
+                alert(data.error || (editingId ? 'Error actualizando alerta' : 'Error creando alerta'));
             }
         } catch (e: any) {
-            alert(e.message || 'Error creando alerta');
+            alert(e.message || (editingId ? 'Error actualizando alerta' : 'Error creando alerta'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const [sendingId, setSendingId] = useState<string | null>(null);
+
+    const sendNow = async (rule: AlertRule) => {
+        const phones = splitPhones(rule.telefono);
+        if (phones.length === 0) {
+            alert('Agrega números de WhatsApp a esta alerta primero.');
+            return;
+        }
+        // Entre 00:00 y 4:00 el envío manual reporta el día que acaba de cerrar.
+        const earlyMorning = new Date().getHours() < 4;
+        const periodNote = earlyMorning ? '\n\nPor la hora, se enviará el resumen del DÍA ANTERIOR.' : '';
+        if (!confirm(`¿Enviar "${rule.name}" ahora por WhatsApp a ${phones.length} número(s)?${periodNote}`)) return;
+        setSendingId(rule.id);
+        try {
+            const r = await fetch(`/api/agent/alerts/${rule.id}/send`, { method: 'POST' });
+            const data = await r.json();
+            if (r.ok) {
+                alert(`Enviado a ${data.sent} de ${data.recipients} número(s)${data.period === 'ayer' ? ' (datos del día anterior)' : ''}.`);
+            } else {
+                alert(data.error || 'Error enviando la alerta');
+            }
+        } catch (e: any) {
+            alert(e.message || 'Error enviando la alerta');
+        } finally {
+            setSendingId(null);
+        }
+    };
+
+    const saveModel = async (model: string) => {
+        setSaving(true);
+        try {
+            const r = await fetch('/api/agent/alerts/recipients', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: model || null })
+            });
+            const data = await r.json();
+            if (r.ok) {
+                setAlertModel(data.model || '');
+                setEditingModel(false);
+            } else {
+                alert(data.error || 'Error guardando el modelo');
+            }
+        } catch (e: any) {
+            alert(e.message || 'Error guardando el modelo');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const savePhones = async (ruleId: string, phones: string[]) => {
+        setSaving(true);
+        try {
+            const r = await fetch(`/api/agent/alerts/${ruleId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefono: phones.join(',') })
+            });
+            const data = await r.json();
+            if (r.ok) {
+                const telefono = typeof data.telefono === 'string' ? data.telefono : phones.join(',');
+                setRules(prev => prev.map(x => x.id === ruleId ? { ...x, telefono } : x));
+                setEditingPhonesRule(null);
+            } else {
+                alert(data.error || 'Error guardando números');
+            }
+        } catch (e: any) {
+            alert(e.message || 'Error guardando números');
         } finally {
             setSaving(false);
         }
@@ -265,9 +395,25 @@ export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: A
                         <CreateAlertForm
                             draft={draft}
                             onChange={setDraft}
-                            onCancel={() => { setShowCreateForm(false); setDraft(null); }}
+                            onCancel={() => { setShowCreateForm(false); setDraft(null); setEditingId(null); }}
                             onSave={saveDraft}
                             saving={saving}
+                            isEditing={!!editingId}
+                        />
+                    ) : editingPhonesRule ? (
+                        <AlertPhonesEditor
+                            rule={editingPhonesRule}
+                            saving={saving}
+                            onSave={savePhones}
+                            onCancel={() => setEditingPhonesRule(null)}
+                        />
+                    ) : editingModel ? (
+                        <ModelEditor
+                            model={alertModel}
+                            models={models}
+                            saving={saving}
+                            onSave={saveModel}
+                            onCancel={() => setEditingModel(false)}
                         />
                     ) : (
                         <div className="flex-1 overflow-y-auto">
@@ -284,6 +430,10 @@ export function AlertsPanel({ onCreateFromChat, refreshKey, compact = false }: A
                                     onToggle={toggleRule}
                                     onDelete={deleteRule}
                                     onNew={openCreateForm}
+                                    onEdit={openEditForm}
+                                    onEditModel={() => setEditingModel(true)}
+                                    onSendNow={sendNow}
+                                    sendingId={sendingId}
                                 />
                             )}
                         </div>
@@ -356,17 +506,91 @@ function EventsList({ events, onMarkAllRead }: { events: AlertEvent[]; onMarkAll
     );
 }
 
-function RulesList({ rules, onToggle, onDelete, onNew }: {
+function RulesList({ rules, onToggle, onDelete, onNew, onEdit, onEditModel, onSendNow, sendingId }: {
     rules: AlertRule[];
     onToggle: (id: string, active: boolean) => void;
     onDelete: (id: string) => void;
     onNew: () => void;
+    onEdit: (rule: AlertRule) => void;
+    onEditModel: () => void;
+    onSendNow: (rule: AlertRule) => void;
+    sendingId: string | null;
 }) {
+    const systemRules = rules.filter(r => r.clave);
+    const userRules = rules.filter(r => !r.clave);
+
     return (
         <div>
+            {/* ── Alertas automáticas (de sistema) ── */}
+            {systemRules.length > 0 && (
+                <div className="bg-indigo-50/40 border-b border-indigo-100">
+                    <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 inline-flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" /> Automáticas
+                        </span>
+                        <button
+                            onClick={onEditModel}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[10.5px] font-bold rounded-lg bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                        >
+                            <Sparkles className="w-3 h-3" />
+                            Modelo de IA
+                        </button>
+                    </div>
+                    <div>
+                        {systemRules.map(r => {
+                            const phones = splitPhones(r.telefono);
+                            return (
+                                <div key={r.id} className="px-3 py-2 flex items-start gap-2 border-t border-indigo-100/60">
+                                    <Lock className="w-3.5 h-3.5 text-indigo-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[12.5px] font-bold text-slate-800 leading-snug">{r.name}</p>
+                                        {r.description && (
+                                            <p className="text-[10.5px] text-slate-500 mt-0.5 leading-snug">{r.description}</p>
+                                        )}
+                                        {phones.length > 0 ? (
+                                            <span className="inline-flex items-center gap-0.5 mt-1 text-[9.5px] font-bold text-emerald-600" title={phones.join(', ')}>
+                                                <MessageCircle className="w-3 h-3" />
+                                                {phones.length} número{phones.length > 1 ? 's' : ''}
+                                            </span>
+                                        ) : (
+                                            <span className="inline-block mt-1 text-[9.5px] font-bold text-amber-600">
+                                                Sin números — no se enviará
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex-shrink-0 flex items-center gap-1">
+                                        <button
+                                            onClick={() => onEdit(r)}
+                                            className="p-1.5 rounded-lg bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                                            title="Editar números de WhatsApp de esta alerta"
+                                        >
+                                            <Pencil className="w-3 h-3" />
+                                        </button>
+                                        {(r.clave === 'resumen_dia' || r.clave === 'hallazgos_dia') && (
+                                            <button
+                                                onClick={() => onSendNow(r)}
+                                                disabled={sendingId !== null}
+                                                className="inline-flex items-center gap-1 px-2 py-1 text-[10.5px] font-bold rounded-lg bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                                                title="Enviar ahora por WhatsApp. De 12 AM a 4 AM se envía el resumen del día anterior."
+                                            >
+                                                {sendingId === r.id
+                                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                    : <Send className="w-3 h-3" />}
+                                                Enviar
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Tus alertas ── */}
             <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    {rules.length} {rules.length === 1 ? 'alerta' : 'alertas'} configuradas
+                    {userRules.length} {userRules.length === 1 ? 'alerta tuya' : 'alertas tuyas'}
                 </span>
                 <button
                     onClick={onNew}
@@ -377,15 +601,15 @@ function RulesList({ rules, onToggle, onDelete, onNew }: {
                 </button>
             </div>
 
-            {rules.length === 0 ? (
+            {userRules.length === 0 ? (
                 <div className="p-8 flex flex-col items-center gap-2 text-slate-400 text-center">
                     <Bell className="w-8 h-8 opacity-40" />
-                    <span className="text-[12px] font-medium">No tienes alertas configuradas.</span>
+                    <span className="text-[12px] font-medium">No tienes alertas propias.</span>
                     <span className="text-[10px]">Crea una para que el sistema te avise cuando algo cambie.</span>
                 </div>
             ) : (
                 <div>
-                    {rules.map(r => (
+                    {userRules.map(r => (
                         <div key={r.id} className="px-3 py-2.5 border-b border-slate-50 last:border-b-0 group">
                             <div className="flex items-start gap-2">
                                 <div className="flex-1 min-w-0">
@@ -408,9 +632,23 @@ function RulesList({ rules, onToggle, onDelete, onNew }: {
                                             {CONDITION_LABELS[r.conditionType] || r.conditionType}
                                             {r.conditionValue !== null ? ` ${r.conditionValue}` : ''}
                                         </span>
+                                        {r.telefono && (
+                                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-600" title={`Avisa por WhatsApp a ${splitPhones(r.telefono).join(', ')}`}>
+                                                <span className="text-slate-300">·</span>
+                                                <MessageCircle className="w-3 h-3" />
+                                                WhatsApp{splitPhones(r.telefono).length > 1 ? ` (${splitPhones(r.telefono).length})` : ''}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                        onClick={() => onEdit(r)}
+                                        className="p-1.5 rounded-lg transition-colors hover:bg-indigo-100 text-indigo-600"
+                                        title="Editar"
+                                    >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                    </button>
                                     <button
                                         onClick={() => onToggle(r.id, r.active)}
                                         className={cn(
@@ -438,17 +676,429 @@ function RulesList({ rules, onToggle, onDelete, onNew }: {
     );
 }
 
-function CreateAlertForm({ draft, onChange, onCancel, onSave, saving }: {
+// ─── Editor de lista de números (chips, +52 por default) ──────────────────
+function PhoneListEditor({ phones, onChange }: { phones: string[]; onChange: (p: string[]) => void }) {
+    const [input, setInput] = useState('');
+    const add = () => {
+        const v = normalizePhoneLocal(input);
+        if (v && !phones.includes(v)) onChange([...phones, v]);
+        setInput('');
+    };
+    return (
+        <div>
+            {phones.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                    {phones.map(p => (
+                        <span key={p} className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg">
+                            <MessageCircle className="w-3 h-3" />
+                            {p}
+                            <button onClick={() => onChange(phones.filter(x => x !== p))} className="hover:text-rose-600">
+                                <X className="w-3 h-3" />
+                            </button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            <div className="flex items-center gap-2">
+                <input
+                    type="tel"
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); } }}
+                    placeholder="+52 81 1234 5678"
+                    className="flex-1 px-3 py-2 text-[12px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400"
+                />
+                <button
+                    onClick={add}
+                    disabled={!input.trim()}
+                    className="px-3 py-2 text-[12px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-40"
+                >
+                    Agregar
+                </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                Se guardan con lada +52 automáticamente. Enter o coma para agregar otro.
+            </p>
+        </div>
+    );
+}
+
+// ─── Editor de NÚMEROS por alerta (sistema: lo único editable) ────────────
+function AlertPhonesEditor({ rule, saving, onSave, onCancel }: {
+    rule: AlertRule;
+    saving: boolean;
+    onSave: (ruleId: string, phones: string[]) => void;
+    onCancel: () => void;
+}) {
+    const [list, setList] = useState<string[]>(splitPhones(rule.telefono));
+    return (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 inline-flex items-center gap-1.5">
+                    <MessageCircle className="w-3.5 h-3.5 text-indigo-500" /> Destinatarios
+                </span>
+                <button onClick={onCancel} className="p-1 hover:bg-slate-100 rounded">
+                    <X className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+            </div>
+            <p className="text-[12px] text-slate-500 leading-snug">
+                Estos números reciben por WhatsApp <span className="font-bold text-slate-700">{rule.name}</span>.
+            </p>
+
+            <PhoneListEditor phones={list} onChange={setList} />
+
+            <div className="flex gap-2 pt-1">
+                <button
+                    onClick={onCancel}
+                    className="flex-1 px-3 py-2 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+                >
+                    Cancelar
+                </button>
+                <button
+                    onClick={() => onSave(rule.id, list)}
+                    disabled={saving}
+                    className="flex-1 px-3 py-2 text-[12px] font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                    {saving && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Guardar
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── Editor del MODELO de IA (compartido por las alertas automáticas) ─────
+function ModelEditor({ model, models, saving, onSave, onCancel }: {
+    model: string;
+    models: Array<{ id: string; label: string }>;
+    saving: boolean;
+    onSave: (model: string) => void;
+    onCancel: () => void;
+}) {
+    const [selectedModel, setSelectedModel] = useState<string>(model);
+    return (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 inline-flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-500" /> Modelo de IA
+                </span>
+                <button onClick={onCancel} className="p-1 hover:bg-slate-100 rounded">
+                    <X className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+            </div>
+            <p className="text-[12px] text-slate-500 leading-snug">
+                Con este modelo se redactan el resumen y los hallazgos del día.
+            </p>
+
+            <select
+                value={selectedModel}
+                onChange={e => setSelectedModel(e.target.value)}
+                className="w-full px-2 py-2 text-[12px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400"
+            >
+                <option value="">Default del servidor</option>
+                {models.map(m => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+            </select>
+
+            <div className="flex gap-2 pt-1">
+                <button
+                    onClick={onCancel}
+                    className="flex-1 px-3 py-2 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+                >
+                    Cancelar
+                </button>
+                <button
+                    onClick={() => onSave(selectedModel)}
+                    disabled={saving}
+                    className="flex-1 px-3 py-2 text-[12px] font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                    {saving && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Guardar
+                </button>
+            </div>
+        </div>
+    );
+}
+
+interface AlertPreview {
+    ok: boolean;
+    observedValue: number | null;
+    wouldTriggerNow: boolean;
+    error?: string;
+}
+
+const ALERT_EXAMPLES = [
+    'Avísame si las cancelaciones de hoy pasan de $5,000',
+    'Dime cuando un retiro supere $10,000',
+    'Avísame si las ventas del día bajan de $20,000',
+    'Cuando haya una cancelación mayor a $1,000',
+];
+
+function fallbackSummary(d: CreateAlertDraft): string {
+    const freq = (FREQUENCY_LABELS[d.frequency] || d.frequency).toLowerCase();
+    if (d.conditionType === 'has_rows') {
+        return `Te avisaré (${freq}) cuando la consulta encuentre resultados.`;
+    }
+    const col = d.targetColumn || 'el valor';
+    return `Te avisaré (${freq}) cuando ${col} sea ${CONDITION_LABELS[d.conditionType] || d.conditionType} ${d.conditionValue ?? ''}.`;
+}
+
+function CreateAlertForm({ draft, onChange, onCancel, onSave, saving, isEditing = false }: {
     draft: CreateAlertDraft;
     onChange: (d: CreateAlertDraft) => void;
     onCancel: () => void;
     onSave: () => void;
     saving: boolean;
+    isEditing?: boolean;
 }) {
+    const saveLabel = isEditing ? 'Guardar cambios' : 'Crear alerta';
+    // Editar o venir armado (desde el chat) arranca en revisión; si no, a describir.
+    const initialView: 'describe' | 'review' | 'advanced' = (draft.name?.trim() && draft.sql?.trim()) ? 'review' : 'describe';
+    const [view, setView] = useState<'describe' | 'review' | 'advanced'>(initialView);
+    const [nlText, setNlText] = useState('');
+    const [generating, setGenerating] = useState(false);
+    const [genError, setGenError] = useState<string | null>(null);
+    const [summary, setSummary] = useState('');
+    const [preview, setPreview] = useState<AlertPreview | null>(null);
+    const [showSql, setShowSql] = useState(false);
+
+    const generate = async () => {
+        const prompt = nlText.trim();
+        if (!prompt) return;
+        setGenerating(true);
+        setGenError(null);
+        try {
+            const r = await fetch('/api/agent/alerts/draft', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
+            const d = await r.json();
+            if (!r.ok) { setGenError(d.error || 'No pude generar la alerta.'); return; }
+            const g = d.draft;
+            onChange({
+                ...draft,
+                name: g.name || '',
+                description: g.description || undefined,
+                sql: g.sql || '',
+                conditionType: g.conditionType,
+                conditionValue: g.conditionValue,
+                targetColumn: g.targetColumn || undefined,
+                frequency: g.frequency,
+            });
+            setSummary(g.summary || '');
+            setPreview(d.preview || null);
+            setView('review');
+        } catch {
+            setGenError('Error de conexión. Intenta de nuevo.');
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    const goAdvanced = () => {
+        if (!draft.sql?.trim()) {
+            onChange({ ...draft, sql: 'SELECT COUNT(*) AS Total FROM Ventas WHERE CAST([Fecha Venta] AS DATE) = CAST(GETDATE() AS DATE)' });
+        }
+        setView('advanced');
+    };
+
+    // ─── Vista: DESCRIBE (conversacional, por defecto) ──────────────────────
+    if (view === 'describe') {
+        return (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 inline-flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-500" /> Nueva alerta
+                    </span>
+                    <button onClick={onCancel} className="p-1 hover:bg-slate-100 rounded">
+                        <X className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+                </div>
+
+                <p className="text-[12px] text-slate-500 leading-snug">
+                    Describe en tus palabras qué quieres que vigilemos. Yo armo la alerta por ti.
+                </p>
+
+                <textarea
+                    value={nlText}
+                    onChange={e => setNlText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate(); }}
+                    rows={3}
+                    autoFocus
+                    placeholder="Ej: avísame si las cancelaciones de hoy pasan de $5,000"
+                    className="w-full px-3 py-2.5 text-[13px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 resize-y"
+                />
+
+                <div className="flex flex-wrap gap-1.5">
+                    {ALERT_EXAMPLES.map(ex => (
+                        <button
+                            key={ex}
+                            onClick={() => setNlText(ex)}
+                            className="px-2.5 py-1 rounded-full text-[10.5px] bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                        >
+                            {ex}
+                        </button>
+                    ))}
+                </div>
+
+                {genError && (
+                    <div className="bg-rose-50 border border-rose-200 text-rose-600 rounded-lg p-2.5 text-[11px]">{genError}</div>
+                )}
+
+                <button
+                    onClick={generate}
+                    disabled={generating || !nlText.trim()}
+                    className="w-full px-3 py-2.5 text-[13px] font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                    {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {generating ? 'Armando tu alerta…' : 'Generar alerta'}
+                </button>
+
+                <div className="flex items-center justify-between pt-1">
+                    <button onClick={goAdvanced} className="text-[10.5px] font-bold text-slate-400 hover:text-slate-600 inline-flex items-center gap-1">
+                        <Code2 className="w-3 h-3" /> Prefiero escribir el SQL yo
+                    </button>
+                    <button onClick={onCancel} className="text-[10.5px] font-bold text-slate-400 hover:text-slate-600">Cancelar</button>
+                </div>
+            </div>
+        );
+    }
+
+    // ─── Vista: REVIEW (resumen claro + ajustes simples) ────────────────────
+    if (view === 'review') {
+        const text = summary || fallbackSummary(draft);
+        return (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-500">{isEditing ? 'Editar alerta' : 'Revisa tu alerta'}</span>
+                    <button onClick={onCancel} className="p-1 hover:bg-slate-100 rounded">
+                        <X className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+                </div>
+
+                {/* Resumen en lenguaje claro */}
+                <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3">
+                    <div className="flex items-start gap-2">
+                        <Sparkles className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-[13px] text-slate-700 leading-snug font-medium">{text}</p>
+                    </div>
+                    {preview && (
+                        <div className="mt-2 pt-2 border-t border-indigo-100/80 text-[11px] leading-snug">
+                            {preview.ok ? (
+                                <span className="text-slate-600">
+                                    {draft.conditionType === 'has_rows'
+                                        ? `Ahorita hay ${preview.observedValue ?? 0} coincidencia(s). `
+                                        : `Valor actual: ${preview.observedValue !== null ? preview.observedValue.toLocaleString('es-MX') : '—'}. `}
+                                    {preview.wouldTriggerNow
+                                        ? <span className="font-bold text-rose-600">Con esto se dispararía ahora mismo.</span>
+                                        : <span className="text-emerald-600 inline-flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> No se dispararía todavía.</span>}
+                                </span>
+                            ) : (
+                                <span className="text-amber-600">No pude probar la consulta ahorita, pero puedes guardarla igual.</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Nombre */}
+                <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Nombre de la alerta</label>
+                    <input
+                        type="text"
+                        value={draft.name}
+                        onChange={e => onChange({ ...draft, name: e.target.value })}
+                        placeholder="Ej: Cancelaciones del día > $5K"
+                        className="w-full px-3 py-2 text-[13px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400"
+                    />
+                </div>
+
+                {/* Ajustes simples: umbral + frecuencia */}
+                <div className="grid grid-cols-2 gap-2">
+                    {draft.conditionType !== 'has_rows' && (
+                        <div>
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Umbral</label>
+                            <input
+                                type="number"
+                                value={draft.conditionValue ?? ''}
+                                onChange={e => onChange({ ...draft, conditionValue: parseFloat(e.target.value) })}
+                                className="w-full px-3 py-2 text-[12px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400"
+                            />
+                        </div>
+                    )}
+                    <div className={draft.conditionType === 'has_rows' ? 'col-span-2' : ''}>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Revisar</label>
+                        <select
+                            value={draft.frequency}
+                            onChange={e => onChange({ ...draft, frequency: e.target.value as any })}
+                            className="w-full px-2 py-2 text-[12px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400"
+                        >
+                            <option value="5min">Cada 5 minutos</option>
+                            <option value="hourly">Cada hora</option>
+                            <option value="daily">Una vez al día</option>
+                            <option value="weekly">Una vez por semana</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* WhatsApp opcional (uno o varios números) */}
+                <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Avisar por WhatsApp <span className="text-slate-300 normal-case font-medium tracking-normal">(opcional)</span>
+                    </label>
+                    <PhoneListEditor
+                        phones={splitPhones(draft.telefono)}
+                        onChange={list => onChange({ ...draft, telefono: list.join(',') })}
+                    />
+                </div>
+
+                {/* Detalles técnicos (colapsable) */}
+                <div className="border-t border-slate-100 pt-2">
+                    <button
+                        onClick={() => setShowSql(s => !s)}
+                        className="w-full flex items-center justify-between text-[10.5px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600"
+                    >
+                        <span className="inline-flex items-center gap-1"><Code2 className="w-3 h-3" /> Detalles técnicos</span>
+                        <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showSql && 'rotate-180')} />
+                    </button>
+                    {showSql && (
+                        <div className="mt-2 space-y-2">
+                            <pre className="px-3 py-2 text-[10.5px] font-mono bg-slate-50 border border-slate-200 rounded-lg whitespace-pre-wrap break-words text-slate-600 max-h-32 overflow-y-auto">{draft.sql}</pre>
+                            <button onClick={() => setView('advanced')} className="text-[10.5px] font-bold text-indigo-600 hover:text-indigo-700">
+                                Editar a detalle →
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                    <button
+                        onClick={() => { setView('describe'); setGenError(null); }}
+                        className="px-3 py-2 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"
+                    >
+                        <ArrowLeft className="w-3.5 h-3.5" /> Describir
+                    </button>
+                    <button
+                        onClick={onSave}
+                        disabled={saving || !draft.name.trim()}
+                        className="flex-1 px-3 py-2 text-[12px] font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                        {saving && <Loader2 className="w-3 h-3 animate-spin" />}
+                        {saveLabel}
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // ─── Vista: ADVANCED (SQL crudo — para usuarios técnicos) ───────────────
     return (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
             <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-500">Nueva alerta</span>
+                <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 inline-flex items-center gap-1.5">
+                    <Code2 className="w-3.5 h-3.5 text-slate-400" /> Modo avanzado
+                </span>
                 <button onClick={onCancel} className="p-1 hover:bg-slate-100 rounded">
                     <X className="w-3.5 h-3.5 text-slate-400" />
                 </button>
@@ -523,6 +1173,7 @@ function CreateAlertForm({ draft, onChange, onCancel, onSave, saving }: {
                         onChange={e => onChange({ ...draft, frequency: e.target.value as any })}
                         className="w-full px-2 py-2 text-[12px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400"
                     >
+                        <option value="5min">Cada 5 minutos</option>
                         <option value="hourly">Cada hora</option>
                         <option value="daily">Diaria</option>
                         <option value="weekly">Semanal</option>
@@ -530,12 +1181,22 @@ function CreateAlertForm({ draft, onChange, onCancel, onSave, saving }: {
                 </div>
             </div>
 
+            <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    WhatsApp <span className="text-slate-300 normal-case font-medium tracking-normal">(opcional, uno o varios)</span>
+                </label>
+                <PhoneListEditor
+                    phones={splitPhones(draft.telefono)}
+                    onChange={list => onChange({ ...draft, telefono: list.join(',') })}
+                />
+            </div>
+
             <div className="flex gap-2 pt-2">
                 <button
-                    onClick={onCancel}
-                    className="flex-1 px-3 py-2 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+                    onClick={() => setView(initialView)}
+                    className="px-3 py-2 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"
                 >
-                    Cancelar
+                    <ArrowLeft className="w-3.5 h-3.5" /> Volver
                 </button>
                 <button
                     onClick={onSave}
@@ -543,7 +1204,7 @@ function CreateAlertForm({ draft, onChange, onCancel, onSave, saving }: {
                     className="flex-1 px-3 py-2 text-[12px] font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                     {saving && <Loader2 className="w-3 h-3 animate-spin" />}
-                    Crear alerta
+                    {saveLabel}
                 </button>
             </div>
         </div>

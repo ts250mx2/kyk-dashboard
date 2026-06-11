@@ -14,7 +14,7 @@ interface ModelOption { id: string; label: string; provider: string; inputUsdPer
 interface Proposal {
     title?: string; description?: string; sql?: string; visualization?: string;
     expectedColumns?: any[]; insights?: string[]; recommendations?: string[]; suggestedQuestions?: string[]; params?: any[];
-    complexity?: string; recommendedModel?: string;
+    blocks?: any[]; complexity?: string; recommendedModel?: string;
 }
 interface Session {
     id: string;
@@ -547,11 +547,30 @@ export default function AgentConsolePage() {
                             {/* Resumen del reporte a crear */}
                             <div className="bg-white/5 rounded-lg p-3 space-y-1.5">
                                 <div className="text-[11px] text-slate-500 uppercase tracking-wider">Resumen del reporte</div>
-                                <div className="text-[13px] text-[#d6deeb]">
-                                    Gráfica: <b className="text-indigo-300">{VIZ_LABELS[active.proposal.visualization || "table"] || active.proposal.visualization}</b>
-                                </div>
-                                {Array.isArray(active.proposal.expectedColumns) && active.proposal.expectedColumns.length > 0 && (
-                                    <div className="text-[12px] text-slate-400">Columnas: {active.proposal.expectedColumns.map((c: any) => c.label || c.key).join(", ")}</div>
+                                {Array.isArray(active.proposal.blocks) && active.proposal.blocks.length > 0 ? (
+                                    <>
+                                        <div className="text-[13px] text-[#d6deeb]">
+                                            Tablero: <b className="text-indigo-300">{active.proposal.blocks.length} bloque(s)</b>
+                                        </div>
+                                        <div className="text-[12px] text-slate-400">
+                                            {active.proposal.blocks.map((b: any, i: number) => {
+                                                const label = b?.type === "kpis" ? "KPIs"
+                                                    : b?.type === "table" ? "Tabla"
+                                                        : b?.type === "narrative" ? "Nota"
+                                                            : (VIZ_LABELS[b?.visualization || "bar"] || b?.visualization || "Gráfica");
+                                                return `${b?.title || `Bloque ${i + 1}`} (${label})`;
+                                            }).join(" · ")}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="text-[13px] text-[#d6deeb]">
+                                            Gráfica: <b className="text-indigo-300">{VIZ_LABELS[active.proposal.visualization || "table"] || active.proposal.visualization}</b>
+                                        </div>
+                                        {Array.isArray(active.proposal.expectedColumns) && active.proposal.expectedColumns.length > 0 && (
+                                            <div className="text-[12px] text-slate-400">Columnas: {active.proposal.expectedColumns.map((c: any) => c.label || c.key).join(", ")}</div>
+                                        )}
+                                    </>
                                 )}
                                 <div className="text-[12px] text-slate-400">
                                     Filtros: {Array.isArray(active.proposal.params) && active.proposal.params.length

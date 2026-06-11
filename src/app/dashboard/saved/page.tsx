@@ -9,6 +9,7 @@ interface ReportItem {
     titulo: string;
     descripcion: string | null;
     visualization: string | null;
+    blockCount?: number;
     realCostoUsd: number | null;
     realCostoMxn: number | null;
     estCostoMxn: number | null;
@@ -207,7 +208,7 @@ export default function SavedReportsPage() {
                         >
                             <Link href={`/dashboard/saved/${r.idReporte}`} className="flex-1 p-5">
                                 <div className="flex items-start justify-between gap-2">
-                                    <span className="text-2xl">{VIZ_EMOJI[r.visualization || "table"] || "📋"}</span>
+                                    <span className="text-2xl">{(r.blockCount ?? 0) > 1 ? "🗂️" : (VIZ_EMOJI[r.visualization || "table"] || "📋")}</span>
                                     {(r.realCostoMxn != null || r.estCostoMxn != null) && (
                                         <span title="Costo ÚNICO de crear el reporte con IA. Abrirlo no cuesta." className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-100 rounded-full px-2 py-0.5">
                                             Creación: ${(r.realCostoMxn ?? r.estCostoMxn ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN
@@ -218,6 +219,9 @@ export default function SavedReportsPage() {
                                 {r.descripcion && <p className="text-sm text-slate-500 mt-1.5 line-clamp-2">{r.descripcion}</p>}
                                 <div className="flex items-center flex-wrap gap-2 mt-3">
                                     <p className="text-[11px] text-slate-400">{fmtFecha(r.fechaCreacion)}</p>
+                                    {(r.blockCount ?? 0) > 1 && (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-600 bg-violet-50 border border-violet-100 rounded-full px-2 py-0.5"><Layers className="w-3 h-3" /> Tablero · {r.blockCount}</span>
+                                    )}
                                     {modelLabel(r.modelo) && (
                                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5">🧠 {modelLabel(r.modelo)}</span>
                                     )}

@@ -5,8 +5,24 @@ import {
     ensureAlertTables,
     evaluateCondition,
     recordAlertEvent,
+    splitPhones,
     AlertRule
 } from '@/lib/alerts';
+import { runInicioOperaciones, runEndOfDayMessage } from '@/lib/system-alerts';
+import { sendWhatsApp } from '@/lib/whatsapp/send';
+
+const TZ = 'America/Monterrey';
+/** Hora local + clave de fecha (YYYY-M-D) en Monterrey. */
+function monterreyParts(d: Date = new Date()): { hour: number; dateKey: string } {
+    const local = new Date(d.toLocaleString('en-US', { timeZone: TZ }));
+    return { hour: local.getHours(), dateKey: `${local.getFullYear()}-${local.getMonth()}-${local.getDate()}` };
+}
+/** Las alertas de fin de día (resumen/hallazgos) tocan a las 23:00, una vez por día. */
+function isEndOfDayDue(rule: AlertRule, now: { hour: number; dateKey: string }): boolean {
+    if (now.hour !== 23) return false;
+    if (!rule.lastEvaluatedAt) return true;
+    return monterreyParts(new Date(rule.lastEvaluatedAt)).dateKey !== now.dateKey;
+}
 
 /**
  * POST /api/agent/alerts/evaluate
@@ -14,10 +30,10 @@ import {
  * Endpoint cron-callable. Recorre todas las alertas activas, evalúa cada una
  * contra el estado actual de los datos, y registra eventos cuando se disparan.
  *
- * Frecuencia: el cron externo (Windows Task Scheduler, Cron de Vercel, etc.)
- * debe llamarlo cada hora. La lógica de frequency de cada regla decide si
- * realmente se evalúa en esa pasada (hourly siempre, daily solo si pasó >20h
- * desde la última, weekly solo si pasó >6 días).
+ * Frecuencia: el cron externo (Windows Task Scheduler, crontab, etc.) debe
+ * llamarlo cada 5 minutos. La lógica de frequency de cada regla decide si
+ * realmente se evalúa en esa pasada (5min siempre, hourly si pasó >1h, daily
+ * solo si pasó >20h desde la última, weekly solo si pasó >6 días).
  *
  * Seguridad: protegido por header X-Cron-Secret (env var CRON_SECRET).
  * Si no está configurado, acepta cualquier llamada (modo desarrollo).
@@ -31,6 +47,8 @@ function shouldEvaluateNow(rule: AlertRule): boolean {
     const lastMs = new Date(rule.lastEvaluatedAt).getTime();
     const hoursSince = (Date.now() - lastMs) / (1000 * 60 * 60);
     switch (rule.frequency) {
+        // 4 min y no 5: tolera el jitter del cron para no saltarse pasadas.
+        case '5min': return hoursSince >= 4 / 60;
         case 'hourly': return hoursSince >= 1;
         case 'daily': return hoursSince >= 20;
         case 'weekly': return hoursSince >= 24 * 6;
@@ -78,6 +96,8 @@ export async function POST(req: Request) {
             targetColumn: r.ColumnaObjetivo,
             frequency: r.Frecuencia,
             active: !!r.Activa,
+            telefono: r.Telefono ?? null,
+            clave: r.Clave ?? null,
             createdAt: r.FechaCreacion?.toISOString?.() || String(r.FechaCreacion),
             lastEvaluatedAt: r.FechaUltimaEvaluacion
                 ? (r.FechaUltimaEvaluacion?.toISOString?.() || String(r.FechaUltimaEvaluacion))
@@ -94,8 +114,38 @@ export async function POST(req: Request) {
             details: [] as Array<{ id: string; name: string; status: string; observedValue?: number | null }>
         };
 
+        const now = monterreyParts();
+
         for (const rule of pending) {
             try {
+                // ── Alertas de SISTEMA: atendidas por su clave, no por SQL/condición ──
+                if (rule.clave) {
+                    // Destinatarios POR ALERTA (columna Telefono).
+                    const recipients = splitPhones(rule.telefono);
+                    if (recipients.length === 0) {
+                        summary.details.push({ id: rule.id, name: rule.name, status: 'sin_destinatarios' });
+                        continue;
+                    }
+                    if (rule.clave === 'inicio_operaciones') {
+                        const r = await runInicioOperaciones(rule.userId, rule.id, recipients);
+                        await query(`UPDATE tblAgentAlertas SET FechaUltimaEvaluacion = GETDATE() WHERE IdAlerta = ?`, [rule.id]);
+                        summary.evaluated++;
+                        if (r.stores > 0) summary.triggered++;
+                        summary.details.push({ id: rule.id, name: rule.name, status: r.stores > 0 ? `inicio: ${r.stores} suc / ${r.sent} envíos` : 'inicio: sin nuevas' });
+                    } else if (rule.clave === 'resumen_dia' || rule.clave === 'hallazgos_dia') {
+                        if (!isEndOfDayDue(rule, now)) {
+                            summary.details.push({ id: rule.id, name: rule.name, status: 'fin_dia: no toca' });
+                            continue;
+                        }
+                        const r = await runEndOfDayMessage(rule.clave, rule.userId, rule.id, recipients);
+                        await query(`UPDATE tblAgentAlertas SET FechaUltimaEvaluacion = GETDATE() WHERE IdAlerta = ?`, [rule.id]);
+                        summary.evaluated++;
+                        summary.triggered++;
+                        summary.details.push({ id: rule.id, name: rule.name, status: `fin_dia: ${r.sent} envíos` });
+                    }
+                    continue;
+                }
+
                 // Sandbox: doble defensa por si alguien metió SQL malicioso en la BD
                 const safeSql = assertReadOnly(rule.sql);
                 console.log(`\n\x1b[33m[AGENT SQL - EVALUACIÓN ALERTA: ${rule.name.toUpperCase()}]\x1b[0m\n${safeSql}\n`);
@@ -119,6 +169,10 @@ export async function POST(req: Request) {
                         message,
                         resultsJson: JSON.stringify(((results as any[]).slice(0, 5)))
                     });
+                    // Push proactivo: avisa por WhatsApp a cada número configurado.
+                    for (const phone of splitPhones(rule.telefono)) {
+                        await sendWhatsApp({ phone, text: `🔔 Alerta: ${message}` }).catch(() => { /* no bloquea la evaluación */ });
+                    }
                     summary.triggered++;
                     summary.details.push({ id: rule.id, name: rule.name, status: 'triggered', observedValue });
                 } else {

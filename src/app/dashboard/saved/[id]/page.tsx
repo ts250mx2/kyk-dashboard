@@ -3,10 +3,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Lightbulb, Target, Sparkles, Loader2, SlidersHorizontal, Wand2, ChevronDown, FileDown } from "lucide-react";
+import { ArrowLeft, Lightbulb, Target, Sparkles, Loader2, SlidersHorizontal, Wand2, ChevronDown, FileDown, CalendarClock, Trash2 } from "lucide-react";
 import { AgentDataView } from "@/components/agent-data-view";
 import { downloadPdf } from "@/lib/export-pdf";
-import type { AdvancedReportDefinition, ReportParam, ReportKpi } from "@/lib/advanced-reports/types";
+import type { AdvancedReportDefinition, ReportParam, ReportKpi, ReportBlock, ReportViz } from "@/lib/advanced-reports/types";
 
 interface ModelOption { id: string; label: string; provider: string; }
 interface StoreOption { id: number; name: string; }
@@ -19,10 +19,14 @@ interface AiAnalysis {
     cost: { tokensInput: number; tokensOutput: number; costUsd: number; costMxn: number };
 }
 
+/** Un bloque ya cargado con sus filas (lo que devuelve el data route en multi-bloque). */
+type LoadedBlock = ReportBlock & { rows: any[]; rowCount: number; error?: string };
+
 interface ReportData {
     definition: AdvancedReportDefinition;
-    rows: any[];
-    rowCount: number;
+    rows?: any[];                 // camino single (v1)
+    rowCount?: number;            // camino single (v1)
+    blocks?: LoadedBlock[];       // camino multi-bloque (tablero)
     title: string;
     descripcion: string | null;
     modelo?: string | null;
@@ -75,6 +79,77 @@ function fmtKpiVal(v: number, format?: string): string {
     return new Intl.NumberFormat("es-MX", { notation: Math.abs(v) >= 10000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(v);
 }
 const isDeptParam = (p: ReportParam) => /depto|departamento|categor/i.test(p.token) || /depto|departamento|categor/i.test(p.label);
+
+/** Renderiza UN bloque del tablero según su tipo (kpis/chart/table/narrative/forecast). */
+function ReportBlockView({ block, onDrill }: { block: LoadedBlock; onDrill?: (clicked: string) => void }) {
+    const heading = block.title ? (
+        <h3 className="text-sm font-black uppercase tracking-wider text-slate-500 mb-3">{block.title}</h3>
+    ) : null;
+
+    // Comentario del analista (estático o generado al crear)
+    if (block.type === "narrative") {
+        const txt = block.narrative?.text?.trim();
+        if (!txt) return null;
+        return (
+            <div className="bg-white rounded-3xl border border-slate-100 p-5">
+                {heading}
+                <p className="text-[15px] leading-relaxed text-slate-700 font-medium">{renderBold(txt)}</p>
+            </div>
+        );
+    }
+
+    // Un bloque que falló no tumba el tablero: se muestra su error y los demás siguen.
+    if (block.error) {
+        return (
+            <div className="bg-white rounded-3xl border border-slate-100 p-5">
+                {heading}
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm font-medium">
+                    No se pudo cargar este bloque: {block.error}
+                </div>
+            </div>
+        );
+    }
+
+    // Tarjetas KPI calculadas sobre las filas del bloque
+    if (block.type === "kpis") {
+        const kpis = block.kpis || [];
+        if (kpis.length === 0 || block.rows.length === 0) return null;
+        return (
+            <div>
+                {heading}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {kpis.map((k, i) => (
+                        <div key={i} className="bg-white rounded-2xl border border-slate-100 p-4">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">{k.label}</div>
+                            <div className="text-2xl font-black text-slate-900 tabular-nums mt-1">{fmtKpiVal(computeKpi(block.rows, k), k.format)}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    // chart / table / forecast → AgentDataView
+    return (
+        <div className="bg-white rounded-3xl border border-slate-100 p-4 md:p-6">
+            {heading}
+            {block.rows.length > 0 ? (
+                <AgentDataView
+                    data={block.rows}
+                    suggestedViz={block.type === "table" ? "table" : (block.visualization || (block.type === "forecast" ? "area" : "bar"))}
+                    question={block.title}
+                    lockViz={block.chartConfig?.lockViz}
+                    showValues={block.chartConfig?.showValues}
+                    showPercent={block.chartConfig?.showPercent}
+                    alsoTable={block.chartConfig?.withTable}
+                    onDrill={block.drill ? onDrill : undefined}
+                />
+            ) : (
+                <p className="text-slate-400 font-medium py-8 text-center">Sin datos para este bloque con los filtros actuales.</p>
+            )}
+        </div>
+    );
+}
 
 function toggleCsv(csv: string, id: number): string {
     const set = new Set((csv || "").split(",").map((s) => s.trim()).filter(Boolean));
@@ -144,12 +219,17 @@ export default function SavedReportViewerPage() {
     const exportPdf = () => {
         const d = dataRef.current;
         if (!d?.definition) return;
+        // Tablero → una tabla por bloque con datos; reporte simple → una sola tabla.
+        const tables = d.blocks
+            ? d.blocks.filter((b) => (b.rows?.length ?? 0) > 0).map((b) => ({ title: b.title, rows: b.rows }))
+            : undefined;
         downloadPdf({
             question: d.title,
             analysis: d.definition.description || `Reporte: ${d.title}`,
             keyInsights: d.definition.insights,
             recommendations: d.definition.recommendations,
-            data: d.rows,
+            data: tables ? undefined : (d.rows ?? []),
+            tables,
             aiModel: d.modelo || undefined,
         });
     };
@@ -172,6 +252,15 @@ export default function SavedReportViewerPage() {
     const [ai, setAi] = useState<AiAnalysis | null>(null);
     const [aiError, setAiError] = useState<string | null>(null);
     const [iaOn, setIaOn] = useState(false); // Modo IA: opcional, desactivado por defecto
+
+    // Drill-down: detalle al hacer clic en una categoría
+    const [drill, setDrill] = useState<{ title: string; visualization?: ReportViz; loading: boolean; rows: any[] | null; error: string | null } | null>(null);
+
+    // Envíos programados por WhatsApp
+    const [schedOpen, setSchedOpen] = useState(false);
+    const [schedules, setSchedules] = useState<Array<{ idSchedule: number; telefono: string; frecuencia: string; horaLocal: number; diaSemana: number | null; activo: boolean }>>([]);
+    const [schedForm, setSchedForm] = useState({ telefono: "", frecuencia: "daily", horaLocal: 8, diaSemana: 1 });
+    const [savingSched, setSavingSched] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -252,7 +341,60 @@ export default function SavedReportViewerPage() {
         }
     }, [id, analyzeModel, analyzing]);
 
+    // Drill-down: re-consulta el detalle filtrado por el valor clickeado.
+    const openDrill = useCallback(async (blockId: string | null, clicked: string) => {
+        const d = dataRef.current;
+        const definition = d?.definition;
+        if (!definition || !id) return;
+        const drillCfg = blockId
+            ? definition.blocks?.find((b) => b.id === blockId)?.drill
+            : definition.drill;
+        const title = (drillCfg?.title || "Detalle: {{clicked}}").replace(/\{\{clicked\}\}/g, clicked);
+        setDrill({ title, visualization: drillCfg?.visualization, loading: true, rows: null, error: null });
+        try {
+            const resp = await fetch(`/api/agent/advanced/reports/${id}/drill`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ blockId, clicked, params: paramValues }),
+            });
+            const json = await resp.json();
+            if (!resp.ok) throw new Error(json?.error || "No se pudo cargar el detalle");
+            setDrill((prev) => prev ? { ...prev, loading: false, rows: Array.isArray(json.rows) ? json.rows : [], visualization: json.visualization || prev.visualization } : prev);
+        } catch (e: any) {
+            setDrill((prev) => prev ? { ...prev, loading: false, error: e?.message || "Error obteniendo el detalle" } : prev);
+        }
+    }, [id, paramValues]);
+
+    // Envíos programados
+    const loadSchedules = useCallback(async () => {
+        if (!id) return;
+        try {
+            const r = await fetch(`/api/agent/schedules?reportId=${id}`);
+            const j = await r.json();
+            setSchedules(Array.isArray(j.schedules) ? j.schedules : []);
+        } catch { /* noop */ }
+    }, [id]);
+    const openSchedule = useCallback(() => { setSchedOpen(true); loadSchedules(); }, [loadSchedules]);
+    const saveSchedule = useCallback(async () => {
+        if (!schedForm.telefono.trim() || savingSched || !id) return;
+        setSavingSched(true);
+        try {
+            const r = await fetch(`/api/agent/schedules`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ idReporte: Number(id), telefono: schedForm.telefono.trim(), frecuencia: schedForm.frecuencia, horaLocal: schedForm.horaLocal, diaSemana: schedForm.diaSemana }),
+            });
+            if (!r.ok) throw new Error();
+            setSchedForm((f) => ({ ...f, telefono: "" }));
+            await loadSchedules();
+        } catch { /* noop */ } finally { setSavingSched(false); }
+    }, [id, schedForm, savingSched, loadSchedules]);
+    const removeSchedule = useCallback(async (sid: number) => {
+        try { await fetch(`/api/agent/schedules?id=${sid}`, { method: "DELETE" }); await loadSchedules(); } catch { /* noop */ }
+    }, [loadSchedules]);
+
     const def = data?.definition;
+    const hasBlocks = Array.isArray(data?.blocks) && (data?.blocks?.length ?? 0) > 0;
     const reportParams = (def?.params || []) as ReportParam[];
     const setPv = (token: string, value: string) => setParamValues((prev) => ({ ...prev, [token]: value }));
 
@@ -284,7 +426,7 @@ export default function SavedReportViewerPage() {
                             <h1 className="text-2xl font-black tracking-tight text-slate-900">{data.title}</h1>
                             {data.descripcion && <p className="text-slate-500 font-medium mt-1">{data.descripcion}</p>}
                             <p className="text-[11px] text-slate-400 mt-2">
-                                {data.rowCount} fila(s) · creado {new Date(data.fechaCreacion).toLocaleDateString("es-MX", { dateStyle: "medium" })}
+                                {hasBlocks ? `${data.blocks!.length} bloque(s)` : `${data.rowCount ?? 0} fila(s)`} · creado {new Date(data.fechaCreacion).toLocaleDateString("es-MX", { dateStyle: "medium" })}
                                 {data.cost?.realCostoMxn != null && ` · creación: $${data.cost.realCostoMxn.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN (única vez; abrirlo no cuesta)`}
                             </p>
                         </div>
@@ -293,6 +435,11 @@ export default function SavedReportViewerPage() {
                                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-100 transition-colors"
                                 title="Exportar el reporte a PDF">
                                 <FileDown className="w-4 h-4" /> PDF
+                            </button>
+                            <button onClick={openSchedule}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-100 transition-colors"
+                                title="Programar el envío automático de este reporte por WhatsApp">
+                                <CalendarClock className="w-4 h-4" /> Programar
                             </button>
                             <button onClick={openInAgent}
                                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 text-white font-bold text-sm hover:bg-violet-700 transition-colors whitespace-nowrap"
@@ -355,36 +502,50 @@ export default function SavedReportViewerPage() {
                         </div>
                     )}
 
-                    {/* Tarjetas KPI (calculadas sobre los datos actuales) */}
-                    {def.kpis && def.kpis.length > 0 && data.rows.length > 0 && !loading && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {def.kpis.map((k, i) => (
-                                <div key={i} className="bg-white rounded-2xl border border-slate-100 p-4">
-                                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">{k.label}</div>
-                                    <div className="text-2xl font-black text-slate-900 tabular-nums mt-1">{fmtKpiVal(computeKpi(data.rows, k), k.format)}</div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Datos + visualización */}
-                    <div className="bg-white rounded-3xl border border-slate-100 p-4 md:p-6">
-                        {loading ? (
+                    {hasBlocks ? (
+                        /* ── Tablero multi-bloque: un control global de filtros mueve todos los bloques ── */
+                        loading ? (
                             <div className="h-[280px] bg-gradient-to-b from-slate-100 to-slate-50 rounded-2xl animate-pulse" />
-                        ) : data.rows.length > 0 ? (
-                            <AgentDataView
-                                data={data.rows}
-                                suggestedViz={def.visualization}
-                                question={data.title}
-                                lockViz={def.chartConfig?.lockViz}
-                                showValues={def.chartConfig?.showValues}
-                                showPercent={def.chartConfig?.showPercent}
-                                alsoTable={def.chartConfig?.withTable}
-                            />
                         ) : (
-                            <p className="text-slate-400 font-medium py-8 text-center">El reporte no devolvió datos con los filtros actuales.</p>
-                        )}
-                    </div>
+                            <div className="space-y-6">
+                                {data.blocks!.map((b) => <ReportBlockView key={b.id} block={b} onDrill={(v) => openDrill(b.id, v)} />)}
+                            </div>
+                        )
+                    ) : (
+                        <>
+                            {/* Tarjetas KPI (calculadas sobre los datos actuales) */}
+                            {def.kpis && def.kpis.length > 0 && (data.rows?.length ?? 0) > 0 && !loading && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {def.kpis.map((k, i) => (
+                                        <div key={i} className="bg-white rounded-2xl border border-slate-100 p-4">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">{k.label}</div>
+                                            <div className="text-2xl font-black text-slate-900 tabular-nums mt-1">{fmtKpiVal(computeKpi(data.rows ?? [], k), k.format)}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Datos + visualización */}
+                            <div className="bg-white rounded-3xl border border-slate-100 p-4 md:p-6">
+                                {loading ? (
+                                    <div className="h-[280px] bg-gradient-to-b from-slate-100 to-slate-50 rounded-2xl animate-pulse" />
+                                ) : (data.rows?.length ?? 0) > 0 ? (
+                                    <AgentDataView
+                                        data={data.rows ?? []}
+                                        suggestedViz={def.visualization}
+                                        question={data.title}
+                                        lockViz={def.chartConfig?.lockViz}
+                                        showValues={def.chartConfig?.showValues}
+                                        showPercent={def.chartConfig?.showPercent}
+                                        alsoTable={def.chartConfig?.withTable}
+                                        onDrill={def.drill ? (v) => openDrill(null, v) : undefined}
+                                    />
+                                ) : (
+                                    <p className="text-slate-400 font-medium py-8 text-center">El reporte no devolvió datos con los filtros actuales.</p>
+                                )}
+                            </div>
+                        </>
+                    )}
 
                     {/* Modo IA (opcional, toggle, desactivado por defecto) */}
                     <div className="bg-gradient-to-br from-indigo-50 to-white rounded-3xl border border-indigo-100 p-5">
@@ -409,7 +570,7 @@ export default function SavedReportViewerPage() {
                                     {models.length === 0 && <option value="">(cargando…)</option>}
                                     {models.map((m) => (<option key={m.id} value={m.id}>{m.label}</option>))}
                                 </select>
-                                <button onClick={analyzeWithAI} disabled={analyzing || data.rows.length === 0}
+                                <button onClick={analyzeWithAI} disabled={analyzing || ((data.rows?.length ?? 0) === 0 && !hasBlocks)}
                                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                                     {analyzing ? <><Loader2 className="w-4 h-4 animate-spin" /> Analizando…</> : <><Sparkles className="w-4 h-4" /> Analizar con IA</>}
                                 </button>
@@ -462,6 +623,96 @@ export default function SavedReportViewerPage() {
             )}
 
             {!data && loading && <ReportSkeleton />}
+
+            {/* Modal de drill-down (detalle de la categoría clickeada) */}
+            {drill && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDrill(null)}>
+                    <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+                            <h4 className="font-black text-slate-800 text-sm tracking-tight">{drill.title}</h4>
+                            <button onClick={() => setDrill(null)} className="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
+                        </div>
+                        <div className="p-5 overflow-auto">
+                            {drill.loading ? (
+                                <div className="h-[220px] bg-gradient-to-b from-slate-100 to-slate-50 rounded-2xl animate-pulse" />
+                            ) : drill.error ? (
+                                <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm font-medium">{drill.error}</div>
+                            ) : drill.rows && drill.rows.length > 0 ? (
+                                <AgentDataView data={drill.rows} suggestedViz={drill.visualization} question={drill.title} />
+                            ) : (
+                                <p className="text-slate-400 font-medium py-8 text-center">Sin detalle para este elemento.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: programar envío por WhatsApp */}
+            {schedOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSchedOpen(false)}>
+                    <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+                            <h4 className="font-black text-slate-800 text-sm tracking-tight flex items-center gap-2"><CalendarClock className="w-4 h-4 text-indigo-600" /> Programar envío por WhatsApp</h4>
+                            <button onClick={() => setSchedOpen(false)} className="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
+                        </div>
+                        <div className="p-5 space-y-4 overflow-auto">
+                            <p className="text-[12px] text-slate-500">Kesito enviará este reporte por WhatsApp con un link a la gráfica y la tabla.</p>
+
+                            <label className="block">
+                                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Teléfono (con lada)</span>
+                                <input value={schedForm.telefono} onChange={(e) => setSchedForm((f) => ({ ...f, telefono: e.target.value }))} placeholder="528112345678"
+                                    className="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-700 outline-none focus:border-indigo-400" />
+                            </label>
+
+                            <div className="flex gap-3 flex-wrap">
+                                <label className="block">
+                                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Frecuencia</span>
+                                    <select value={schedForm.frecuencia} onChange={(e) => setSchedForm((f) => ({ ...f, frecuencia: e.target.value }))}
+                                        className="mt-1 block px-3 py-2 rounded-lg border border-slate-200 text-slate-700 outline-none focus:border-indigo-400 cursor-pointer">
+                                        <option value="daily">Diario</option>
+                                        <option value="weekly">Semanal</option>
+                                    </select>
+                                </label>
+                                {schedForm.frecuencia === "weekly" && (
+                                    <label className="block">
+                                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Día</span>
+                                        <select value={schedForm.diaSemana} onChange={(e) => setSchedForm((f) => ({ ...f, diaSemana: Number(e.target.value) }))}
+                                            className="mt-1 block px-3 py-2 rounded-lg border border-slate-200 text-slate-700 outline-none focus:border-indigo-400 cursor-pointer">
+                                            {["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"].map((d, i) => (<option key={i} value={i}>{d}</option>))}
+                                        </select>
+                                    </label>
+                                )}
+                                <label className="block">
+                                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Hora</span>
+                                    <select value={schedForm.horaLocal} onChange={(e) => setSchedForm((f) => ({ ...f, horaLocal: Number(e.target.value) }))}
+                                        className="mt-1 block px-3 py-2 rounded-lg border border-slate-200 text-slate-700 outline-none focus:border-indigo-400 cursor-pointer">
+                                        {Array.from({ length: 24 }, (_, h) => (<option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>))}
+                                    </select>
+                                </label>
+                            </div>
+
+                            <button onClick={saveSchedule} disabled={savingSched || !schedForm.telefono.trim()}
+                                className="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                                {savingSched ? "Guardando…" : "Programar"}
+                            </button>
+
+                            {schedules.length > 0 && (
+                                <div className="border-t border-slate-100 pt-3 space-y-2">
+                                    <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Envíos activos</div>
+                                    {schedules.map((s) => (
+                                        <div key={s.idSchedule} className="flex items-center justify-between gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                                            <span className="text-[13px] text-slate-700">
+                                                {s.telefono} · {s.frecuencia === "weekly" ? `${["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][s.diaSemana ?? 1]} ` : "diario "}{String(s.horaLocal).padStart(2, "0")}:00
+                                            </span>
+                                            <button onClick={() => removeSchedule(s.idSchedule)} className="text-slate-300 hover:text-red-500 p-1" title="Eliminar"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

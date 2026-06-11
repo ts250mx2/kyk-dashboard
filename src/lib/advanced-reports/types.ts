@@ -73,14 +73,73 @@ export interface ReportLayout {
     }>;
 }
 
+/** Tipo de bloque dentro de un reporte multi-bloque (schemaVersion >= 2). */
+export type ReportBlockType = 'kpis' | 'chart' | 'table' | 'narrative' | 'forecast';
+
+/** Configuración de un bloque 'forecast' (proyección de ventas del motor del dashboard). */
+export interface ReportForecastConfig {
+    horizonDays?: number;        // días a proyectar (1-180, default 30)
+    storeNames?: string[];       // nombres parciales de sucursales (LIKE). Omite para todas o usa el filtro global.
+}
+
+/**
+ * Configuración de DRILL-DOWN: al hacer clic en una categoría (barra/rebanada/fila),
+ * el visor re-ejecuta este SQL filtrado por el valor clickeado y muestra el detalle
+ * en un modal. El SQL usa el token `{{clicked}}` (el sistema lo sustituye por el valor
+ * como literal SQL seguro) y TAMBIÉN puede usar los `{{token}}` de los params globales.
+ *
+ * Convención: el WHERE debe filtrar por la MISMA columna que es la dimensión/eje del
+ * bloque padre. Ej. si el bloque agrupa por Tienda: `... WHERE Tienda = {{clicked}}`.
+ */
+export interface ReportDrill {
+    sql: string;                 // SELECT/WITH con {{clicked}} (y opcionalmente params globales)
+    title?: string;              // título del panel de detalle; puede incluir {{clicked}} para mostrar el valor
+    visualization?: ReportViz;   // cómo mostrar el detalle (default 'table')
+}
+
+/**
+ * Un bloque de un reporte multi-bloque (un "tablero"). Cada bloque tiene su
+ * PROPIA consulta (salvo 'narrative') y su propia visualización. Los `params`
+ * del reporte son GLOBALES: el SQL de cada bloque usa los mismos `{{token}}`,
+ * de modo que un solo control de período/sucursal mueve todos los bloques.
+ *
+ * El visor itera `definition.blocks` y monta el sub-render correcto por tipo:
+ *   kpis      → tarjetas calculadas sobre las filas del bloque (usa `kpis`)
+ *   chart     → <AgentDataView> con `visualization`
+ *   table     → <AgentDataView> en modo tabla
+ *   narrative → texto del analista (estático o generado por IA)
+ *   forecast  → proyección de ventas (motor del dashboard, NO usa SQL): el server
+ *               corre el modelo de forecast y devuelve la serie como filas
+ */
+export interface ReportBlock {
+    id: string;                                    // identificador estable del bloque
+    type: ReportBlockType;
+    title?: string;
+    sql?: string;                                  // SELECT/WITH con tokens {{...}}; no aplica a 'narrative'/'forecast'
+    visualization?: ReportViz;                     // para type 'chart' (default 'bar') / 'forecast' (default 'area')
+    chartConfig?: ReportChartConfig;
+    kpis?: ReportKpi[];                            // para type 'kpis'
+    expectedColumns?: ReportColumn[];              // orden de columnas del SELECT del bloque
+    rowLimit?: number;                             // tope de filas del bloque (default 500)
+    narrative?: { source: 'ai' | 'static'; text?: string };  // para type 'narrative'
+    forecast?: ReportForecastConfig;               // para type 'forecast'
+    drill?: ReportDrill;                           // drill-down al clic en una categoría del bloque
+}
+
 export interface AdvancedReportDefinition {
-    schemaVersion: number;                 // versión del esquema de la definición (default 1)
+    schemaVersion: number;                 // versión del esquema de la definición (1 = single, 2 = multi-bloque)
     title: string;
     description?: string;
     sql: string;                           // SELECT/WITH validado con assertReadOnly (sin ';' final)
     expectedColumns: ReportColumn[];       // orden de columnas del SELECT
     visualization: ReportViz;              // suggestedViz para AgentDataView
     chartConfig?: ReportChartConfig;
+    // Multi-bloque (schemaVersion >= 2). Si `blocks` está presente y no vacío, el
+    // visor renderiza un TABLERO (itera blocks) e IGNORA sql/visualization de raíz.
+    // Si falta, se usa el camino single de v1 (sql + visualization). El
+    // comportamiento se decide por la PRESENCIA de `blocks`, no por el número de versión.
+    blocks?: ReportBlock[];
+    drill?: ReportDrill;                   // drill-down para el reporte single (v1) al clic en una categoría
     layout?: ReportLayout;
     params?: ReportParam[];                // placeholders `?` posicionales en el SQL
     kpis?: ReportKpi[];                    // tarjetas KPI arriba del reporte
@@ -95,4 +154,4 @@ export interface AdvancedReportDefinition {
     };
 }
 
-export const ADVANCED_REPORT_SCHEMA_VERSION = 1;
+export const ADVANCED_REPORT_SCHEMA_VERSION = 2;

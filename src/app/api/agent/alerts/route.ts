@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     try {
         const userId = await getUserId();
         const body = await req.json();
-        const { name, description, sql, conditionType, conditionValue, targetColumn, frequency } = body;
+        const { name, description, sql, conditionType, conditionValue, targetColumn, frequency, telefono } = body;
 
         if (!name || !sql || !conditionType) {
             return NextResponse.json(
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'conditionType inválido' }, { status: 400 });
         }
 
-        const validFrequencies: Frecuencia[] = ['hourly', 'daily', 'weekly'];
+        const validFrequencies: Frecuencia[] = ['5min', 'hourly', 'daily', 'weekly'];
         const freq: Frecuencia = validFrequencies.includes(frequency) ? frequency : 'hourly';
 
         const id = generateAlertId();
@@ -56,7 +56,8 @@ export async function POST(req: Request) {
             conditionValue: conditionType === 'has_rows' ? null : (typeof conditionValue === 'number' ? conditionValue : parseFloat(conditionValue)),
             targetColumn: targetColumn ? String(targetColumn).slice(0, 100) : null,
             frequency: freq,
-            active: true
+            active: true,
+            telefono: telefono ? String(telefono).slice(0, 40) : null
         });
 
         return NextResponse.json({ success: true, id });

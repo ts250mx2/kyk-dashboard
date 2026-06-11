@@ -9,6 +9,7 @@ import {
     renderForecastSummaryForAgent,
     renderProductRecommendationsForAgent,
 } from '@/lib/forecast/agent-tools';
+import { maybeBuildShare } from '@/lib/whatsapp-shares/build-share';
 import fs from 'fs';
 import path from 'path';
 
@@ -191,6 +192,9 @@ export async function POST(req: Request) {
         const question = (body.question || '').trim();
         const fromPhone = (body.from_phone || '').trim();
         const tenantId = (body.tenant_id || '').trim();
+        // Base absoluta para el link compartible (config recomendada vía PUBLIC_BASE_URL;
+        // fallback al origin del request). El link apunta a la página pública /r/<uuid>.
+        const baseUrl = (process.env.PUBLIC_BASE_URL || new URL(req.url).origin).replace(/\/$/, '');
 
         if (!question) {
             return NextResponse.json({ error: 'Falta question' }, { status: 400 });
@@ -366,8 +370,17 @@ REGLAS DE FORMATO WHATSAPP:
 Devuelve SOLO el texto. Sin prefijos.`;
                 const answer = (await narrate(narratePrompt, 500, requestId)).trim().slice(0, 1500);
                 console.log(`[${requestId}] get_sales_forecast done (${Date.now() - startTime}ms)`);
+                const fcRows = summary.forecastSample.map((p) => ({
+                    Fecha: p.fecha,
+                    'Venta proyectada': Math.round(p.predicted),
+                    'Venta mínima': Math.round(p.lower),
+                    'Venta máxima': Math.round(p.upper),
+                }));
+                const fcShare = await maybeBuildShare({ question, answer, tool: 'get_sales_forecast', rows: fcRows, viz: 'area', fromPhone, tenantId, baseUrl });
+                const fcAnswer = fcShare ? `${answer}\n\n📊 Ver gráfica: ${fcShare.url}` : answer;
                 return NextResponse.json({
-                    answer,
+                    answer: fcAnswer,
+                    link: fcShare?.url ?? null,
                     data: summary,
                     meta: {
                         rows_returned: summary.forecastSample.length,
@@ -375,7 +388,8 @@ Devuelve SOLO el texto. Sin prefijos.`;
                         request_id: requestId,
                         from_phone: fromPhone,
                         tenant_id: tenantId,
-                        tool: 'get_sales_forecast'
+                        tool: 'get_sales_forecast',
+                        share_url: fcShare?.url ?? null
                     }
                 });
             } catch (e: any) {
@@ -413,8 +427,17 @@ REGLAS DE FORMATO WHATSAPP:
 Devuelve SOLO el texto. Sin prefijos.`;
                 const answer = (await narrate(narratePrompt, 600, requestId)).trim().slice(0, 1800);
                 console.log(`[${requestId}] get_product_recommendations done (${Date.now() - startTime}ms, ${rec.products.length} productos)`);
+                const recRows = rec.products.map((p) => ({
+                    Producto: p.descripcion,
+                    Depto: p.depto,
+                    'Venta reciente': Math.round(p.recentTotal),
+                    Acción: p.actionHint,
+                }));
+                const recShare = await maybeBuildShare({ question, answer, tool: 'get_product_recommendations', rows: recRows, viz: 'bar', fromPhone, tenantId, baseUrl });
+                const recAnswer = recShare ? `${answer}\n\n📊 Ver tabla: ${recShare.url}` : answer;
                 return NextResponse.json({
-                    answer,
+                    answer: recAnswer,
+                    link: recShare?.url ?? null,
                     data: rec,
                     meta: {
                         rows_returned: rec.products.length,
@@ -422,7 +445,8 @@ Devuelve SOLO el texto. Sin prefijos.`;
                         request_id: requestId,
                         from_phone: fromPhone,
                         tenant_id: tenantId,
-                        tool: 'get_product_recommendations'
+                        tool: 'get_product_recommendations',
+                        share_url: recShare?.url ?? null
                     }
                 });
             } catch (e: any) {
@@ -485,8 +509,13 @@ Devuelve SOLO el texto de la respuesta, nada más (sin JSON, sin comillas, sin p
         const totalMs = Date.now() - startTime;
         console.log(`[${requestId}] done (${totalMs}ms, ${rows.length} rows)`);
 
+        // Si la respuesta amerita gráfica/tabla, congela un snapshot y devuelve el link.
+        const share = await maybeBuildShare({ question, answer, tool: 'query_database', rows, viz: null, sql: safeSql, fromPhone, tenantId, baseUrl });
+        const answerWithLink = share ? `${answer}\n\n📊 Ver gráfica y tabla: ${share.url}` : answer;
+
         return NextResponse.json({
-            answer,
+            answer: answerWithLink,
+            link: share?.url ?? null,
             data: sampleRows.length > 0 ? sampleRows : null,
             sql: safeSql,
             meta: {
@@ -495,7 +524,8 @@ Devuelve SOLO el texto de la respuesta, nada más (sin JSON, sin comillas, sin p
                 request_id: requestId,
                 from_phone: fromPhone,
                 tenant_id: tenantId,
-                tool: 'query_database'
+                tool: 'query_database',
+                share_url: share?.url ?? null
             }
         });
     } catch (e: any) {

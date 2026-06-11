@@ -7,6 +7,7 @@ import { substituteParams } from '@/lib/advanced-reports/params';
 import { getModel } from '@/lib/advanced-reports/models';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import { query } from '@/lib/db';
+import { runForecastForAgent } from '@/lib/forecast/agent-tools';
 import { costUsd, costMxn, USD_MXN_RATE } from '@/lib/pricing';
 import { recordMetric } from '@/lib/metrics';
 
@@ -25,6 +26,23 @@ Responde SOLO con un JSON válido (sin markdown), en español:
 {
   "narrative": "2-4 oraciones con la lectura principal. Cifras con **negritas Markdown** (ej. **$1.2M**, **+12%**).",
   "insights": ["3-4 hallazgos concretos con dato"],
+  "recommendations": ["1-3 acciones recomendadas"]
+}`;
+}
+
+/** Prompt de análisis para un TABLERO (varios bloques): lectura del conjunto. */
+function buildDashboardAnalysisPrompt(title: string, description: string | undefined, digest: any[]): string {
+    const dataStr = JSON.stringify(digest).slice(0, 9000);
+    return `Eres un consultor senior de retail. Analiza este TABLERO completo (compuesto por varios bloques) y entrega una lectura accionable del CONJUNTO, conectando lo que muestran los distintos bloques entre sí (no analices cada bloque por separado).
+
+TABLERO: ${title}
+${description ? `DESCRIPCIÓN: ${description}` : ''}
+BLOQUES (con muestra de datos): ${dataStr}
+
+Responde SOLO con un JSON válido (sin markdown), en español:
+{
+  "narrative": "2-4 oraciones con la lectura principal del tablero. Cifras con **negritas Markdown**.",
+  "insights": ["3-4 hallazgos concretos cruzando los bloques"],
   "recommendations": ["1-3 acciones recomendadas"]
 }`;
 }
@@ -62,15 +80,49 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const def = report.definition;
     try {
-        // Datos frescos con los valores por defecto de los parámetros
-        const sql = assertReadOnly(substituteParams(def.sql, def.params));
-        const rows = (await query(sql)) as any[];
+        // Datos frescos con los valores por defecto de los parámetros.
+        let prompt: string;
+        let analyzedRows = 0;
 
-        if (rows.length === 0) {
-            return NextResponse.json({ error: 'El reporte no devolvió datos para analizar.' }, { status: 400 });
+        if (Array.isArray(def.blocks) && def.blocks.length > 0) {
+            // TABLERO: junta una muestra de cada bloque y analiza el conjunto.
+            const digest: any[] = [];
+            for (const b of def.blocks) {
+                if (b.type === 'narrative') continue;
+                if (b.type === 'forecast') {
+                    try {
+                        const horizonDays = Math.max(1, Math.min(180, Number(b.forecast?.horizonDays) || 30));
+                        const s = await runForecastForAgent({ horizonDays, sampleSize: Math.min(horizonDays, 14), storeNames: b.forecast?.storeNames });
+                        analyzedRows += s.forecastSample.length;
+                        digest.push({ title: b.title || 'Proyección', type: 'forecast', totales: { totalForecast: Math.round(s.totalForecast), avgDaily: Math.round(s.avgDaily), trendPct: s.trend, vsHistoryPct: s.projectedVsHistoryPct, mape: s.mape } });
+                    } catch (e: any) {
+                        digest.push({ title: b.title || 'Proyección', type: 'forecast', error: e?.message });
+                    }
+                    continue;
+                }
+                if (!b.sql) continue;
+                try {
+                    const sql = assertReadOnly(substituteParams(b.sql, def.params));
+                    const rows = (await query(sql)) as any[];
+                    analyzedRows += rows.length;
+                    digest.push({ title: b.title || 'Bloque', type: b.type, rowCount: rows.length, sample: rows.slice(0, 15) });
+                } catch (e: any) {
+                    digest.push({ title: b.title || 'Bloque', type: b.type, error: e?.message });
+                }
+            }
+            if (analyzedRows === 0) {
+                return NextResponse.json({ error: 'El tablero no devolvió datos para analizar.' }, { status: 400 });
+            }
+            prompt = buildDashboardAnalysisPrompt(report.titulo, def.description, digest);
+        } else {
+            const sql = assertReadOnly(substituteParams(def.sql, def.params));
+            const rows = (await query(sql)) as any[];
+            if (rows.length === 0) {
+                return NextResponse.json({ error: 'El reporte no devolvió datos para analizar.' }, { status: 400 });
+            }
+            analyzedRows = rows.length;
+            prompt = buildAnalysisPrompt(report.titulo, def.description, rows);
         }
-
-        const prompt = buildAnalysisPrompt(report.titulo, def.description, rows);
 
         let text = '';
         let inTok = 0;
@@ -120,7 +172,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             insights: Array.isArray(parsed.insights) ? parsed.insights : [],
             recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
             cost: { tokensInput: inTok, tokensOutput: outTok, costUsd: usd, costMxn: mxn, usdMxnRate: USD_MXN_RATE },
-            rowCount: rows.length,
+            rowCount: analyzedRows,
         });
     } catch (e: any) {
         const msg = e?.message || 'Error analizando el reporte';
