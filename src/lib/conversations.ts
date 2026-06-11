@@ -16,7 +16,9 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
 const SECRET_KEY = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'your-secret-key-change-this-in-prod'
+    // Mismo default que auth/login y middleware: si difieren, jwtVerify falla
+    // (ERR_JWS_SIGNATURE_VERIFICATION_FAILED) y todo cae al usuario 'anonymous'.
+    process.env.JWT_SECRET || 'dev-secret-key-replaces-this-in-prod'
 );
 
 let tableEnsured = false;

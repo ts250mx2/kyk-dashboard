@@ -4,7 +4,7 @@ import { jwtVerify } from 'jose';
 import { searchSimilar } from '@/lib/semantic-memory';
 
 const SECRET_KEY = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'your-secret-key-change-this-in-prod'
+    process.env.JWT_SECRET || 'dev-secret-key-replaces-this-in-prod'
 );
 
 async function getUserIdFromCookie(): Promise<string | null> {
