@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, BellRing, Plus, X, Trash2, Loader2, Power, MessageCircle, Sparkles, ChevronDown, ArrowLeft, Code2, CheckCircle2, Pencil, Lock, Send } from 'lucide-react';
+import { Bell, BellRing, Plus, X, Trash2, Loader2, Power, MessageCircle, Sparkles, ChevronDown, ArrowLeft, Code2, CheckCircle2, Pencil, Lock, Send, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AlertEvent {
@@ -26,8 +26,19 @@ interface AlertRule {
     active: boolean;
     telefono?: string | null;
     clave?: string | null;
+    horaEnvio?: string | null;
     createdAt: string;
     lastEvaluatedAt: string | null;
+}
+
+/** '19:30' → '7:30 PM' (para mostrar la hora de envío). */
+function formatHora12(hora: string | null | undefined): string {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(hora || '');
+    if (!m) return '';
+    const h = Number(m[1]);
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m[2]} ${suffix}`;
 }
 
 /** Separa "+52...,+52..." en números individuales (frontend). */
@@ -319,24 +330,29 @@ export function AlertsPanel({ refreshKey, compact = false }: AlertsPanelProps) {
         }
     };
 
-    const savePhones = async (ruleId: string, phones: string[]) => {
+    const savePhones = async (ruleId: string, phones: string[], horaEnvio?: string) => {
         setSaving(true);
         try {
             const r = await fetch(`/api/agent/alerts/${ruleId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telefono: phones.join(',') })
+                body: JSON.stringify({
+                    telefono: phones.join(','),
+                    ...(horaEnvio ? { horaEnvio } : {})
+                })
             });
             const data = await r.json();
             if (r.ok) {
                 const telefono = typeof data.telefono === 'string' ? data.telefono : phones.join(',');
-                setRules(prev => prev.map(x => x.id === ruleId ? { ...x, telefono } : x));
+                setRules(prev => prev.map(x => x.id === ruleId
+                    ? { ...x, telefono, ...(data.horaEnvio ? { horaEnvio: data.horaEnvio } : {}) }
+                    : x));
                 setEditingPhonesRule(null);
             } else {
-                alert(data.error || 'Error guardando números');
+                alert(data.error || 'Error guardando cambios');
             }
         } catch (e: any) {
-            alert(e.message || 'Error guardando números');
+            alert(e.message || 'Error guardando cambios');
         } finally {
             setSaving(false);
         }
@@ -547,16 +563,24 @@ function RulesList({ rules, onToggle, onDelete, onNew, onEdit, onEditModel, onSe
                                         {r.description && (
                                             <p className="text-[10.5px] text-slate-500 mt-0.5 leading-snug">{r.description}</p>
                                         )}
-                                        {phones.length > 0 ? (
-                                            <span className="inline-flex items-center gap-0.5 mt-1 text-[9.5px] font-bold text-emerald-600" title={phones.join(', ')}>
-                                                <MessageCircle className="w-3 h-3" />
-                                                {phones.length} número{phones.length > 1 ? 's' : ''}
-                                            </span>
-                                        ) : (
-                                            <span className="inline-block mt-1 text-[9.5px] font-bold text-amber-600">
-                                                Sin números — no se enviará
-                                            </span>
-                                        )}
+                                        <span className="inline-flex items-center gap-2 mt-1">
+                                            {r.horaEnvio && (
+                                                <span className="inline-flex items-center gap-0.5 text-[9.5px] font-bold text-indigo-600" title="Hora de envío (edítala con el lápiz)">
+                                                    <Clock className="w-3 h-3" />
+                                                    {formatHora12(r.horaEnvio)}
+                                                </span>
+                                            )}
+                                            {phones.length > 0 ? (
+                                                <span className="inline-flex items-center gap-0.5 text-[9.5px] font-bold text-emerald-600" title={phones.join(', ')}>
+                                                    <MessageCircle className="w-3 h-3" />
+                                                    {phones.length} número{phones.length > 1 ? 's' : ''}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[9.5px] font-bold text-amber-600">
+                                                    Sin números — no se enviará
+                                                </span>
+                                            )}
+                                        </span>
                                     </div>
                                     <div className="flex-shrink-0 flex items-center gap-1">
                                         <button
@@ -723,14 +747,16 @@ function PhoneListEditor({ phones, onChange }: { phones: string[]; onChange: (p:
     );
 }
 
-// ─── Editor de NÚMEROS por alerta (sistema: lo único editable) ────────────
+// ─── Editor por alerta de sistema: números + hora de envío ────────────────
 function AlertPhonesEditor({ rule, saving, onSave, onCancel }: {
     rule: AlertRule;
     saving: boolean;
-    onSave: (ruleId: string, phones: string[]) => void;
+    onSave: (ruleId: string, phones: string[], horaEnvio?: string) => void;
     onCancel: () => void;
 }) {
     const [list, setList] = useState<string[]>(splitPhones(rule.telefono));
+    const [hora, setHora] = useState<string>(rule.horaEnvio || '');
+    const canEditHora = !!rule.horaEnvio; // solo las alertas de hora fija la traen
     return (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -747,6 +773,23 @@ function AlertPhonesEditor({ rule, saving, onSave, onCancel }: {
 
             <PhoneListEditor phones={list} onChange={setList} />
 
+            {canEditHora && (
+                <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Hora de envío
+                    </label>
+                    <input
+                        type="time"
+                        value={hora}
+                        onChange={e => setHora(e.target.value)}
+                        className="w-full px-3 py-2 text-[13px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                        Hora local de Monterrey. El resumen sale en la primera pasada del sistema a partir de esa hora.
+                    </p>
+                </div>
+            )}
+
             <div className="flex gap-2 pt-1">
                 <button
                     onClick={onCancel}
@@ -755,8 +798,8 @@ function AlertPhonesEditor({ rule, saving, onSave, onCancel }: {
                     Cancelar
                 </button>
                 <button
-                    onClick={() => onSave(rule.id, list)}
-                    disabled={saving}
+                    onClick={() => onSave(rule.id, list, canEditHora && hora ? hora : undefined)}
+                    disabled={saving || (canEditHora && !hora)}
                     className="flex-1 px-3 py-2 text-[12px] font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                     {saving && <Loader2 className="w-3 h-3 animate-spin" />}

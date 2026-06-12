@@ -18,7 +18,7 @@ import { query } from '@/lib/db';
 import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { sendWhatsApp } from '@/lib/whatsapp/send';
-import { recordAlertEvent, getSystemAlertModel } from '@/lib/alerts';
+import { recordAlertEvent, getSystemAlertModel, EndOfDayClave } from '@/lib/alerts';
 import { getScannersByPriority } from '@/lib/insights-scanners';
 import { getModel } from '@/lib/advanced-reports/models';
 import { createShare } from '@/lib/whatsapp-shares/shares-store';
@@ -40,21 +40,6 @@ function targetDateLabel(daysAgo: number): string {
     return d.toLocaleDateString('es-MX', {
         timeZone: 'America/Monterrey', weekday: 'long', day: 'numeric', month: 'long',
     });
-}
-
-/** Alertas de sistema que mandan un mensaje a una hora fija del día. */
-export type EndOfDayClave = 'resumen_dia' | 'hallazgos_dia' | 'resumen_cancelaciones' | 'resumen_devoluciones';
-
-/** Hora local (Monterrey) a la que toca cada una. */
-export const END_OF_DAY_TIMES: Record<EndOfDayClave, { hour: number; minute: number }> = {
-    resumen_dia: { hour: 23, minute: 0 },
-    hallazgos_dia: { hour: 23, minute: 0 },
-    resumen_cancelaciones: { hour: 19, minute: 0 },
-    resumen_devoluciones: { hour: 19, minute: 30 },
-};
-
-export function isEndOfDayClave(clave: string | null | undefined): clave is EndOfDayClave {
-    return !!clave && clave in END_OF_DAY_TIMES;
 }
 
 /** Contenido de fin de día: versión completa (página pública) + corta (WhatsApp). */

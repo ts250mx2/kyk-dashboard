@@ -60,6 +60,8 @@ export async function ensureAlertTables(): Promise<void> {
                      ALTER TABLE tblAgentAlertas ALTER COLUMN Telefono NVARCHAR(500) NULL`);
         // Clave: identifica alertas de sistema (inicio_operaciones, resumen_dia, hallazgos_dia).
         await query(`IF COL_LENGTH('tblAgentAlertas', 'Clave') IS NULL ALTER TABLE tblAgentAlertas ADD Clave VARCHAR(50) NULL`);
+        // Hora de envío 'HH:MM' de las alertas de hora fija (NULL = default del código).
+        await query(`IF COL_LENGTH('tblAgentAlertas', 'HoraEnvio') IS NULL ALTER TABLE tblAgentAlertas ADD HoraEnvio VARCHAR(5) NULL`);
         // Destinatarios COMPARTIDOS de las alertas de sistema (una lista por usuario).
         await query(`
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tblAgentAlertConfig' AND xtype='U')
@@ -104,7 +106,8 @@ export interface AlertRule {
     frequency: Frecuencia;
     active: boolean;
     telefono?: string | null;     // uno o varios números separados por coma; WhatsApp al dispararse
-    clave?: string | null;        // si está, es una alerta de SISTEMA (no editable salvo destinatarios)
+    clave?: string | null;        // si está, es una alerta de SISTEMA (no editable salvo destinatarios/hora)
+    horaEnvio?: string | null;    // 'HH:MM' — hora fija de envío (solo claves de fin de día)
     createdAt: string;
     lastEvaluatedAt: string | null;
 }
@@ -135,6 +138,7 @@ function mapAlertRow(r: any): AlertRule {
         active: !!r.Activa,
         telefono: r.Telefono ?? null,
         clave: r.Clave ?? null,
+        horaEnvio: r.HoraEnvio ?? null,
         createdAt: r.FechaCreacion?.toISOString?.() || String(r.FechaCreacion),
         lastEvaluatedAt: r.FechaUltimaEvaluacion
             ? (r.FechaUltimaEvaluacion?.toISOString?.() || String(r.FechaUltimaEvaluacion))
@@ -161,6 +165,31 @@ export const SYSTEM_ALERT_CLAVES = [
     'resumen_cancelaciones', 'resumen_devoluciones',
 ] as const;
 
+/** Alertas de sistema que mandan un mensaje a una hora fija del día. */
+export type EndOfDayClave = 'resumen_dia' | 'hallazgos_dia' | 'resumen_cancelaciones' | 'resumen_devoluciones';
+
+/** Hora default 'HH:MM' (Monterrey). El usuario puede cambiarla por alerta (HoraEnvio). */
+export const END_OF_DAY_TIMES: Record<EndOfDayClave, string> = {
+    resumen_dia: '23:00',
+    hallazgos_dia: '23:00',
+    resumen_cancelaciones: '19:00',
+    resumen_devoluciones: '19:30',
+};
+
+export function isEndOfDayClave(clave: string | null | undefined): clave is EndOfDayClave {
+    return !!clave && clave in END_OF_DAY_TIMES;
+}
+
+/** Valida y normaliza 'H:MM'/'HH:MM' → 'HH:MM'; null si no es una hora válida. */
+export function normalizeHora(raw: string | null | undefined): string | null {
+    const m = /^(\d{1,2}):(\d{2})$/.exec((raw || '').trim());
+    if (!m) return null;
+    const hour = Number(m[1]);
+    const minute = Number(m[2]);
+    if (hour > 23 || minute > 59) return null;
+    return `${String(hour).padStart(2, '0')}:${m[2]}`;
+}
+
 const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; frequency: Frecuencia }> = [
     {
         clave: 'inicio_operaciones',
@@ -171,25 +200,25 @@ const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; f
     {
         clave: 'resumen_dia',
         name: 'Resumen de operaciones del día',
-        description: 'Resumen del día por WhatsApp a las 11:00 PM.',
+        description: 'Resumen del día por WhatsApp a la hora configurada.',
         frequency: 'daily',
     },
     {
         clave: 'hallazgos_dia',
         name: 'Hallazgos más importantes del día',
-        description: 'Los hallazgos más relevantes del día por WhatsApp a las 11:00 PM.',
+        description: 'Los hallazgos más relevantes del día por WhatsApp a la hora configurada.',
         frequency: 'daily',
     },
     {
         clave: 'resumen_cancelaciones',
         name: 'Resumen de cancelaciones',
-        description: 'Resumen de las cancelaciones del día por WhatsApp a las 7:00 PM.',
+        description: 'Resumen de las cancelaciones del día por WhatsApp a la hora configurada.',
         frequency: 'daily',
     },
     {
         clave: 'resumen_devoluciones',
         name: 'Resumen de devoluciones de venta',
-        description: 'Resumen de las devoluciones de venta del día por WhatsApp a las 7:30 PM.',
+        description: 'Resumen de las devoluciones de venta del día por WhatsApp a la hora configurada.',
         frequency: 'daily',
     },
 ];
@@ -211,8 +240,9 @@ export async function ensureSystemAlerts(userId: string): Promise<void> {
     const shared = ((sharedRows as any[])[0]?.TelefonosSistema || '') as string;
 
     for (const sa of SYSTEM_ALERTS) {
+        const defaultHora = isEndOfDayClave(sa.clave) ? END_OF_DAY_TIMES[sa.clave] : null;
         const rows = await query(
-            `SELECT TOP 1 IdAlerta, Telefono, Nombre, Descripcion FROM tblAgentAlertas WHERE IdUsuario = ? AND Clave = ?`,
+            `SELECT TOP 1 IdAlerta, Telefono, Nombre, Descripcion, HoraEnvio FROM tblAgentAlertas WHERE IdUsuario = ? AND Clave = ?`,
             [userId, sa.clave]
         );
         const existing = (rows as any[])[0];
@@ -220,8 +250,11 @@ export async function ensureSystemAlerts(userId: string): Promise<void> {
             if (existing.Telefono == null && shared) {
                 await query(`UPDATE tblAgentAlertas SET Telefono = ? WHERE IdAlerta = ?`, [shared, existing.IdAlerta]);
             }
-            // Nombre/descripción canónicos: si cambian en el código (p.ej. la hora
-            // de envío), se reflejan en las alertas ya sembradas.
+            // Alertas sembradas antes de que la hora fuera editable: toman el default.
+            if (existing.HoraEnvio == null && defaultHora) {
+                await query(`UPDATE tblAgentAlertas SET HoraEnvio = ? WHERE IdAlerta = ?`, [defaultHora, existing.IdAlerta]);
+            }
+            // Nombre/descripción canónicos: si cambian en el código se reflejan.
             if (existing.Nombre !== sa.name || existing.Descripcion !== sa.description) {
                 await query(
                     `UPDATE tblAgentAlertas SET Nombre = ?, Descripcion = ? WHERE IdAlerta = ?`,
@@ -232,11 +265,11 @@ export async function ensureSystemAlerts(userId: string): Promise<void> {
         }
         await query(
             `INSERT INTO tblAgentAlertas (IdAlerta, IdUsuario, Nombre, Descripcion, SqlConsulta,
-                CondicionTipo, CondicionValor, ColumnaObjetivo, Frecuencia, Activa, Telefono, Clave)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+                CondicionTipo, CondicionValor, ColumnaObjetivo, Frecuencia, Activa, Telefono, Clave, HoraEnvio)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
             [
                 generateAlertId(), userId, sa.name, sa.description, 'SELECT 1 AS Sistema',
-                'has_rows', null, null, sa.frequency, shared || null, sa.clave
+                'has_rows', null, null, sa.frequency, shared || null, sa.clave, defaultHora
             ]
         );
     }
@@ -363,6 +396,15 @@ export async function updateAlertPhones(userId: string, id: string, telefono: st
     await query(
         `UPDATE tblAgentAlertas SET Telefono = ? WHERE IdAlerta = ? AND IdUsuario = ?`,
         [telefono.slice(0, 500), id, userId]
+    );
+}
+
+/** Edita la hora de envío 'HH:MM' de una alerta de hora fija. */
+export async function updateAlertHoraEnvio(userId: string, id: string, hora: string): Promise<void> {
+    await ensureAlertTables();
+    await query(
+        `UPDATE tblAgentAlertas SET HoraEnvio = ? WHERE IdAlerta = ? AND IdUsuario = ?`,
+        [hora, id, userId]
     );
 }
 

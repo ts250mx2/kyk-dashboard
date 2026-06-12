@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { updateAlertActive, updateAlert, updateAlertPhones, deleteAlert, getAlert, splitPhones, CondicionTipo, Frecuencia } from '@/lib/alerts';
+import { updateAlertActive, updateAlert, updateAlertPhones, updateAlertHoraEnvio, deleteAlert, getAlert, splitPhones, normalizeHora, isEndOfDayClave, CondicionTipo, Frecuencia } from '@/lib/alerts';
 import { getUserId } from '@/lib/conversations';
 import { normalizePhone } from '@/lib/whatsapp/send';
 
 /**
  * PATCH /api/agent/alerts/[id]
  *  - { active: boolean }                       → activa/desactiva
- *  - { telefono: string }                      → solo números WhatsApp (válido también en alertas de sistema)
+ *  - { telefono?, horaEnvio? }                 → números WhatsApp y/u hora de envío
+ *                                                (lo único editable en alertas de sistema)
  *  - { name, sql, conditionType, ... }         → edición completa de la alerta
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,18 +22,45 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             return NextResponse.json({ success: true });
         }
 
-        // Solo números de WhatsApp (lo único editable de una alerta de sistema)
-        if (typeof body.telefono === 'string' && body.name === undefined && body.sql === undefined) {
+        // Solo números y/u hora de envío (lo único editable de una alerta de sistema)
+        const phonesOnly = typeof body.telefono === 'string';
+        const horaOnly = typeof body.horaEnvio === 'string';
+        if ((phonesOnly || horaOnly) && body.name === undefined && body.sql === undefined) {
             const existing = await getAlert(userId, id);
             if (!existing) {
                 return NextResponse.json({ error: 'Alerta no encontrada' }, { status: 404 });
             }
-            const phones = Array.from(new Set(
-                splitPhones(body.telefono).map(normalizePhone).filter(Boolean)
-            )).slice(0, 20);
-            const telefono = phones.join(',');
-            await updateAlertPhones(userId, id, telefono);
-            return NextResponse.json({ success: true, telefono });
+
+            let telefono: string | undefined = undefined;
+            if (phonesOnly) {
+                const phones = Array.from(new Set(
+                    splitPhones(body.telefono).map(normalizePhone).filter(Boolean)
+                )).slice(0, 20);
+                telefono = phones.join(',');
+                await updateAlertPhones(userId, id, telefono);
+            }
+
+            let horaEnvio: string | undefined = undefined;
+            if (horaOnly) {
+                if (!isEndOfDayClave(existing.clave)) {
+                    return NextResponse.json(
+                        { error: 'Solo las alertas de hora fija permiten cambiar la hora de envío.' },
+                        { status: 400 }
+                    );
+                }
+                const hora = normalizeHora(body.horaEnvio);
+                if (!hora) {
+                    return NextResponse.json({ error: 'Hora inválida; usa formato HH:MM (ej. 19:30).' }, { status: 400 });
+                }
+                horaEnvio = hora;
+                await updateAlertHoraEnvio(userId, id, hora);
+            }
+
+            return NextResponse.json({
+                success: true,
+                ...(telefono !== undefined ? { telefono } : {}),
+                ...(horaEnvio !== undefined ? { horaEnvio } : {}),
+            });
         }
 
         // Edición completa

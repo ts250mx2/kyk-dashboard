@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getAlert, splitPhones } from '@/lib/alerts';
+import { getAlert, splitPhones, isEndOfDayClave } from '@/lib/alerts';
 import { getUserId } from '@/lib/conversations';
-import { runEndOfDayMessage, isEndOfDayClave } from '@/lib/system-alerts';
+import { runEndOfDayMessage } from '@/lib/system-alerts';
 
 const TZ = 'America/Monterrey';
 

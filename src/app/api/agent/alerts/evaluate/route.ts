@@ -6,9 +6,12 @@ import {
     evaluateCondition,
     recordAlertEvent,
     splitPhones,
+    normalizeHora,
+    isEndOfDayClave,
+    END_OF_DAY_TIMES,
     AlertRule
 } from '@/lib/alerts';
-import { runInicioOperaciones, runEndOfDayMessage, isEndOfDayClave, END_OF_DAY_TIMES } from '@/lib/system-alerts';
+import { runInicioOperaciones, runEndOfDayMessage } from '@/lib/system-alerts';
 import { sendWhatsApp } from '@/lib/whatsapp/send';
 
 const TZ = 'America/Monterrey';
@@ -22,13 +25,14 @@ function monterreyParts(d: Date = new Date()): { minutesOfDay: number; dateKey: 
 }
 /**
  * Las alertas de hora fija tocan en la PRIMERA pasada del cron a partir de su
- * hora (END_OF_DAY_TIMES), una vez por día. Si el cron estuvo caído, alcanzan
- * a salir en cuanto regrese (mientras sea el mismo día).
+ * hora (HoraEnvio editable; default END_OF_DAY_TIMES), una vez por día. Si el
+ * cron estuvo caído, alcanzan a salir en cuanto regrese (mismo día).
  */
 function isEndOfDayDue(rule: AlertRule, now: { minutesOfDay: number; dateKey: string }): boolean {
     if (!isEndOfDayClave(rule.clave)) return false;
-    const t = END_OF_DAY_TIMES[rule.clave];
-    if (now.minutesOfDay < t.hour * 60 + t.minute) return false;
+    const hora = normalizeHora(rule.horaEnvio) || END_OF_DAY_TIMES[rule.clave];
+    const [h, m] = hora.split(':').map(Number);
+    if (now.minutesOfDay < h * 60 + m) return false;
     if (!rule.lastEvaluatedAt) return true;
     return monterreyParts(new Date(rule.lastEvaluatedAt)).dateKey !== now.dateKey;
 }
@@ -107,6 +111,7 @@ export async function POST(req: Request) {
             active: !!r.Activa,
             telefono: r.Telefono ?? null,
             clave: r.Clave ?? null,
+            horaEnvio: r.HoraEnvio ?? null,
             createdAt: r.FechaCreacion?.toISOString?.() || String(r.FechaCreacion),
             lastEvaluatedAt: r.FechaUltimaEvaluacion
                 ? (r.FechaUltimaEvaluacion?.toISOString?.() || String(r.FechaUltimaEvaluacion))
