@@ -566,7 +566,7 @@ function RulesList({ rules, onToggle, onDelete, onNew, onEdit, onEditModel, onSe
                                         >
                                             <Pencil className="w-3 h-3" />
                                         </button>
-                                        {(r.clave === 'resumen_dia' || r.clave === 'hallazgos_dia') && (
+                                        {r.clave !== 'inicio_operaciones' && (
                                             <button
                                                 onClick={() => onSendNow(r)}
                                                 disabled={sendingId !== null}

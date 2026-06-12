@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getAlert, splitPhones } from '@/lib/alerts';
 import { getUserId } from '@/lib/conversations';
-import { runEndOfDayMessage } from '@/lib/system-alerts';
+import { runEndOfDayMessage, isEndOfDayClave } from '@/lib/system-alerts';
 
 const TZ = 'America/Monterrey';
 
 /**
  * POST /api/agent/alerts/[id]/send
  *
- * Envío MANUAL de una alerta automática de fin de día (resumen_dia / hallazgos_dia)
- * a los números de ESA alerta. Si la hora local (Monterrey) está entre las
- * 00:00 y las 4:00, se envía el resumen del DÍA ANTERIOR (el día que acaba de cerrar).
+ * Envío MANUAL de una alerta automática de hora fija (resumen_dia, hallazgos_dia,
+ * resumen_cancelaciones, resumen_devoluciones) a los números de ESA alerta.
+ * Si la hora local (Monterrey) está entre las 00:00 y las 4:00, se envía el
+ * resumen del DÍA ANTERIOR (el día que acaba de cerrar).
  *
  * No toca FechaUltimaEvaluacion: el envío automático de las 11 PM sigue su curso.
  */
@@ -23,9 +24,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         if (!alert) {
             return NextResponse.json({ error: 'Alerta no encontrada' }, { status: 404 });
         }
-        if (alert.clave !== 'resumen_dia' && alert.clave !== 'hallazgos_dia') {
+        if (!isEndOfDayClave(alert.clave)) {
             return NextResponse.json(
-                { error: 'Solo el resumen y los hallazgos del día se pueden enviar manualmente.' },
+                { error: 'Solo los resúmenes de hora fija (día, hallazgos, cancelaciones, devoluciones) se pueden enviar manualmente.' },
                 { status: 400 }
             );
         }

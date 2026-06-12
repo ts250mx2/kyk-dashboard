@@ -156,7 +156,10 @@ export async function listAlerts(userId: string): Promise<AlertRule[]> {
 // El cron las atiende por su Clave (no por SQL/condición). El usuario solo
 // puede editar la lista COMPARTIDA de números (tblAgentAlertConfig).
 
-export const SYSTEM_ALERT_CLAVES = ['inicio_operaciones', 'resumen_dia', 'hallazgos_dia'] as const;
+export const SYSTEM_ALERT_CLAVES = [
+    'inicio_operaciones', 'resumen_dia', 'hallazgos_dia',
+    'resumen_cancelaciones', 'resumen_devoluciones',
+] as const;
 
 const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; frequency: Frecuencia }> = [
     {
@@ -175,6 +178,18 @@ const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; f
         clave: 'hallazgos_dia',
         name: 'Hallazgos más importantes del día',
         description: 'Los hallazgos más relevantes del día por WhatsApp a las 11:00 PM.',
+        frequency: 'daily',
+    },
+    {
+        clave: 'resumen_cancelaciones',
+        name: 'Resumen de cancelaciones',
+        description: 'Resumen de las cancelaciones del día por WhatsApp a las 6:00 PM.',
+        frequency: 'daily',
+    },
+    {
+        clave: 'resumen_devoluciones',
+        name: 'Resumen de devoluciones de venta',
+        description: 'Resumen de las devoluciones de venta del día por WhatsApp a las 6:00 PM.',
         frequency: 'daily',
     },
 ];

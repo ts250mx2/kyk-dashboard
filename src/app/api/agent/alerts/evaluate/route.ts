@@ -8,7 +8,7 @@ import {
     splitPhones,
     AlertRule
 } from '@/lib/alerts';
-import { runInicioOperaciones, runEndOfDayMessage } from '@/lib/system-alerts';
+import { runInicioOperaciones, runEndOfDayMessage, isEndOfDayClave, END_OF_DAY_HOURS } from '@/lib/system-alerts';
 import { sendWhatsApp } from '@/lib/whatsapp/send';
 
 const TZ = 'America/Monterrey';
@@ -17,9 +17,10 @@ function monterreyParts(d: Date = new Date()): { hour: number; dateKey: string }
     const local = new Date(d.toLocaleString('en-US', { timeZone: TZ }));
     return { hour: local.getHours(), dateKey: `${local.getFullYear()}-${local.getMonth()}-${local.getDate()}` };
 }
-/** Las alertas de fin de día (resumen/hallazgos) tocan a las 23:00, una vez por día. */
+/** Las alertas de hora fija tocan a SU hora (END_OF_DAY_HOURS), una vez por día. */
 function isEndOfDayDue(rule: AlertRule, now: { hour: number; dateKey: string }): boolean {
-    if (now.hour !== 23) return false;
+    if (!isEndOfDayClave(rule.clave)) return false;
+    if (now.hour !== END_OF_DAY_HOURS[rule.clave]) return false;
     if (!rule.lastEvaluatedAt) return true;
     return monterreyParts(new Date(rule.lastEvaluatedAt)).dateKey !== now.dateKey;
 }
@@ -132,7 +133,7 @@ export async function POST(req: Request) {
                         summary.evaluated++;
                         if (r.stores > 0) summary.triggered++;
                         summary.details.push({ id: rule.id, name: rule.name, status: r.stores > 0 ? `inicio: ${r.stores} suc / ${r.sent} envíos` : 'inicio: sin nuevas' });
-                    } else if (rule.clave === 'resumen_dia' || rule.clave === 'hallazgos_dia') {
+                    } else if (isEndOfDayClave(rule.clave)) {
                         if (!isEndOfDayDue(rule, now)) {
                             summary.details.push({ id: rule.id, name: rule.name, status: 'fin_dia: no toca' });
                             continue;
