@@ -8,8 +8,8 @@
  *     (revisión frecuente, dedup por sucursal+día en tblAgentInicioLog).
  *   - resumen_dia            → resumen de operaciones del día (11:00 PM).
  *   - hallazgos_dia          → hallazgos más importantes del día (11:00 PM).
- *   - resumen_cancelaciones  → resumen de cancelaciones del día (6:00 PM).
- *   - resumen_devoluciones   → resumen de devoluciones de venta del día (6:00 PM).
+ *   - resumen_cancelaciones  → resumen de cancelaciones del día (7:00 PM).
+ *   - resumen_devoluciones   → resumen de devoluciones de venta del día (7:30 PM).
  *
  * Los destinatarios salen de la columna Telefono de CADA alerta (splitPhones).
  */
@@ -46,15 +46,15 @@ function targetDateLabel(daysAgo: number): string {
 export type EndOfDayClave = 'resumen_dia' | 'hallazgos_dia' | 'resumen_cancelaciones' | 'resumen_devoluciones';
 
 /** Hora local (Monterrey) a la que toca cada una. */
-export const END_OF_DAY_HOURS: Record<EndOfDayClave, number> = {
-    resumen_dia: 23,
-    hallazgos_dia: 23,
-    resumen_cancelaciones: 18,
-    resumen_devoluciones: 18,
+export const END_OF_DAY_TIMES: Record<EndOfDayClave, { hour: number; minute: number }> = {
+    resumen_dia: { hour: 23, minute: 0 },
+    hallazgos_dia: { hour: 23, minute: 0 },
+    resumen_cancelaciones: { hour: 19, minute: 0 },
+    resumen_devoluciones: { hour: 19, minute: 30 },
 };
 
 export function isEndOfDayClave(clave: string | null | undefined): clave is EndOfDayClave {
-    return !!clave && clave in END_OF_DAY_HOURS;
+    return !!clave && clave in END_OF_DAY_TIMES;
 }
 
 /** Contenido de fin de día: versión completa (página pública) + corta (WhatsApp). */

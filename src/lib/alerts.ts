@@ -183,13 +183,13 @@ const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; f
     {
         clave: 'resumen_cancelaciones',
         name: 'Resumen de cancelaciones',
-        description: 'Resumen de las cancelaciones del día por WhatsApp a las 6:00 PM.',
+        description: 'Resumen de las cancelaciones del día por WhatsApp a las 7:00 PM.',
         frequency: 'daily',
     },
     {
         clave: 'resumen_devoluciones',
         name: 'Resumen de devoluciones de venta',
-        description: 'Resumen de las devoluciones de venta del día por WhatsApp a las 6:00 PM.',
+        description: 'Resumen de las devoluciones de venta del día por WhatsApp a las 7:30 PM.',
         frequency: 'daily',
     },
 ];
@@ -212,13 +212,21 @@ export async function ensureSystemAlerts(userId: string): Promise<void> {
 
     for (const sa of SYSTEM_ALERTS) {
         const rows = await query(
-            `SELECT TOP 1 IdAlerta, Telefono FROM tblAgentAlertas WHERE IdUsuario = ? AND Clave = ?`,
+            `SELECT TOP 1 IdAlerta, Telefono, Nombre, Descripcion FROM tblAgentAlertas WHERE IdUsuario = ? AND Clave = ?`,
             [userId, sa.clave]
         );
         const existing = (rows as any[])[0];
         if (existing) {
             if (existing.Telefono == null && shared) {
                 await query(`UPDATE tblAgentAlertas SET Telefono = ? WHERE IdAlerta = ?`, [shared, existing.IdAlerta]);
+            }
+            // Nombre/descripción canónicos: si cambian en el código (p.ej. la hora
+            // de envío), se reflejan en las alertas ya sembradas.
+            if (existing.Nombre !== sa.name || existing.Descripcion !== sa.description) {
+                await query(
+                    `UPDATE tblAgentAlertas SET Nombre = ?, Descripcion = ? WHERE IdAlerta = ?`,
+                    [sa.name, sa.description, existing.IdAlerta]
+                );
             }
             continue;
         }

@@ -8,19 +8,27 @@ import {
     splitPhones,
     AlertRule
 } from '@/lib/alerts';
-import { runInicioOperaciones, runEndOfDayMessage, isEndOfDayClave, END_OF_DAY_HOURS } from '@/lib/system-alerts';
+import { runInicioOperaciones, runEndOfDayMessage, isEndOfDayClave, END_OF_DAY_TIMES } from '@/lib/system-alerts';
 import { sendWhatsApp } from '@/lib/whatsapp/send';
 
 const TZ = 'America/Monterrey';
-/** Hora local + clave de fecha (YYYY-M-D) en Monterrey. */
-function monterreyParts(d: Date = new Date()): { hour: number; dateKey: string } {
+/** Hora local (minutos del día) + clave de fecha (YYYY-M-D) en Monterrey. */
+function monterreyParts(d: Date = new Date()): { minutesOfDay: number; dateKey: string } {
     const local = new Date(d.toLocaleString('en-US', { timeZone: TZ }));
-    return { hour: local.getHours(), dateKey: `${local.getFullYear()}-${local.getMonth()}-${local.getDate()}` };
+    return {
+        minutesOfDay: local.getHours() * 60 + local.getMinutes(),
+        dateKey: `${local.getFullYear()}-${local.getMonth()}-${local.getDate()}`,
+    };
 }
-/** Las alertas de hora fija tocan a SU hora (END_OF_DAY_HOURS), una vez por día. */
-function isEndOfDayDue(rule: AlertRule, now: { hour: number; dateKey: string }): boolean {
+/**
+ * Las alertas de hora fija tocan en la PRIMERA pasada del cron a partir de su
+ * hora (END_OF_DAY_TIMES), una vez por día. Si el cron estuvo caído, alcanzan
+ * a salir en cuanto regrese (mientras sea el mismo día).
+ */
+function isEndOfDayDue(rule: AlertRule, now: { minutesOfDay: number; dateKey: string }): boolean {
     if (!isEndOfDayClave(rule.clave)) return false;
-    if (now.hour !== END_OF_DAY_HOURS[rule.clave]) return false;
+    const t = END_OF_DAY_TIMES[rule.clave];
+    if (now.minutesOfDay < t.hour * 60 + t.minute) return false;
     if (!rule.lastEvaluatedAt) return true;
     return monterreyParts(new Date(rule.lastEvaluatedAt)).dateKey !== now.dateKey;
 }
