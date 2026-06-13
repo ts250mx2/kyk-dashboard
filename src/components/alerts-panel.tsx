@@ -93,10 +93,18 @@ function formatRelative(iso: string): string {
     } catch { return ''; }
 }
 
-const CONDITION_LABELS: Record<string, string> = {
-    gt: '>', gte: '≥', lt: '<', lte: '≤',
-    eq: '=', neq: '≠', has_rows: 'tiene resultados'
+const CONDITION_WORDS: Record<string, string> = {
+    gt: 'pase de', gte: 'llegue a', lt: 'baje de', lte: 'baje a',
+    eq: 'sea igual a', neq: 'sea distinto de'
 };
+
+/** "Te aviso si Total pasa de $5,000" — la condición en palabras, sin símbolos. */
+function humanCondition(r: { conditionType: string; conditionValue: number | null; targetColumn: string | null }): string {
+    if (r.conditionType === 'has_rows') return 'Te aviso cuando la consulta encuentre resultados';
+    const col = r.targetColumn || 'el valor';
+    const val = r.conditionValue !== null ? r.conditionValue.toLocaleString('es-MX') : '—';
+    return `Te aviso cuando ${col} ${CONDITION_WORDS[r.conditionType] || r.conditionType} ${val}`;
+}
 
 const FREQUENCY_LABELS: Record<string, string> = {
     '5min': 'Cada 5 min', hourly: 'Cada hora', daily: 'Diario', weekly: 'Semanal'
@@ -250,8 +258,13 @@ export function AlertsPanel({ refreshKey, compact = false }: AlertsPanelProps) {
     };
 
     const saveDraft = async () => {
-        if (!draft || !draft.name.trim() || !draft.sql.trim()) {
-            alert('Nombre y SQL son requeridos');
+        if (!draft) return;
+        if (!draft.name.trim()) {
+            alert('Ponle un nombre a la alerta antes de guardarla.');
+            return;
+        }
+        if (!draft.sql.trim()) {
+            alert('Falta la consulta SQL. Genera la alerta describiéndola, o escríbela en el modo avanzado.');
             return;
         }
         setSaving(true);
@@ -285,11 +298,12 @@ export function AlertsPanel({ refreshKey, compact = false }: AlertsPanelProps) {
     const sendNow = async (rule: AlertRule) => {
         const phones = splitPhones(rule.telefono);
         if (phones.length === 0) {
-            alert('Agrega números de WhatsApp a esta alerta primero.');
+            alert('Esta alerta no tiene números de WhatsApp. Edítala y agrega al menos uno para poder enviarla.');
             return;
         }
-        // Entre 00:00 y 4:00 el envío manual reporta el día que acaba de cerrar.
-        const earlyMorning = new Date().getHours() < 4;
+        // Solo los resúmenes de sistema: entre 00:00 y 4:00 el envío manual
+        // reporta el día que acaba de cerrar.
+        const earlyMorning = !!rule.clave && new Date().getHours() < 4;
         const periodNote = earlyMorning ? '\n\nPor la hora, se enviará el resumen del DÍA ANTERIOR.' : '';
         if (!confirm(`¿Enviar "${rule.name}" ahora por WhatsApp a ${phones.length} número(s)?${periodNote}`)) return;
         setSendingId(rule.id);
@@ -634,7 +648,7 @@ function RulesList({ rules, onToggle, onDelete, onNew, onEdit, onEditModel, onSe
             ) : (
                 <div>
                     {userRules.map(r => (
-                        <div key={r.id} className="px-3 py-2.5 border-b border-slate-50 last:border-b-0 group">
+                        <div key={r.id} className="px-3 py-2.5 border-b border-slate-50 last:border-b-0">
                             <div className="flex items-start gap-2">
                                 <div className="flex-1 min-w-0">
                                     <p className={cn(
@@ -646,30 +660,40 @@ function RulesList({ rules, onToggle, onDelete, onNew, onEdit, onEditModel, onSe
                                     {r.description && (
                                         <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{r.description}</p>
                                     )}
-                                    <div className="flex items-center gap-2 mt-1.5">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                                            {FREQUENCY_LABELS[r.frequency] || r.frequency}
-                                        </span>
-                                        <span className="text-[9px] text-slate-300">·</span>
-                                        <span className="text-[9px] font-mono text-slate-500">
-                                            {r.targetColumn ? `${r.targetColumn} ` : ''}
-                                            {CONDITION_LABELS[r.conditionType] || r.conditionType}
-                                            {r.conditionValue !== null ? ` ${r.conditionValue}` : ''}
-                                        </span>
-                                        {r.telefono && (
-                                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-600" title={`Avisa por WhatsApp a ${splitPhones(r.telefono).join(', ')}`}>
-                                                <span className="text-slate-300">·</span>
+                                    <p className="text-[10.5px] text-slate-500 mt-1 leading-snug">
+                                        {humanCondition(r)} <span className="text-slate-400">· se revisa {(FREQUENCY_LABELS[r.frequency] || r.frequency).toLowerCase()}</span>
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        {splitPhones(r.telefono).length > 0 ? (
+                                            <span className="inline-flex items-center gap-0.5 text-[9.5px] font-bold text-emerald-600" title={`Avisa por WhatsApp a ${splitPhones(r.telefono).join(', ')}`}>
                                                 <MessageCircle className="w-3 h-3" />
-                                                WhatsApp{splitPhones(r.telefono).length > 1 ? ` (${splitPhones(r.telefono).length})` : ''}
+                                                {splitPhones(r.telefono).length} número{splitPhones(r.telefono).length > 1 ? 's' : ''} de WhatsApp
                                             </span>
+                                        ) : (
+                                            <span className="text-[9.5px] font-medium text-slate-400">
+                                                Sin WhatsApp — solo avisa aquí en la bandeja
+                                            </span>
+                                        )}
+                                        {!r.active && (
+                                            <span className="text-[9.5px] font-bold text-amber-600">Pausada</span>
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => onSendNow(r)}
+                                        disabled={sendingId !== null}
+                                        className="p-1.5 rounded-lg transition-colors hover:bg-indigo-100 text-indigo-600 disabled:opacity-50"
+                                        title="Enviar ahora por WhatsApp el estado actual de esta alerta"
+                                    >
+                                        {sendingId === r.id
+                                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            : <Send className="w-3.5 h-3.5" />}
+                                    </button>
                                     <button
                                         onClick={() => onEdit(r)}
                                         className="p-1.5 rounded-lg transition-colors hover:bg-indigo-100 text-indigo-600"
-                                        title="Editar"
+                                        title="Editar esta alerta"
                                     >
                                         <Pencil className="w-3.5 h-3.5" />
                                     </button>
@@ -679,14 +703,14 @@ function RulesList({ rules, onToggle, onDelete, onNew, onEdit, onEditModel, onSe
                                             "p-1.5 rounded-lg transition-colors",
                                             r.active ? "hover:bg-amber-100 text-amber-600" : "hover:bg-emerald-100 text-emerald-600"
                                         )}
-                                        title={r.active ? "Desactivar" : "Activar"}
+                                        title={r.active ? "Pausar (deja de revisarse)" : "Reactivar"}
                                     >
                                         <Power className="w-3.5 h-3.5" />
                                     </button>
                                     <button
                                         onClick={() => onDelete(r.id)}
                                         className="p-1.5 hover:bg-rose-100 rounded-lg transition-colors text-rose-500"
-                                        title="Eliminar"
+                                        title="Eliminar esta alerta"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -881,10 +905,12 @@ const ALERT_EXAMPLES = [
 function fallbackSummary(d: CreateAlertDraft): string {
     const freq = (FREQUENCY_LABELS[d.frequency] || d.frequency).toLowerCase();
     if (d.conditionType === 'has_rows') {
-        return `Te avisaré (${freq}) cuando la consulta encuentre resultados.`;
+        return `Reviso ${freq} y te aviso cuando la consulta encuentre resultados.`;
     }
     const col = d.targetColumn || 'el valor';
-    return `Te avisaré (${freq}) cuando ${col} sea ${CONDITION_LABELS[d.conditionType] || d.conditionType} ${d.conditionValue ?? ''}.`;
+    const val = d.conditionValue !== undefined && d.conditionValue !== null
+        ? d.conditionValue.toLocaleString('es-MX') : '—';
+    return `Reviso ${freq} y te aviso cuando ${col} ${CONDITION_WORDS[d.conditionType] || d.conditionType} ${val}.`;
 }
 
 function CreateAlertForm({ draft, onChange, onCancel, onSave, saving, isEditing = false }: {
@@ -1021,6 +1047,12 @@ function CreateAlertForm({ draft, onChange, onCancel, onSave, saving, isEditing 
                     </button>
                 </div>
 
+                <p className="text-[12px] text-slate-500 leading-snug">
+                    {isEditing
+                        ? 'Cambia lo que necesites y guarda. Así funciona hoy:'
+                        : 'Así quedó tu alerta. Ajusta lo que quieras antes de guardarla.'}
+                </p>
+
                 {/* Resumen en lenguaje claro */}
                 <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3">
                     <div className="flex items-start gap-2">
@@ -1061,17 +1093,20 @@ function CreateAlertForm({ draft, onChange, onCancel, onSave, saving, isEditing 
                 <div className="grid grid-cols-2 gap-2">
                     {draft.conditionType !== 'has_rows' && (
                         <div>
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Umbral</label>
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                Avísame cuando {CONDITION_WORDS[draft.conditionType] || 'llegue a'}
+                            </label>
                             <input
                                 type="number"
                                 value={draft.conditionValue ?? ''}
                                 onChange={e => onChange({ ...draft, conditionValue: parseFloat(e.target.value) })}
+                                placeholder="Ej: 5000"
                                 className="w-full px-3 py-2 text-[12px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400"
                             />
                         </div>
                     )}
                     <div className={draft.conditionType === 'has_rows' ? 'col-span-2' : ''}>
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Revisar</label>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">¿Cada cuánto reviso?</label>
                         <select
                             value={draft.frequency}
                             onChange={e => onChange({ ...draft, frequency: e.target.value as any })}
@@ -1090,6 +1125,9 @@ function CreateAlertForm({ draft, onChange, onCancel, onSave, saving, isEditing 
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
                         Avisar por WhatsApp <span className="text-slate-300 normal-case font-medium tracking-normal">(opcional)</span>
                     </label>
+                    <p className="text-[10.5px] text-slate-400 mb-1.5 leading-snug">
+                        Si no agregas números, la alerta solo te avisa aquí en la bandeja.
+                    </p>
                     <PhoneListEditor
                         phones={splitPhones(draft.telefono)}
                         onChange={list => onChange({ ...draft, telefono: list.join(',') })}
@@ -1147,8 +1185,12 @@ function CreateAlertForm({ draft, onChange, onCancel, onSave, saving, isEditing 
                 </button>
             </div>
 
+            <p className="text-[12px] text-slate-500 leading-snug">
+                Aquí editas la consulta y la condición a detalle. Si prefieres algo más sencillo, usa el botón Volver.
+            </p>
+
             <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Nombre</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Nombre de la alerta</label>
                 <input
                     type="text"
                     value={draft.name}
