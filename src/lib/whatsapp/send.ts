@@ -1,3 +1,6 @@
+import { createHash } from 'crypto';
+import { query } from '@/lib/db';
+
 /**
  * Envío de WhatsApp SALIENTE (push proactivo).
  *
@@ -28,6 +31,12 @@ export interface SendWhatsAppInput {
     text: string;
     /** El link (si aplica) ya viene embebido en `text` por el llamador; se ignora en el payload. */
     link?: string;
+    /**
+     * Si es true, no reenvía un texto idéntico al mismo número dentro de la
+     * ventana de dedup (WHATSAPP_DEDUP_WINDOW_MINUTES, default 120). Lo activan
+     * los envíos AUTOMÁTICOS (cron) de alertas; el envío manual lo deja en false.
+     */
+    dedupe?: boolean;
 }
 
 export interface SendWhatsAppResult {
@@ -66,6 +75,56 @@ export function flattenForTemplate(text: string): string {
         .trim();
 }
 
+// ─── Dedup: no mandar el mismo mensaje dos veces al mismo dispositivo ──────
+// Ventana en minutos; un texto idéntico al MISMO número dentro de la ventana
+// no se reenvía. Cubre reintentos/dobles pasadas del cron y un número repetido
+// en la lista. Configurable por env; default 120 min (2 h).
+const DEDUP_WINDOW_MINUTES = Math.max(1, Number(process.env.WHATSAPP_DEDUP_WINDOW_MINUTES) || 120);
+
+let dedupTableEnsured = false;
+async function ensureDedupTable(): Promise<void> {
+    if (dedupTableEnsured) return;
+    await query(`
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tblWhatsAppDedup' AND xtype='U')
+        CREATE TABLE tblWhatsAppDedup (
+            Phone NVARCHAR(40) NOT NULL,
+            MsgHash CHAR(40) NOT NULL,
+            FechaEnvio DATETIME NOT NULL DEFAULT GETDATE(),
+            PRIMARY KEY (Phone, MsgHash)
+        )
+    `);
+    dedupTableEnsured = true;
+}
+
+/**
+ * Reclama atómicamente el envío (phone, hash). Devuelve true si NO hubo un
+ * envío idéntico dentro de la ventana (procede a enviar) y false si es un
+ * duplicado (se debe suprimir). El MERGE con HOLDLOCK serializa la decisión
+ * para que dos pasadas del cron casi simultáneas no reclamen ambas.
+ */
+async function claimSend(phone: string, hash: string, windowMinutes: number): Promise<boolean> {
+    await ensureDedupTable();
+    const rows = await query(
+        `MERGE tblWhatsAppDedup WITH (HOLDLOCK) AS t
+         USING (SELECT ? AS Phone, ? AS MsgHash) AS s
+            ON t.Phone = s.Phone AND t.MsgHash = s.MsgHash
+         WHEN MATCHED AND t.FechaEnvio < DATEADD(MINUTE, -?, GETDATE()) THEN
+            UPDATE SET FechaEnvio = GETDATE()
+         WHEN NOT MATCHED THEN
+            INSERT (Phone, MsgHash, FechaEnvio) VALUES (s.Phone, s.MsgHash, GETDATE())
+         OUTPUT $action AS Act;`,
+        [phone, hash, windowMinutes]
+    );
+    // Hubo INSERT o UPDATE → reclamamos el envío. Sin filas → ya había uno reciente.
+    return Array.isArray(rows) && rows.length > 0;
+}
+
+/** Libera el claim cuando el envío falló, para no bloquear un reintento. */
+async function releaseSend(phone: string, hash: string): Promise<void> {
+    await query(`DELETE FROM tblWhatsAppDedup WHERE Phone = ? AND MsgHash = ?`, [phone, hash])
+        .catch(() => { /* la guarda de dedup nunca debe tumbar el envío */ });
+}
+
 export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendWhatsAppResult> {
     const url = process.env.WHATSAPP_OUTBOUND_URL || process.env.WHATSAPP_OUTBOUND_WEBHOOK || DEFAULT_OUTBOUND_URL;
     const sourceApp = process.env.WHATSAPP_SOURCE_APP || DEFAULT_SOURCE_APP;
@@ -76,6 +135,20 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendWhatsA
 
     if (!phone || !text) {
         return { ok: false, error: 'Falta phone o text' };
+    }
+
+    // Dedup (solo envíos automáticos): hash sobre el texto FINAL que recibe el
+    // dispositivo, así dos entradas que se aplanan igual cuentan como el mismo.
+    const hash = input.dedupe ? createHash('sha1').update(text).digest('hex') : '';
+    if (input.dedupe) {
+        const claimed = await claimSend(phone, hash, DEDUP_WINDOW_MINUTES).catch((e) => {
+            console.error('[sendWhatsApp] dedup falló, se envía igual:', e?.message || e);
+            return true; // si la guarda revienta, mejor enviar que perder la alerta
+        });
+        if (!claimed) {
+            console.log(`[sendWhatsApp] duplicado suprimido a ${phone} (mismo texto < ${DEDUP_WINDOW_MINUTES} min)`);
+            return { ok: true, skipped: true };
+        }
     }
 
     try {
@@ -90,11 +163,13 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendWhatsA
         if (!resp.ok) {
             const body = await resp.text().catch(() => '');
             console.error(`[sendWhatsApp] ${url} respondió ${resp.status}: ${body.slice(0, 200)}`);
+            if (input.dedupe) await releaseSend(phone, hash); // no llegó: libera para reintentar
             return { ok: false, status: resp.status, error: `Outbound ${resp.status}` };
         }
         return { ok: true, status: resp.status };
     } catch (e: any) {
         console.error('[sendWhatsApp] error:', e?.message || e);
+        if (input.dedupe) await releaseSend(phone, hash); // no llegó: libera para reintentar
         return { ok: false, error: e?.message || 'Error enviando WhatsApp' };
     }
 }

@@ -11,7 +11,7 @@ import {
     END_OF_DAY_TIMES,
     AlertRule
 } from '@/lib/alerts';
-import { runInicioOperaciones, runEndOfDayMessage } from '@/lib/system-alerts';
+import { runInicioOperaciones, runEndOfDayMessage, runCancelacionesAnomalas } from '@/lib/system-alerts';
 import { sendWhatsApp } from '@/lib/whatsapp/send';
 
 const TZ = 'America/Monterrey';
@@ -146,12 +146,18 @@ export async function POST(req: Request) {
                         summary.evaluated++;
                         if (r.stores > 0) summary.triggered++;
                         summary.details.push({ id: rule.id, name: rule.name, status: r.stores > 0 ? `inicio: ${r.stores} suc / ${r.sent} envíos` : 'inicio: sin nuevas' });
+                    } else if (rule.clave === 'cancelaciones_anomalas') {
+                        const r = await runCancelacionesAnomalas(rule.userId, rule.id, recipients);
+                        await query(`UPDATE tblAgentAlertas SET FechaUltimaEvaluacion = GETDATE() WHERE IdAlerta = ?`, [rule.id]);
+                        summary.evaluated++;
+                        if (r.anomalias > 0) summary.triggered++;
+                        summary.details.push({ id: rule.id, name: rule.name, status: r.anomalias > 0 ? `cancelaciones: ${r.anomalias} atípicas / ${r.sent} envíos` : 'cancelaciones: sin atípicas' });
                     } else if (isEndOfDayClave(rule.clave)) {
                         if (!isEndOfDayDue(rule, now)) {
                             summary.details.push({ id: rule.id, name: rule.name, status: 'fin_dia: no toca' });
                             continue;
                         }
-                        const r = await runEndOfDayMessage(rule.clave, rule.userId, rule.id, recipients);
+                        const r = await runEndOfDayMessage(rule.clave, rule.userId, rule.id, recipients, 0, true);
                         await query(`UPDATE tblAgentAlertas SET FechaUltimaEvaluacion = GETDATE() WHERE IdAlerta = ?`, [rule.id]);
                         summary.evaluated++;
                         summary.triggered++;
@@ -184,8 +190,9 @@ export async function POST(req: Request) {
                         resultsJson: JSON.stringify(((results as any[]).slice(0, 5)))
                     });
                     // Push proactivo: avisa por WhatsApp a cada número configurado.
+                    // dedupe: no repetir el mismo aviso al mismo número si el cron re-dispara.
                     for (const phone of splitPhones(rule.telefono)) {
-                        await sendWhatsApp({ phone, text: `🔔 Alerta: ${message}` }).catch(() => { /* no bloquea la evaluación */ });
+                        await sendWhatsApp({ phone, text: `🔔 Alerta: ${message}`, dedupe: true }).catch(() => { /* no bloquea la evaluación */ });
                     }
                     summary.triggered++;
                     summary.details.push({ id: rule.id, name: rule.name, status: 'triggered', observedValue });

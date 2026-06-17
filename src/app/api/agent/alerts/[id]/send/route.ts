@@ -3,7 +3,7 @@ import { query } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import { getAlert, splitPhones, isEndOfDayClave, evaluateCondition, AlertRule } from '@/lib/alerts';
 import { getUserId } from '@/lib/conversations';
-import { runEndOfDayMessage } from '@/lib/system-alerts';
+import { runEndOfDayMessage, runCancelacionesAnomalas } from '@/lib/system-alerts';
 import { sendWhatsApp } from '@/lib/whatsapp/send';
 
 const TZ = 'America/Monterrey';
@@ -49,7 +49,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         if (!alert) {
             return NextResponse.json({ error: 'Alerta no encontrada' }, { status: 404 });
         }
-        if (alert.clave && !isEndOfDayClave(alert.clave)) {
+        // inicio_operaciones es la única de sistema que no se puede enviar a mano
+        // (se dispara sola por sucursal); las demás (resúmenes y atípicas) sí.
+        if (alert.clave && !isEndOfDayClave(alert.clave) && alert.clave !== 'cancelaciones_anomalas') {
             return NextResponse.json(
                 { error: 'Esta alerta automática se dispara sola y no se puede enviar manualmente.' },
                 { status: 400 }
@@ -62,6 +64,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
                 { error: 'Agrega al menos un número de WhatsApp a esta alerta.' },
                 { status: 400 }
             );
+        }
+
+        // ── Cancelaciones atípicas: reporta las de HOY al momento ──
+        if (alert.clave === 'cancelaciones_anomalas') {
+            const r = await runCancelacionesAnomalas(userId, alert.id, recipients, { manual: true });
+            return NextResponse.json({
+                success: true,
+                sent: r.sent,
+                recipients: recipients.length,
+                period: 'hoy',
+                anomalias: r.anomalias,
+            });
         }
 
         // ── Resúmenes de sistema de hora fija ──

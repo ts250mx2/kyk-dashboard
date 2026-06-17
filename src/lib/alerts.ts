@@ -84,6 +84,20 @@ export async function ensureAlertTables(): Promise<void> {
                 PRIMARY KEY (IdUsuario, IdTienda, Fecha)
             )
         `);
+        // Dedup de "cancelaciones atípicas": una fila por usuario + cancelación + día,
+        // para avisar cada cancelación rara una sola vez. La Fecha la pone GETDATE()
+        // (reloj de la BD), igual que el barrido, para no depender del huso del proceso.
+        await query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tblAgentCancelacionAlertLog' AND xtype='U')
+            CREATE TABLE tblAgentCancelacionAlertLog (
+                IdUsuario VARCHAR(64) NOT NULL,
+                CancelKey VARCHAR(80) NOT NULL,
+                Fecha DATE NOT NULL,
+                Motivo VARCHAR(20) NULL,
+                FechaAviso DATETIME NOT NULL DEFAULT GETDATE(),
+                PRIMARY KEY (IdUsuario, CancelKey, Fecha)
+            )
+        `);
         tablesEnsured = true;
     } catch (e) {
         console.error('No se pudo asegurar tablas de alertas:', e);
@@ -163,6 +177,7 @@ export async function listAlerts(userId: string): Promise<AlertRule[]> {
 export const SYSTEM_ALERT_CLAVES = [
     'inicio_operaciones', 'resumen_dia', 'hallazgos_dia',
     'resumen_cancelaciones', 'resumen_devoluciones',
+    'cancelaciones_anomalas',
 ] as const;
 
 /** Alertas de sistema que mandan un mensaje a una hora fija del día. */
@@ -220,6 +235,12 @@ const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; f
         name: 'Resumen de devoluciones de venta',
         description: 'Resumen de las devoluciones de venta del día por WhatsApp a la hora configurada.',
         frequency: 'daily',
+    },
+    {
+        clave: 'cancelaciones_anomalas',
+        name: 'Cancelaciones atípicas',
+        description: 'Avisa por WhatsApp al instante cuando hay una cancelación rara: monto alto (> $1,000) o varias del mismo cajero en menos de 2 minutos. Incluye producto, cantidad, precio, total, sucursal, fecha, cajero y supervisor.',
+        frequency: '5min',
     },
 ];
 

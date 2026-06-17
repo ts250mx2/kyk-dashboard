@@ -301,9 +301,9 @@ export function AlertsPanel({ refreshKey, compact = false }: AlertsPanelProps) {
             alert('Esta alerta no tiene números de WhatsApp. Edítala y agrega al menos uno para poder enviarla.');
             return;
         }
-        // Solo los resúmenes de sistema: entre 00:00 y 4:00 el envío manual
-        // reporta el día que acaba de cerrar.
-        const earlyMorning = !!rule.clave && new Date().getHours() < 4;
+        // Solo los resúmenes de sistema de hora fija: entre 00:00 y 4:00 el envío
+        // manual reporta el día que acaba de cerrar. (Las atípicas siempre son de hoy.)
+        const earlyMorning = !!rule.clave && rule.clave !== 'cancelaciones_anomalas' && new Date().getHours() < 4;
         const periodNote = earlyMorning ? '\n\nPor la hora, se enviará el resumen del DÍA ANTERIOR.' : '';
         if (!confirm(`¿Enviar "${rule.name}" ahora por WhatsApp a ${phones.length} número(s)?${periodNote}`)) return;
         setSendingId(rule.id);
@@ -609,7 +609,7 @@ function RulesList({ rules, onToggle, onDelete, onNew, onEdit, onEditModel, onSe
                                                 onClick={() => onSendNow(r)}
                                                 disabled={sendingId !== null}
                                                 className="inline-flex items-center gap-1 px-2 py-1 text-[10.5px] font-bold rounded-lg bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
-                                                title="Enviar ahora por WhatsApp. De 12 AM a 4 AM se envía el resumen del día anterior."
+                                                title="Enviar ahora por WhatsApp el estado actual de esta alerta."
                                             >
                                                 {sendingId === r.id
                                                     ? <Loader2 className="w-3 h-3 animate-spin" />

@@ -17,7 +17,7 @@
 import { query } from '@/lib/db';
 import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
-import { sendWhatsApp } from '@/lib/whatsapp/send';
+import { sendWhatsApp, SendWhatsAppResult } from '@/lib/whatsapp/send';
 import { recordAlertEvent, getSystemAlertModel, EndOfDayClave } from '@/lib/alerts';
 import { getScannersByPriority } from '@/lib/insights-scanners';
 import { getModel } from '@/lib/advanced-reports/models';
@@ -101,12 +101,16 @@ async function narrate(prompt: string, maxTokens = 700, modelId?: string | null)
     }
 }
 
-/** Envía el mismo texto a todos los destinatarios. Devuelve cuántos salieron OK. */
-async function sendToAll(recipients: string[], text: string): Promise<number> {
+/**
+ * Envía el mismo texto a todos los destinatarios. Devuelve cuántos SALIERON
+ * (los duplicados suprimidos por dedup no cuentan). Con `dedupe` (envíos del
+ * cron) no reenvía un texto idéntico al mismo número dentro de la ventana.
+ */
+async function sendToAll(recipients: string[], text: string, dedupe = false): Promise<number> {
     let sent = 0;
     for (const phone of recipients) {
-        const r = await sendWhatsApp({ phone, text }).catch(() => ({ ok: false }));
-        if (r.ok) sent++;
+        const r: SendWhatsAppResult = await sendWhatsApp({ phone, text, dedupe }).catch(() => ({ ok: false }));
+        if (r.ok && !r.skipped) sent++;
     }
     return sent;
 }
@@ -149,7 +153,7 @@ export async function runInicioOperaciones(
         } catch { /* noop */ }
 
         const text = `🟢 Inicio de operaciones\n${tienda} registró su primera venta del día${hora ? ` a las ${hora}` : ''}.`;
-        sent += await sendToAll(recipients, text);
+        sent += await sendToAll(recipients, text, true); // cron: dedup activado
 
         await query(
             `INSERT INTO tblAgentInicioLog (IdUsuario, IdTienda, Fecha) VALUES (?, ?, CAST(GETDATE() AS DATE))`,
@@ -464,7 +468,8 @@ export async function runEndOfDayMessage(
     userId: string,
     alertId: string,
     recipients: string[],
-    daysAgo = 0
+    daysAgo = 0,
+    dedupe = false
 ): Promise<{ sent: number }> {
     const modelId = await getSystemAlertModel(userId).catch(() => null);
     const gen = await END_OF_DAY_GENERATORS[clave](daysAgo, modelId);
@@ -489,7 +494,7 @@ export async function runEndOfDayMessage(
 
     // Axon limita `message` a 800 caracteres: corto (≤700) + liga (~60).
     const text = gen.short.slice(0, 700) + link;
-    const sent = await sendToAll(recipients, text);
+    const sent = await sendToAll(recipients, text, dedupe);
     await recordAlertEvent({
         alertId,
         userId,
@@ -499,4 +504,203 @@ export async function runEndOfDayMessage(
         touchLastEvaluation: false,
     }).catch(() => { });
     return { sent };
+}
+
+// ─── 6) Cancelaciones atípicas (evento, cada 5 min) ────────────────────────
+// Dispara cuando aparece una cancelación "rara": monto alto, o parte de una
+// ráfaga de muchas cancelaciones en poco tiempo hechas por el MISMO cajero.
+// Manda el detalle de CADA cancelación atípica UNA sola vez (dedup en
+// tblAgentCancelacionAlertLog, por usuario + cancelación + día).
+//
+// Umbrales configurables por env (con default = lo que pidió el dueño):
+const CANCEL_BIG_AMOUNT = Math.max(1, Number(process.env.CANCEL_ALERT_MONTO) || 1000);        // "> $1,000"
+const CANCEL_BURST_COUNT = Math.max(1, Number(process.env.CANCEL_ALERT_RAFAGA_NUM) || 4);     // "más de 4"
+const CANCEL_BURST_WINDOW_MIN = Math.max(1, Number(process.env.CANCEL_ALERT_RAFAGA_MIN) || 2);// "en menos de 2 min"
+const CANCEL_MAX_PER_PASS = 15; // tope de avisos por pasada; el resto se manda en la siguiente
+
+interface CancHeader {
+    IdTienda: number;
+    IdComputadora: number;
+    IdCancelacion: number;
+    IdCajero: number | null;
+    FechaCancelacion: Date;
+    Total: number;
+}
+
+const cancelKey = (h: { IdTienda: unknown; IdComputadora: unknown; IdCancelacion: unknown }) =>
+    `${h.IdTienda}-${h.IdComputadora}-${h.IdCancelacion}`;
+
+/** Detalle (una línea por producto) de UNA cancelación, para el mensaje. */
+async function buildCancelacionMessage(h: CancHeader, big: boolean, burst: number): Promise<string | null> {
+    const detalle = (await query(
+        `SELECT T.Tienda,
+                ISNULL(F.Descripcion, '(sin descripción)') AS Producto,
+                B.Cantidad,
+                B.PrecioVenta AS Precio,
+                B.Cantidad * B.PrecioVenta AS Total,
+                A.FechaCancelacion,
+                ISNULL(D.Usuario, '—') AS Cajero,
+                ISNULL(E.Usuario, '—') AS Supervisor
+         FROM tblCancelaciones A
+         INNER JOIN tblDetalleCancelaciones B
+            ON A.IdCancelacion = B.IdCancelacion AND A.IdComputadora = B.IdComputadora AND A.IdTienda = B.IdTienda
+         LEFT JOIN tblAperturasCierres C
+            ON A.IdTienda = C.IdTienda AND A.IdApertura = C.IdApertura AND A.IdComputadora = C.IdComputadora
+         LEFT JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
+         LEFT JOIN tblUsuarios E ON A.IdSupervisor = E.IdUsuario
+         LEFT JOIN tblArticulos F ON B.CodigoInterno = F.CodigoInterno
+         INNER JOIN tblTiendas T ON A.IdTienda = T.IdTienda
+         WHERE A.IdTienda = ? AND A.IdComputadora = ? AND A.IdCancelacion = ?
+         ORDER BY B.Cantidad * B.PrecioVenta DESC`,
+        [h.IdTienda, h.IdComputadora, h.IdCancelacion]
+    )) as any[];
+    if (!detalle.length) return null;
+
+    const first = detalle[0];
+    let fecha = '';
+    try {
+        fecha = new Date(first.FechaCancelacion).toLocaleString('es-MX', {
+            timeZone: 'America/Monterrey', day: '2-digit', month: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+        });
+    } catch { fecha = String(first.FechaCancelacion); }
+
+    const motivos: string[] = [];
+    if (big) motivos.push(`monto mayor a ${fmtMxn(CANCEL_BIG_AMOUNT)}`);
+    if (burst > CANCEL_BURST_COUNT) motivos.push(`ráfaga (${burst} cancelaciones del mismo cajero en menos de ${CANCEL_BURST_WINDOW_MIN} min)`);
+
+    const lineas = detalle
+        .map((d) => `• ${d.Producto} — ${Number(d.Cantidad) || 0} x ${fmtMxn(d.Precio)} = ${fmtMxn(d.Total)}`)
+        .join('\n');
+
+    return `🚨 Cancelación atípica (${motivos.join(' y ')})
+Sucursal: ${first.Tienda}
+Folio: ${h.IdComputadora}-${h.IdCancelacion}
+Fecha: ${fecha}
+Cajero: ${first.Cajero} · Supervisor: ${first.Supervisor}
+Detalle:
+${lineas}
+Total cancelación: ${fmtMxn(h.Total)}`;
+}
+
+export async function runCancelacionesAnomalas(
+    userId: string,
+    alertId: string,
+    recipients: string[],
+    opts: { manual?: boolean } = {}
+): Promise<{ sent: number; anomalias: number }> {
+    const manual = !!opts.manual;
+    // En envío manual, si hoy no hay nada raro, confirmamos; en automático, silencio.
+    const nada = async (): Promise<{ sent: number; anomalias: number }> =>
+        manual
+            ? { sent: await sendToAll(recipients, '✅ Sin cancelaciones atípicas hoy.', false), anomalias: 0 }
+            : { sent: 0, anomalias: 0 };
+
+    // Cancelaciones de HOY, una fila por cancelación con su monto total.
+    const headers = (await query(`
+        ;WITH Canc AS (
+            SELECT A.IdTienda, A.IdComputadora, A.IdCancelacion, C.IdCajero,
+                   MIN(A.FechaCancelacion) AS FechaCancelacion,
+                   SUM(B.Cantidad * B.PrecioVenta) AS Total
+            FROM tblCancelaciones A
+            INNER JOIN tblDetalleCancelaciones B
+                ON A.IdCancelacion = B.IdCancelacion AND A.IdComputadora = B.IdComputadora AND A.IdTienda = B.IdTienda
+            LEFT JOIN tblAperturasCierres C
+                ON A.IdTienda = C.IdTienda AND A.IdApertura = C.IdApertura AND A.IdComputadora = C.IdComputadora
+            WHERE A.FechaCancelacion >= CAST(GETDATE() AS DATE)
+            GROUP BY A.IdTienda, A.IdComputadora, A.IdCancelacion, C.IdCajero
+        )
+        SELECT IdTienda, IdComputadora, IdCancelacion, IdCajero, FechaCancelacion, Total
+        FROM Canc
+        ORDER BY IdCajero, FechaCancelacion
+    `)) as CancHeader[];
+    if (!headers.length) return nada();
+
+    // Motivos por cancelación (una cancelación puede cumplir ambos).
+    const flagged = new Map<string, { h: CancHeader; big: boolean; burst: number }>();
+    const mark = (h: CancHeader, patch: { big?: boolean; burst?: number }) => {
+        const k = cancelKey(h);
+        const cur = flagged.get(k) || { h, big: false, burst: 0 };
+        if (patch.big) cur.big = true;
+        if (patch.burst) cur.burst = Math.max(cur.burst, patch.burst);
+        flagged.set(k, cur);
+    };
+
+    // Regla A: cancelación con monto mayor al umbral.
+    for (const h of headers) {
+        if (Number(h.Total) > CANCEL_BIG_AMOUNT) mark(h, { big: true });
+    }
+
+    // Regla B: ráfaga — > N cancelaciones dentro de una ventana < W min del MISMO cajero.
+    // Ventana deslizante (dos punteros) sobre las cancelaciones de cada cajero, ya ordenadas por fecha.
+    const windowMs = CANCEL_BURST_WINDOW_MIN * 60_000;
+    const byCajero = new Map<number, CancHeader[]>();
+    for (const h of headers) {
+        if (h.IdCajero == null) continue;            // sin cajero atribuible no se evalúa ráfaga
+        const idc = Number(h.IdCajero);
+        const arr = byCajero.get(idc) || [];
+        arr.push(h);
+        byCajero.set(idc, arr);
+    }
+    for (const arr of byCajero.values()) {
+        let i = 0;
+        for (let j = 0; j < arr.length; j++) {
+            const tj = new Date(arr[j].FechaCancelacion).getTime();
+            while (tj - new Date(arr[i].FechaCancelacion).getTime() >= windowMs) i++;
+            const count = j - i + 1; // cancelaciones del cajero dentro de (tj - W, tj]
+            if (count > CANCEL_BURST_COUNT) {
+                for (let k = i; k <= j; k++) mark(arr[k], { burst: count });
+            }
+        }
+    }
+
+    if (flagged.size === 0) return nada();
+
+    // Automático: omite las ya avisadas hoy (dedup persistente; el día lo define la BD).
+    // Manual: manda TODAS las de hoy (reporte on-demand), aunque ya se hayan avisado.
+    let candidatas = [...flagged.values()];
+    if (!manual) {
+        const logged = (await query(
+            `SELECT CancelKey FROM tblAgentCancelacionAlertLog WHERE IdUsuario = ? AND Fecha = CAST(GETDATE() AS DATE)`,
+            [userId]
+        )) as Array<{ CancelKey: string }>;
+        const already = new Set(logged.map((r) => r.CancelKey));
+        candidatas = candidatas.filter((r) => !already.has(cancelKey(r.h)));
+        if (candidatas.length === 0) return { sent: 0, anomalias: 0 };
+    }
+    candidatas.sort((a, b) => new Date(b.h.FechaCancelacion).getTime() - new Date(a.h.FechaCancelacion).getTime());
+
+    const cap = manual ? 30 : CANCEL_MAX_PER_PASS;
+    if (candidatas.length > cap) {
+        console.log(`[cancelaciones_anomalas] ${candidatas.length} atípicas; mando ${cap}, el resto ${manual ? 'se omite' : 'en la siguiente pasada'}.`);
+    }
+
+    let sent = 0;
+    let anomalias = 0;
+    for (const r of candidatas.slice(0, cap)) {
+        const text = await buildCancelacionMessage(r.h, r.big, r.burst).catch(() => null);
+        if (!text) continue;
+
+        // cron: dedup de envío activado; manual: directo (acción deliberada del usuario).
+        sent += await sendToAll(recipients, text, !manual);
+
+        const motivo = r.big && r.burst > CANCEL_BURST_COUNT ? 'ambos' : r.big ? 'grande' : 'rafaga';
+        await query(
+            `INSERT INTO tblAgentCancelacionAlertLog (IdUsuario, CancelKey, Fecha, Motivo)
+             VALUES (?, ?, CAST(GETDATE() AS DATE), ?)`,
+            [userId, cancelKey(r.h), motivo]
+        ).catch(() => { /* si ya estaba (cron previo o pasadas que chocan), la PK evita el duplicado */ });
+
+        await recordAlertEvent({
+            alertId,
+            userId,
+            observedValue: Number(r.h.Total) || null,
+            message: `Cancelación atípica · Folio ${r.h.IdComputadora}-${r.h.IdCancelacion} · ${fmtMxn(r.h.Total)}`,
+            resultsJson: JSON.stringify({ ...r.h, motivo }),
+            touchLastEvaluation: !manual, // el envío manual no debe correr el reloj del cron
+        }).catch(() => { });
+        anomalias++;
+    }
+
+    return { sent, anomalias };
 }
