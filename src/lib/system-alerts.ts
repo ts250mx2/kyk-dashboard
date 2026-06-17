@@ -704,3 +704,350 @@ export async function runCancelacionesAnomalas(
 
     return { sent, anomalias };
 }
+
+// ─── Helpers compartidos de alertas de evento (devoluciones, retiros, supervisor) ─
+const EVENT_MAX_PER_PASS = 15;       // tope por pasada del cron
+const EVENT_MAX_MANUAL = 30;         // tope por clic manual
+
+/** Llaves ya avisadas HOY para una clave (dedup; el día lo define la BD). */
+async function loadAlertedKeys(userId: string, clave: string): Promise<Set<string>> {
+    const rows = (await query(
+        `SELECT EventoKey FROM tblAgentEventoAlertLog WHERE IdUsuario = ? AND Clave = ? AND Fecha = CAST(GETDATE() AS DATE)`,
+        [userId, clave]
+    )) as Array<{ EventoKey: string }>;
+    return new Set(rows.map((r) => r.EventoKey));
+}
+
+/** Marca un evento como avisado hoy (idempotente; la PK evita duplicados). */
+async function markAlerted(userId: string, clave: string, key: string, motivo: string): Promise<void> {
+    await query(
+        `INSERT INTO tblAgentEventoAlertLog (IdUsuario, Clave, EventoKey, Fecha, Motivo)
+         VALUES (?, ?, ?, CAST(GETDATE() AS DATE), ?)`,
+        [userId, clave, key, motivo]
+    ).catch(() => { /* si ya estaba (cron previo / pasadas que chocan), la PK lo evita */ });
+}
+
+/** Marca como "ráfaga" los elementos con > maxCount eventos del MISMO actor dentro de < windowMs. */
+function detectBursts<T>(
+    items: T[],
+    actorOf: (t: T) => number | null,
+    timeOf: (t: T) => number,
+    windowMs: number,
+    maxCount: number,
+    onBurst: (t: T, count: number) => void
+): void {
+    const byActor = new Map<number, T[]>();
+    for (const it of items) {
+        const a = actorOf(it);
+        if (a == null) continue;
+        const arr = byActor.get(a) || [];
+        arr.push(it);
+        byActor.set(a, arr);
+    }
+    for (const arr of byActor.values()) {
+        arr.sort((x, y) => timeOf(x) - timeOf(y));
+        let i = 0;
+        for (let j = 0; j < arr.length; j++) {
+            while (timeOf(arr[j]) - timeOf(arr[i]) >= windowMs) i++;
+            const count = j - i + 1;
+            if (count > maxCount) for (let k = i; k <= j; k++) onBurst(arr[k], count);
+        }
+    }
+}
+
+const fmtFechaHora = (d: Date): string => {
+    try {
+        return new Date(d).toLocaleString('es-MX', {
+            timeZone: 'America/Monterrey', day: '2-digit', month: '2-digit',
+            hour: '2-digit', minute: '2-digit',
+        });
+    } catch { return String(d); }
+};
+
+// ─── 7) Devoluciones atípicas (evento, cada 5 min) ─────────────────────────
+const DEV_BIG_AMOUNT = Math.max(1, Number(process.env.DEV_ALERT_MONTO) || 1000);
+const DEV_BURST_COUNT = Math.max(1, Number(process.env.DEV_ALERT_RAFAGA_NUM) || 4);
+const DEV_BURST_WINDOW_MIN = Math.max(1, Number(process.env.DEV_ALERT_RAFAGA_MIN) || 2);
+
+interface DevRow {
+    IdTienda: number;
+    IdDevolucionVenta: number;
+    IdUsuario: number | null;
+    FechaDevolucionVenta: Date;
+    Valor: number;
+    Tienda: string;
+    Cliente: string | null;
+    Concepto: string | null;
+    Empleado: string | null;
+    Supervisor: string;
+}
+
+function buildDevolucionMessage(d: DevRow, big: boolean, burst: number): string {
+    const motivos: string[] = [];
+    if (big) motivos.push(`monto mayor a ${fmtMxn(DEV_BIG_AMOUNT)}`);
+    if (burst > DEV_BURST_COUNT) motivos.push(`ráfaga (${burst} devoluciones del mismo supervisor en menos de ${DEV_BURST_WINDOW_MIN} min)`);
+    return `🔁 Devolución atípica (${motivos.join(' y ')})
+Sucursal: ${d.Tienda}
+Folio: ${d.IdDevolucionVenta}
+Fecha: ${fmtFechaHora(d.FechaDevolucionVenta)}
+Monto: ${fmtMxn(d.Valor)}
+Cliente: ${d.Cliente || '—'}
+Motivo: ${d.Concepto || '—'}
+Empleado: ${d.Empleado || '—'} · Supervisor: ${d.Supervisor}`;
+}
+
+export async function runDevolucionesAnomalas(
+    userId: string,
+    alertId: string,
+    recipients: string[],
+    opts: { manual?: boolean } = {}
+): Promise<{ sent: number; anomalias: number }> {
+    const manual = !!opts.manual;
+    const nada = async (): Promise<{ sent: number; anomalias: number }> =>
+        manual
+            ? { sent: await sendToAll(recipients, '✅ Sin devoluciones atípicas hoy.', false), anomalias: 0 }
+            : { sent: 0, anomalias: 0 };
+
+    const rows = (await query(`
+        SELECT A.IdTienda, A.IdDevolucionVenta, A.IdUsuario, A.FechaDevolucionVenta, A.Valor,
+               ISNULL(T.Tienda, 'Sin tienda') AS Tienda, A.Cliente, A.Concepto, A.Empleado,
+               ISNULL(U.Usuario, '—') AS Supervisor
+        FROM tblDevolucionesVenta A
+        LEFT JOIN tblTiendas T ON A.IdTienda = T.IdTienda
+        LEFT JOIN tblUsuarios U ON A.IdUsuario = U.IdUsuario
+        WHERE CAST(A.FechaDevolucionVenta AS DATE) = CAST(GETDATE() AS DATE)
+        ORDER BY A.IdUsuario, A.FechaDevolucionVenta
+    `)) as DevRow[];
+    if (!rows.length) return nada();
+
+    const keyOf = (d: DevRow) => `${d.IdTienda}-${d.IdDevolucionVenta}`;
+    const flagged = new Map<string, { d: DevRow; big: boolean; burst: number }>();
+    const mark = (d: DevRow, patch: { big?: boolean; burst?: number }) => {
+        const cur = flagged.get(keyOf(d)) || { d, big: false, burst: 0 };
+        if (patch.big) cur.big = true;
+        if (patch.burst) cur.burst = Math.max(cur.burst, patch.burst);
+        flagged.set(keyOf(d), cur);
+    };
+
+    for (const d of rows) if (Number(d.Valor) > DEV_BIG_AMOUNT) mark(d, { big: true });
+    detectBursts(
+        rows,
+        (d) => (d.IdUsuario == null ? null : Number(d.IdUsuario)),
+        (d) => new Date(d.FechaDevolucionVenta).getTime(),
+        DEV_BURST_WINDOW_MIN * 60_000,
+        DEV_BURST_COUNT,
+        (d, count) => mark(d, { burst: count })
+    );
+
+    if (flagged.size === 0) return nada();
+
+    let candidatas = [...flagged.values()];
+    if (!manual) {
+        const already = await loadAlertedKeys(userId, 'devoluciones_anomalas');
+        candidatas = candidatas.filter((r) => !already.has(keyOf(r.d)));
+        if (candidatas.length === 0) return { sent: 0, anomalias: 0 };
+    }
+    candidatas.sort((a, b) => new Date(b.d.FechaDevolucionVenta).getTime() - new Date(a.d.FechaDevolucionVenta).getTime());
+
+    let sent = 0;
+    let anomalias = 0;
+    for (const r of candidatas.slice(0, manual ? EVENT_MAX_MANUAL : EVENT_MAX_PER_PASS)) {
+        sent += await sendToAll(recipients, buildDevolucionMessage(r.d, r.big, r.burst), !manual);
+        const motivo = r.big && r.burst > DEV_BURST_COUNT ? 'ambos' : r.big ? 'grande' : 'rafaga';
+        await markAlerted(userId, 'devoluciones_anomalas', keyOf(r.d), motivo);
+        await recordAlertEvent({
+            alertId, userId,
+            observedValue: Number(r.d.Valor) || null,
+            message: `Devolución atípica · Folio ${r.d.IdDevolucionVenta} · ${fmtMxn(r.d.Valor)}`,
+            resultsJson: JSON.stringify({ ...r.d, motivo }),
+            touchLastEvaluation: !manual,
+        }).catch(() => { });
+        anomalias++;
+    }
+    return { sent, anomalias };
+}
+
+// ─── 8) Retiros de efectivo inusuales (evento, cada 5 min) ─────────────────
+const RETIRO_BIG_CASH = Math.max(1, Number(process.env.RETIRO_ALERT_MONTO) || 10000);
+const parseHour = (v: string | undefined, def: number): number => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 && n <= 24 ? n : def;
+};
+const RETIRO_HORA_INI = parseHour(process.env.RETIRO_ALERT_HORA_INI, 6);   // permitido DESDE (incl.)
+const RETIRO_HORA_FIN = parseHour(process.env.RETIRO_ALERT_HORA_FIN, 23);  // permitido HASTA (excl.)
+
+interface RetiroRow {
+    IdTienda: number;
+    IdComputadora: number;
+    IdRetiro: number;
+    Fecha: Date;
+    Hora: number;
+    Tienda: string;
+    Concepto: string | null;
+    Efectivo: number;
+    Total: number;
+    Cajero: string;
+    Supervisor: string;
+}
+
+function buildRetiroMessage(r: RetiroRow, big: boolean, offHours: boolean): string {
+    const motivos: string[] = [];
+    if (big) motivos.push(`efectivo mayor a ${fmtMxn(RETIRO_BIG_CASH)}`);
+    if (offHours) motivos.push(`fuera de horario (permitido ${RETIRO_HORA_INI}:00–${RETIRO_HORA_FIN}:00)`);
+    return `💵 Retiro de efectivo inusual (${motivos.join(' y ')})
+Sucursal: ${r.Tienda}
+Folio: ${r.IdComputadora}-${r.IdRetiro}
+Fecha: ${fmtFechaHora(r.Fecha)}
+Efectivo: ${fmtMxn(r.Efectivo)}
+Total retiro: ${fmtMxn(r.Total)}
+Concepto: ${r.Concepto || '—'}
+Cajero: ${r.Cajero} · Supervisor: ${r.Supervisor}`;
+}
+
+export async function runRetirosInusuales(
+    userId: string,
+    alertId: string,
+    recipients: string[],
+    opts: { manual?: boolean } = {}
+): Promise<{ sent: number; anomalias: number }> {
+    const manual = !!opts.manual;
+    const nada = async (): Promise<{ sent: number; anomalias: number }> =>
+        manual
+            ? { sent: await sendToAll(recipients, '✅ Sin retiros de efectivo inusuales hoy.', false), anomalias: 0 }
+            : { sent: 0, anomalias: 0 };
+
+    const rows = (await query(`
+        SELECT A.IdTienda, A.IdComputadora, A.IdRetiro, A.Fecha, DATEPART(HOUR, A.Fecha) AS Hora,
+               ISNULL(T.Tienda, 'Sin tienda') AS Tienda, A.Concepto,
+               ISNULL(A.Efectivo, 0) AS Efectivo,
+               (ISNULL(A.Efectivo,0) + ISNULL(A.Tarjeta,0) + ISNULL(A.TarjetaDebito,0) + ISNULL(A.Dolares,0)
+                + ISNULL(A.Cheques,0) + ISNULL(A.Transferencia,0) + ISNULL(A.Devoluciones,0)) AS Total,
+               ISNULL(D.Usuario, '—') AS Cajero, ISNULL(E.Usuario, '—') AS Supervisor
+        FROM tblRetiros A
+        LEFT JOIN tblAperturasCierres C
+            ON A.IdTienda = C.IdTienda AND A.IdComputadora = C.IdComputadora AND A.IdApertura = C.IdApertura
+        LEFT JOIN tblUsuarios D ON C.IdCajero = D.IdUsuario
+        LEFT JOIN tblUsuarios E ON A.IdSupervisor = E.IdUsuario
+        LEFT JOIN tblTiendas T ON A.IdTienda = T.IdTienda
+        WHERE CAST(A.Fecha AS DATE) = CAST(GETDATE() AS DATE)
+        ORDER BY A.Fecha
+    `)) as RetiroRow[];
+    if (!rows.length) return nada();
+
+    const keyOf = (r: RetiroRow) => `${r.IdTienda}-${r.IdComputadora}-${r.IdRetiro}`;
+    const flagged: Array<{ r: RetiroRow; big: boolean; offHours: boolean }> = [];
+    for (const r of rows) {
+        const efectivo = Number(r.Efectivo) || 0;
+        const big = efectivo > RETIRO_BIG_CASH;
+        const offHours = efectivo > 0 && (Number(r.Hora) < RETIRO_HORA_INI || Number(r.Hora) >= RETIRO_HORA_FIN);
+        if (big || offHours) flagged.push({ r, big, offHours });
+    }
+    if (flagged.length === 0) return nada();
+
+    let candidatos = flagged;
+    if (!manual) {
+        const already = await loadAlertedKeys(userId, 'retiros_inusuales');
+        candidatos = candidatos.filter((x) => !already.has(keyOf(x.r)));
+        if (candidatos.length === 0) return { sent: 0, anomalias: 0 };
+    }
+    candidatos.sort((a, b) => new Date(b.r.Fecha).getTime() - new Date(a.r.Fecha).getTime());
+
+    let sent = 0;
+    let anomalias = 0;
+    for (const x of candidatos.slice(0, manual ? EVENT_MAX_MANUAL : EVENT_MAX_PER_PASS)) {
+        sent += await sendToAll(recipients, buildRetiroMessage(x.r, x.big, x.offHours), !manual);
+        const motivo = x.big && x.offHours ? 'ambos' : x.big ? 'monto' : 'horario';
+        await markAlerted(userId, 'retiros_inusuales', keyOf(x.r), motivo);
+        await recordAlertEvent({
+            alertId, userId,
+            observedValue: Number(x.r.Efectivo) || null,
+            message: `Retiro inusual · Folio ${x.r.IdComputadora}-${x.r.IdRetiro} · efectivo ${fmtMxn(x.r.Efectivo)}`,
+            resultsJson: JSON.stringify({ ...x.r, motivo }),
+            touchLastEvaluation: !manual,
+        }).catch(() => { });
+        anomalias++;
+    }
+    return { sent, anomalias };
+}
+
+// ─── 9) Supervisor con demasiadas autorizaciones ("sello de goma") ─────────
+const SUPERVISOR_MAX = Math.max(1, Number(process.env.SUPERVISOR_ALERT_MAX) || 15);
+
+interface SupRow {
+    Id: number | null;
+    Supervisor: string;
+    CancCnt: number;
+    CancMonto: number;
+    DevCnt: number;
+    DevMonto: number;
+}
+
+export async function runSupervisorSello(
+    userId: string,
+    alertId: string,
+    recipients: string[],
+    opts: { manual?: boolean } = {}
+): Promise<{ sent: number; anomalias: number }> {
+    const manual = !!opts.manual;
+    const nada = async (): Promise<{ sent: number; anomalias: number }> =>
+        manual
+            ? { sent: await sendToAll(recipients, '✅ Ningún supervisor con autorizaciones excesivas hoy.', false), anomalias: 0 }
+            : { sent: 0, anomalias: 0 };
+
+    // Autorizaciones de HOY por supervisor = cancelaciones (IdSupervisor) + devoluciones (IdUsuario).
+    const rows = (await query(`
+        SELECT x.Id, ISNULL(U.Usuario, '—') AS Supervisor,
+               SUM(x.CancCnt) AS CancCnt, SUM(x.CancMonto) AS CancMonto,
+               SUM(x.DevCnt) AS DevCnt, SUM(x.DevMonto) AS DevMonto
+        FROM (
+            SELECT A.IdSupervisor AS Id,
+                   COUNT(DISTINCT CONCAT(A.IdTienda, '-', A.IdComputadora, '-', A.IdCancelacion)) AS CancCnt,
+                   SUM(B.Cantidad * B.PrecioVenta) AS CancMonto,
+                   0 AS DevCnt, 0 AS DevMonto
+            FROM tblCancelaciones A
+            INNER JOIN tblDetalleCancelaciones B
+                ON A.IdCancelacion = B.IdCancelacion AND A.IdComputadora = B.IdComputadora AND A.IdTienda = B.IdTienda
+            WHERE CAST(A.FechaCancelacion AS DATE) = CAST(GETDATE() AS DATE)
+            GROUP BY A.IdSupervisor
+            UNION ALL
+            SELECT A.IdUsuario AS Id, 0, 0, COUNT(*), SUM(A.Valor)
+            FROM tblDevolucionesVenta A
+            WHERE CAST(A.FechaDevolucionVenta AS DATE) = CAST(GETDATE() AS DATE)
+            GROUP BY A.IdUsuario
+        ) x
+        LEFT JOIN tblUsuarios U ON x.Id = U.IdUsuario
+        GROUP BY x.Id, U.Usuario
+    `)) as SupRow[];
+
+    const total = (s: SupRow) => (Number(s.CancCnt) || 0) + (Number(s.DevCnt) || 0);
+    let candidatos = rows.filter((s) => s.Id != null && total(s) > SUPERVISOR_MAX);
+    if (candidatos.length === 0) return nada();
+
+    if (!manual) {
+        const already = await loadAlertedKeys(userId, 'supervisor_sello');
+        candidatos = candidatos.filter((s) => !already.has(`sup-${s.Id}`));
+        if (candidatos.length === 0) return { sent: 0, anomalias: 0 };
+    }
+    candidatos.sort((a, b) => total(b) - total(a));
+
+    let sent = 0;
+    let anomalias = 0;
+    for (const s of candidatos.slice(0, manual ? EVENT_MAX_MANUAL : EVENT_MAX_PER_PASS)) {
+        const text = `🧑‍⚖️ Supervisor con muchas autorizaciones hoy
+Supervisor: ${s.Supervisor}
+Autorizaciones: ${total(s)} (más del límite de ${SUPERVISOR_MAX})
+Cancelaciones: ${Number(s.CancCnt) || 0} por ${fmtMxn(s.CancMonto || 0)}
+Devoluciones: ${Number(s.DevCnt) || 0} por ${fmtMxn(s.DevMonto || 0)}`;
+        sent += await sendToAll(recipients, text, !manual);
+        await markAlerted(userId, 'supervisor_sello', `sup-${s.Id}`, 'umbral');
+        await recordAlertEvent({
+            alertId, userId,
+            observedValue: total(s),
+            message: `Supervisor ${s.Supervisor}: ${total(s)} autorizaciones hoy`,
+            resultsJson: JSON.stringify(s),
+            touchLastEvaluation: !manual,
+        }).catch(() => { });
+        anomalias++;
+    }
+    return { sent, anomalias };
+}

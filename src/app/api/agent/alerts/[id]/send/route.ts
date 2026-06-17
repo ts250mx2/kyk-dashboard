@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
-import { getAlert, splitPhones, isEndOfDayClave, evaluateCondition, AlertRule } from '@/lib/alerts';
+import { getAlert, splitPhones, isEndOfDayClave, isManualEventClave, evaluateCondition, AlertRule } from '@/lib/alerts';
 import { getUserId } from '@/lib/conversations';
-import { runEndOfDayMessage, runCancelacionesAnomalas } from '@/lib/system-alerts';
+import { runEndOfDayMessage, runCancelacionesAnomalas, runDevolucionesAnomalas, runRetirosInusuales, runSupervisorSello } from '@/lib/system-alerts';
 import { sendWhatsApp } from '@/lib/whatsapp/send';
 
 const TZ = 'America/Monterrey';
@@ -50,8 +50,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
             return NextResponse.json({ error: 'Alerta no encontrada' }, { status: 404 });
         }
         // inicio_operaciones es la única de sistema que no se puede enviar a mano
-        // (se dispara sola por sucursal); las demás (resúmenes y atípicas) sí.
-        if (alert.clave && !isEndOfDayClave(alert.clave) && alert.clave !== 'cancelaciones_anomalas') {
+        // (se dispara sola por sucursal); las demás (resúmenes y eventos) sí.
+        if (alert.clave && !isEndOfDayClave(alert.clave) && !isManualEventClave(alert.clave)) {
             return NextResponse.json(
                 { error: 'Esta alerta automática se dispara sola y no se puede enviar manualmente.' },
                 { status: 400 }
@@ -66,9 +66,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
             );
         }
 
-        // ── Cancelaciones atípicas: reporta las de HOY al momento ──
-        if (alert.clave === 'cancelaciones_anomalas') {
-            const r = await runCancelacionesAnomalas(userId, alert.id, recipients, { manual: true });
+        // ── Alertas de evento (atípicas/inusuales): reportan lo de HOY al momento ──
+        if (isManualEventClave(alert.clave)) {
+            const run =
+                alert.clave === 'cancelaciones_anomalas' ? runCancelacionesAnomalas :
+                alert.clave === 'devoluciones_anomalas' ? runDevolucionesAnomalas :
+                alert.clave === 'retiros_inusuales' ? runRetirosInusuales :
+                runSupervisorSello;
+            const r = await run(userId, alert.id, recipients, { manual: true });
             return NextResponse.json({
                 success: true,
                 sent: r.sent,

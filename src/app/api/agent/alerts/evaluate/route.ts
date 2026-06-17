@@ -11,7 +11,7 @@ import {
     END_OF_DAY_TIMES,
     AlertRule
 } from '@/lib/alerts';
-import { runInicioOperaciones, runEndOfDayMessage, runCancelacionesAnomalas } from '@/lib/system-alerts';
+import { runInicioOperaciones, runEndOfDayMessage, runCancelacionesAnomalas, runDevolucionesAnomalas, runRetirosInusuales, runSupervisorSello } from '@/lib/system-alerts';
 import { sendWhatsApp } from '@/lib/whatsapp/send';
 
 const TZ = 'America/Monterrey';
@@ -152,6 +152,24 @@ export async function POST(req: Request) {
                         summary.evaluated++;
                         if (r.anomalias > 0) summary.triggered++;
                         summary.details.push({ id: rule.id, name: rule.name, status: r.anomalias > 0 ? `cancelaciones: ${r.anomalias} atípicas / ${r.sent} envíos` : 'cancelaciones: sin atípicas' });
+                    } else if (rule.clave === 'devoluciones_anomalas') {
+                        const r = await runDevolucionesAnomalas(rule.userId, rule.id, recipients);
+                        await query(`UPDATE tblAgentAlertas SET FechaUltimaEvaluacion = GETDATE() WHERE IdAlerta = ?`, [rule.id]);
+                        summary.evaluated++;
+                        if (r.anomalias > 0) summary.triggered++;
+                        summary.details.push({ id: rule.id, name: rule.name, status: r.anomalias > 0 ? `devoluciones: ${r.anomalias} atípicas / ${r.sent} envíos` : 'devoluciones: sin atípicas' });
+                    } else if (rule.clave === 'retiros_inusuales') {
+                        const r = await runRetirosInusuales(rule.userId, rule.id, recipients);
+                        await query(`UPDATE tblAgentAlertas SET FechaUltimaEvaluacion = GETDATE() WHERE IdAlerta = ?`, [rule.id]);
+                        summary.evaluated++;
+                        if (r.anomalias > 0) summary.triggered++;
+                        summary.details.push({ id: rule.id, name: rule.name, status: r.anomalias > 0 ? `retiros: ${r.anomalias} inusuales / ${r.sent} envíos` : 'retiros: sin inusuales' });
+                    } else if (rule.clave === 'supervisor_sello') {
+                        const r = await runSupervisorSello(rule.userId, rule.id, recipients);
+                        await query(`UPDATE tblAgentAlertas SET FechaUltimaEvaluacion = GETDATE() WHERE IdAlerta = ?`, [rule.id]);
+                        summary.evaluated++;
+                        if (r.anomalias > 0) summary.triggered++;
+                        summary.details.push({ id: rule.id, name: rule.name, status: r.anomalias > 0 ? `supervisores: ${r.anomalias} marcados / ${r.sent} envíos` : 'supervisores: sin exceso' });
                     } else if (isEndOfDayClave(rule.clave)) {
                         if (!isEndOfDayDue(rule, now)) {
                             summary.details.push({ id: rule.id, name: rule.name, status: 'fin_dia: no toca' });

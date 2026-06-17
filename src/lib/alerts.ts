@@ -98,6 +98,20 @@ export async function ensureAlertTables(): Promise<void> {
                 PRIMARY KEY (IdUsuario, CancelKey, Fecha)
             )
         `);
+        // Dedup GENÉRICO de alertas de evento (devoluciones, retiros, supervisor):
+        // una fila por usuario + clave + evento + día. La Fecha la pone GETDATE().
+        await query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tblAgentEventoAlertLog' AND xtype='U')
+            CREATE TABLE tblAgentEventoAlertLog (
+                IdUsuario VARCHAR(64) NOT NULL,
+                Clave VARCHAR(40) NOT NULL,
+                EventoKey VARCHAR(80) NOT NULL,
+                Fecha DATE NOT NULL,
+                Motivo VARCHAR(40) NULL,
+                FechaAviso DATETIME NOT NULL DEFAULT GETDATE(),
+                PRIMARY KEY (IdUsuario, Clave, EventoKey, Fecha)
+            )
+        `);
         tablesEnsured = true;
     } catch (e) {
         console.error('No se pudo asegurar tablas de alertas:', e);
@@ -177,8 +191,21 @@ export async function listAlerts(userId: string): Promise<AlertRule[]> {
 export const SYSTEM_ALERT_CLAVES = [
     'inicio_operaciones', 'resumen_dia', 'hallazgos_dia',
     'resumen_cancelaciones', 'resumen_devoluciones',
-    'cancelaciones_anomalas',
+    'cancelaciones_anomalas', 'devoluciones_anomalas',
+    'retiros_inusuales', 'supervisor_sello',
 ] as const;
+
+/**
+ * Alertas de sistema event-driven (no de hora fija) que SÍ permiten envío
+ * manual: el botón "Enviar" reporta sus eventos atípicos de HOY al momento.
+ * inicio_operaciones queda fuera (se dispara sola por sucursal).
+ */
+export function isManualEventClave(clave: string | null | undefined): boolean {
+    return clave === 'cancelaciones_anomalas'
+        || clave === 'devoluciones_anomalas'
+        || clave === 'retiros_inusuales'
+        || clave === 'supervisor_sello';
+}
 
 /** Alertas de sistema que mandan un mensaje a una hora fija del día. */
 export type EndOfDayClave = 'resumen_dia' | 'hallazgos_dia' | 'resumen_cancelaciones' | 'resumen_devoluciones';
@@ -240,6 +267,24 @@ const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; f
         clave: 'cancelaciones_anomalas',
         name: 'Cancelaciones atípicas',
         description: 'Avisa por WhatsApp al instante cuando hay una cancelación rara: monto alto (> $1,000) o varias del mismo cajero en menos de 2 minutos. Incluye producto, cantidad, precio, total, sucursal, fecha, cajero y supervisor.',
+        frequency: '5min',
+    },
+    {
+        clave: 'devoluciones_anomalas',
+        name: 'Devoluciones atípicas',
+        description: 'Avisa por WhatsApp cuando hay una devolución rara: monto alto (> $1,000) o varias del mismo supervisor en menos de 2 minutos. Incluye monto, cliente, motivo, sucursal, fecha, empleado y supervisor.',
+        frequency: '5min',
+    },
+    {
+        clave: 'retiros_inusuales',
+        name: 'Retiros de efectivo inusuales',
+        description: 'Avisa por WhatsApp cuando hay un retiro de efectivo alto (> $10,000) o fuera de horario. Incluye monto en efectivo, concepto, sucursal, fecha, cajero y supervisor.',
+        frequency: '5min',
+    },
+    {
+        clave: 'supervisor_sello',
+        name: 'Supervisor con demasiadas autorizaciones',
+        description: 'Avisa por WhatsApp cuando un mismo supervisor autoriza demasiadas cancelaciones y devoluciones en el día (posible "sello de goma").',
         frequency: '5min',
     },
 ];

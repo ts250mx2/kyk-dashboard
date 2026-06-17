@@ -302,8 +302,10 @@ export function AlertsPanel({ refreshKey, compact = false }: AlertsPanelProps) {
             return;
         }
         // Solo los resúmenes de sistema de hora fija: entre 00:00 y 4:00 el envío
-        // manual reporta el día que acaba de cerrar. (Las atípicas siempre son de hoy.)
-        const earlyMorning = !!rule.clave && rule.clave !== 'cancelaciones_anomalas' && new Date().getHours() < 4;
+        // manual reporta el día que acaba de cerrar. (Las de evento siempre son de hoy.)
+        const isEndOfDay = rule.clave === 'resumen_dia' || rule.clave === 'hallazgos_dia'
+            || rule.clave === 'resumen_cancelaciones' || rule.clave === 'resumen_devoluciones';
+        const earlyMorning = isEndOfDay && new Date().getHours() < 4;
         const periodNote = earlyMorning ? '\n\nPor la hora, se enviará el resumen del DÍA ANTERIOR.' : '';
         if (!confirm(`¿Enviar "${rule.name}" ahora por WhatsApp a ${phones.length} número(s)?${periodNote}`)) return;
         setSendingId(rule.id);
