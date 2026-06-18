@@ -106,13 +106,18 @@ async function narrate(prompt: string, maxTokens = 700, modelId?: string | null)
  * (los duplicados suprimidos por dedup no cuentan). Con `dedupe` (envíos del
  * cron) no reenvía un texto idéntico al mismo número dentro de la ventana.
  */
-async function sendToAll(recipients: string[], text: string, dedupe = false): Promise<number> {
+async function sendToAll(recipients: string[], text: string, dedupe = false, dedupeKey?: string): Promise<number> {
     let sent = 0;
     for (const phone of recipients) {
-        const r: SendWhatsAppResult = await sendWhatsApp({ phone, text, dedupe }).catch(() => ({ ok: false }));
+        const r: SendWhatsAppResult = await sendWhatsApp({ phone, text, dedupe, dedupeKey }).catch(() => ({ ok: false }));
         if (r.ok && !r.skipped) sent++;
     }
     return sent;
+}
+
+/** Fecha local de Monterrey 'YYYY-MM-DD' para claves de dedup estables por día. */
+function monterreyDateKey(): string {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
 }
 
 // ─── 1) Inicio de operaciones por sucursal ────────────────────────────────
@@ -494,7 +499,9 @@ export async function runEndOfDayMessage(
 
     // Axon limita `message` a 800 caracteres: corto (≤700) + liga (~60).
     const text = gen.short.slice(0, 700) + link;
-    const sent = await sendToAll(recipients, text, dedupe);
+    // Dedup por clave ESTABLE (clave+día): un envío por número al día aunque el
+    // texto varíe (link con UUID, narración IA) o lo disparen varios usuarios.
+    const sent = await sendToAll(recipients, text, dedupe, `eod:${clave}:${monterreyDateKey()}`);
     await recordAlertEvent({
         alertId,
         userId,

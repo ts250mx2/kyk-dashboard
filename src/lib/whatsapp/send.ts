@@ -37,6 +37,14 @@ export interface SendWhatsAppInput {
      * los envíos AUTOMÁTICOS (cron) de alertas; el envío manual lo deja en false.
      */
     dedupe?: boolean;
+    /**
+     * Clave de dedup ESTABLE (independiente del usuario y del texto). Si se da,
+     * el dedup usa esta clave en vez del hash del texto. Necesaria cuando el texto
+     * varía aunque el mensaje sea "el mismo": resúmenes con link de UUID o narración
+     * por IA. Ej.: `eod:resumen_dia:2026-06-17` → un envío por día y número aunque
+     * lo disparen varios usuarios. Sin clave, el hash ignora los links del texto.
+     */
+    dedupeKey?: string;
 }
 
 export interface SendWhatsAppResult {
@@ -119,6 +127,16 @@ async function claimSend(phone: string, hash: string, windowMinutes: number): Pr
     return Array.isArray(rows) && rows.length > 0;
 }
 
+/**
+ * Base de dedup estable cuando no hay dedupeKey: quita los links (UUID cambiante)
+ * y normaliza espacios, para que dos mensajes cuyo único cambio es el link cuenten
+ * como el mismo. (La narración por IA igual puede variar; para esos casos el
+ * llamador debe pasar dedupeKey.)
+ */
+function stripVolatile(text: string): string {
+    return text.replace(/https?:\/\/\S+/gi, '').replace(/\s+/g, ' ').trim();
+}
+
 /** Libera el claim cuando el envío falló, para no bloquear un reintento. */
 async function releaseSend(phone: string, hash: string): Promise<void> {
     await query(`DELETE FROM tblWhatsAppDedup WHERE Phone = ? AND MsgHash = ?`, [phone, hash])
@@ -137,9 +155,12 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendWhatsA
         return { ok: false, error: 'Falta phone o text' };
     }
 
-    // Dedup (solo envíos automáticos): hash sobre el texto FINAL que recibe el
-    // dispositivo, así dos entradas que se aplanan igual cuentan como el mismo.
-    const hash = input.dedupe ? createHash('sha1').update(text).digest('hex') : '';
+    // Dedup (solo envíos automáticos): por clave estable si se da, o por el texto
+    // (ignorando links). Así un mismo mensaje al mismo número no se reenvía aunque
+    // varíe el texto o lo disparen varios usuarios.
+    const hash = input.dedupe
+        ? createHash('sha1').update(input.dedupeKey || stripVolatile(text)).digest('hex')
+        : '';
     if (input.dedupe) {
         const claimed = await claimSend(phone, hash, DEDUP_WINDOW_MINUTES).catch((e) => {
             console.error('[sendWhatsApp] dedup falló, se envía igual:', e?.message || e);
