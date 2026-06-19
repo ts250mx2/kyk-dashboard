@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
 import { CancellationDetailModal } from '@/components/cancellation-detail-modal';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
+import type { PageSummaryContext } from '@/components/narrative-summary';
 
 type Metric = 'venta' | 'operaciones' | 'ticket' | 'cantidadDia';
 
@@ -36,6 +38,7 @@ export default function CancellationAlertsPage() {
     const [data, setData] = useState<any>(null);
     const [aiSummary, setAiSummary] = useState<string|null>(null);
     const [aiLoading, setAiLoading] = useState(false);
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
     const [detailModal, setDetailModal] = useState<{
         isOpen: boolean;
         idTienda?: string;
@@ -147,6 +150,57 @@ export default function CancellationAlertsPage() {
     }).sort((a: any, b: any) => b.value - a.value);
     const barColors: Record<string,string> = { critical:'#E11D48', warning:'#F59E0B', elevated:'#F97316', normal:'#94A3B8' };
 
+    // Contexto para el Análisis Profundo IA (cancelaciones atípicas: más es PEOR)
+    const summaryContext: PageSummaryContext = useMemo(() => {
+        const perStore = data?.perStore || [];
+        const topStores = [...perStore]
+            .sort((a: any, b: any) => (Number(b.Cantidad) || 0) - (Number(a.Cantidad) || 0))
+            .slice(0, 8)
+            .map((s: any) => ({ name: s.Tienda || '', value: Number(s.Cantidad) || 0 }));
+
+        const anomalies: string[] = [];
+
+        [...allCajeros]
+            .map((c: any) => ({ c, lvl: getLevelByCantidad(Number(c.Cantidad) || 0, avgCajeroCantidad), pct: avgCajeroCantidad > 0 ? ((Number(c.Cantidad) || 0) / avgCajeroCantidad) * 100 : 0 }))
+            .filter(x => x.lvl !== 'normal')
+            .sort((a, b) => b.pct - a.pct)
+            .slice(0, 5)
+            .forEach(x => anomalies.push(`Cajero ${x.c.Cajero} (${x.c.Tienda}): ${x.c.Cantidad} cancelaciones, ${x.pct.toFixed(0)}% del promedio — ${labels[x.lvl]}`));
+
+        [...allSups]
+            .map((s: any) => ({ s, lvl: getLevelByCantidad(Number(s.Cantidad) || 0, avgSupCantidad), pct: avgSupCantidad > 0 ? ((Number(s.Cantidad) || 0) / avgSupCantidad) * 100 : 0 }))
+            .filter(x => x.lvl !== 'normal')
+            .sort((a, b) => b.pct - a.pct)
+            .slice(0, 5)
+            .forEach(x => anomalies.push(`Supervisor ${x.s.Supervisor} (${x.s.Tienda}): ${x.s.Cantidad} cancelaciones, ${x.pct.toFixed(0)}% del promedio — ${labels[x.lvl]}`));
+
+        [...perStore]
+            .map((st: any) => ({ st, lvl: getLevelByCantidad(Number(st.Cantidad) || 0, avgCantidad), pct: avgCantidad > 0 ? ((Number(st.Cantidad) || 0) / avgCantidad) * 100 : 0 }))
+            .filter(x => x.lvl === 'critical' || x.lvl === 'warning')
+            .sort((a, b) => b.pct - a.pct)
+            .slice(0, 5)
+            .forEach(x => anomalies.push(`Sucursal ${x.st.Tienda}: ${x.st.Cantidad} cancelaciones, ${x.pct.toFixed(0)}% del promedio — ${labels[x.lvl]}`));
+
+        const cajerosAlerta = allCajeros.filter((c: any) => getLevelByCantidad(Number(c.Cantidad) || 0, avgCajeroCantidad) !== 'normal').length;
+        const supsAlerta = allSups.filter((s: any) => getLevelByCantidad(Number(s.Cantidad) || 0, avgSupCantidad) !== 'normal').length;
+
+        return {
+            pageContext: 'Alertas de Cancelaciones: detección de cajeros, supervisores y sucursales con cancelaciones ATÍPICAS vs el promedio (posible fuga/fraude o mala operación). Más cancelaciones es PEOR.',
+            period: { fechaInicio, fechaFin },
+            scope: `${avg.NumTiendas || perStore.length} sucursales`,
+            kpis: {
+                'Total cancelado': Math.round(totalCanc),
+                'Cantidad de cancelaciones': totalOps,
+                'Prom. cancelaciones por sucursal': Math.round(avgCantidad),
+                'Sucursales monitoreadas': avg.NumTiendas || perStore.length,
+                'Cajeros en alerta': cajerosAlerta,
+                'Supervisores en alerta': supsAlerta
+            },
+            highlights: { topStores, anomalies: anomalies.slice(0, 15) }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data, totalCanc, totalOps, avgCantidad, avgCajeroCantidad, avgSupCantidad, allCajeros, allSups, avg, fechaInicio, fechaFin]);
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -179,6 +233,11 @@ export default function CancellationAlertsPage() {
                     <button onClick={generateAISummary} disabled={aiLoading||!data}
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[10px] font-black uppercase tracking-widest hover:from-purple-700 hover:to-indigo-700 transition-all disabled:opacity-50 shadow-lg shadow-purple-500/20">
                         <Sparkles size={14} className={cn(aiLoading&&"animate-spin")} /> Resumen IA
+                    </button>
+                    <button onClick={() => setDeepSummaryOpen(true)} disabled={loading||!data}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#E11D48] text-white text-[10px] font-black uppercase tracking-widest hover:bg-[#be123c] transition-all disabled:opacity-50 shadow-lg shadow-rose-500/20"
+                        title="Análisis profundo con IA de las alertas (hallazgos, oportunidades, riesgos, acciones)">
+                        <Sparkles size={14} /> Análisis Profundo IA
                     </button>
                 </div>
             </div>
@@ -413,6 +472,12 @@ export default function CancellationAlertsPage() {
                     </div>
                 </div>
             )}
+
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
+            />
 
             {loading && <LoadingScreen />}
         </div>
