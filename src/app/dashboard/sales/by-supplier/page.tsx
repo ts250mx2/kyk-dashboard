@@ -300,6 +300,16 @@ export default function VentasPorProveedorPage() {
                             className="bg-transparent text-xs font-bold text-slate-700 outline-none border-none p-0" />
                     </div>
 
+                    <button
+                        onClick={() => setDeepSummaryOpen(true)}
+                        disabled={loading}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#4050B4] border border-[#4050B4] text-white hover:bg-[#344196] text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Análisis profundo con IA de la vista actual (hallazgos, oportunidades, riesgos, acciones)"
+                    >
+                        <Sparkles size={13} />
+                        <span className="hidden sm:inline">Análisis Profundo IA</span>
+                    </button>
+
                     {/* Modo IA Switch */}
                     <div
                         className="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 shadow-sm h-[38px] cursor-pointer select-none hover:bg-slate-100 transition-all"
@@ -392,18 +402,10 @@ export default function VentasPorProveedorPage() {
                 </div>
             )}
 
-            {/* === IA: Resumen narrativo automático + botón de Análisis Profundo === */}
+            {/* === IA: Resumen narrativo automático === */}
             {aiMode && !loading && (
-                <div className="mb-4 space-y-2">
+                <div className="mb-4">
                     <NarrativeSummary context={summaryContext} />
-                    <button
-                        onClick={() => setDeepSummaryOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#4050B4]/30 text-[#4050B4] hover:bg-[#4050B4] hover:text-white text-[10px] font-black uppercase tracking-widest transition-all"
-                        title="Abre un modal con análisis profundo (insights, oportunidades, riesgos, acciones)"
-                    >
-                        <Sparkles size={13} />
-                        Análisis Profundo IA
-                    </button>
                 </div>
             )}
 

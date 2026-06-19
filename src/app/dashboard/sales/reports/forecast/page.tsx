@@ -25,6 +25,7 @@ import {
 } from '@/lib/forecast/overrides';
 import { NarrativeSummary, type PageSummaryContext } from '@/components/narrative-summary';
 import { ProductRecommendationsModal } from '@/components/dashboard/product-recommendations-modal';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
 
 interface Store { IdTienda: number; Tienda: string; }
 interface HistoryPoint { fecha: string; total: number; }
@@ -221,6 +222,8 @@ export default function SalesForecastPage() {
 
     // Product recommendations modal
     const [showProductRecsModal, setShowProductRecsModal] = useState(false);
+    // Análisis Profundo IA modal
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
 
     useEffect(() => {
         fetch('/api/stores')
@@ -643,6 +646,16 @@ export default function SalesForecastPage() {
                                 <Sparkles className="w-3.5 h-3.5" />
                                 Sugerencias de ventas
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => setDeepSummaryOpen(true)}
+                                disabled={loading || !metrics}
+                                className="inline-flex items-center gap-2 h-10 px-3 rounded-md text-sm font-medium border bg-[#4050B4] text-white border-[#4050B4] hover:bg-[#37469c] shadow-sm disabled:opacity-50"
+                                title="Análisis profundo con IA de la proyección (hallazgos, oportunidades, riesgos, acciones)"
+                            >
+                                <Sparkles className="w-3.5 h-3.5" />
+                                Análisis Profundo IA
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1030,6 +1043,12 @@ export default function SalesForecastPage() {
                     onClose={() => setShowProductRecsModal(false)}
                 />
             )}
+
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
+            />
         </div>
     );
 }

@@ -1,25 +1,28 @@
 "use client";
 
 import { LoadingScreen } from '@/components/ui/loading-screen';
-import { useState, useEffect } from 'react';
-import { 
-    Calendar, 
-    Store, 
-    Receipt, 
-    Ban, 
+import { useState, useEffect, useMemo } from 'react';
+import {
+    Calendar,
+    Store,
+    Receipt,
+    Ban,
     Lock,
     RefreshCw,
     AlertCircle,
     Monitor,
     Search,
     User,
-    X
+    X,
+    Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SalesDetailModal } from '@/components/sales-detail-modal';
 import { OpeningDetailModal } from '@/components/opening-detail-modal';
 import { CancellationDetailModal } from '@/components/cancellation-detail-modal';
 import { ClosingTicketModal } from '@/components/closing-ticket-modal';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
+import type { PageSummaryContext } from '@/components/narrative-summary';
 
 interface OpeningDetail {
     IdApertura: number;
@@ -92,6 +95,7 @@ export default function OperationsKanbanPage() {
     const [isOpeningModalOpen, setIsOpeningModalOpen] = useState(false);
     const [isCancellationModalOpen, setIsCancellationModalOpen] = useState(false);
     const [isClosingTicketModalOpen, setIsClosingTicketModalOpen] = useState(false);
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
     const [selectedStore, setSelectedStore] = useState<{ id: string, name: string } | null>(null);
     const [selectedOpeningId, setSelectedOpeningId] = useState<string | undefined>(undefined);
     const [selectedCajaId, setSelectedCajaId] = useState<string | undefined>(undefined);
@@ -222,6 +226,64 @@ export default function OperationsKanbanPage() {
         const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
         return `${diffHrs}h ${diffMins}m`;
     };
+
+    // Contexto para el Análisis Profundo IA: agrega los KPIs del día y detecta anomalías
+    const summaryContext: PageSummaryContext = useMemo(() => {
+        const totalVentas = data.reduce((a, s) => a + (s.ventas || 0), 0);
+        const totalOperaciones = data.reduce((a, s) => a + (s.ventasCount || 0), 0);
+        const totalAperturas = data.reduce((a, s) => a + (s.aperturas || 0), 0);
+        const totalCancMovs = data.reduce((a, s) => a + (s.details?.cancelaciones || 0), 0);
+        const totalCancMonto = data.reduce((a, s) => a + (s.details?.cancelacionesMonto || 0), 0);
+        const totalCortes = data.reduce((a, s) => a + (s.details?.cortes || 0), 0);
+        const ticketProm = totalOperaciones > 0 ? totalVentas / totalOperaciones : 0;
+
+        const topStores = [...data]
+            .sort((a, b) => (b.ventas || 0) - (a.ventas || 0))
+            .slice(0, 8)
+            .map(s => ({ name: s.name, value: Math.round(s.ventas || 0) }));
+
+        // Anomalías operativas detectadas en los datos
+        const anomalies: string[] = [];
+        data.forEach(s => {
+            const cancMonto = s.details?.cancelacionesMonto || 0;
+            if (s.ventas > 0 && cancMonto > 0) {
+                const ratio = (cancMonto / s.ventas) * 100;
+                if (ratio >= 10) {
+                    anomalies.push(
+                        `${s.name}: cancelaciones equivalen al ${ratio.toFixed(1)}% de la venta (${s.details.cancelaciones} movs · ${formatCurrency(cancMonto)})`
+                    );
+                }
+            }
+            const sinCierre = (s.details?.openings || []).filter(o => o.HoraApertura && !o.HoraCierre).length;
+            if (sinCierre > 0) {
+                anomalies.push(`${s.name}: ${sinCierre} caja(s) sin cierre registrado`);
+            }
+            if (s.aperturas > 0 && s.ventasCount === 0) {
+                anomalies.push(`${s.name}: ${s.aperturas} apertura(s) sin ninguna operación de venta`);
+            }
+        });
+
+        return {
+            pageContext: 'Monitor de Operaciones (estado diario por sucursal y caja)',
+            period: { fechaInicio: date, fechaFin: date },
+            scope: `${data.length} sucursales activas`,
+            kpis: {
+                'Ventas Totales': Math.round(totalVentas),
+                'Operaciones': totalOperaciones,
+                'Ticket Promedio': Math.round(ticketProm),
+                'Aperturas': totalAperturas,
+                'Cierres realizados': totalCortes,
+                'Cancelaciones (movimientos)': totalCancMovs,
+                'Cancelaciones (monto)': Math.round(totalCancMonto),
+                'Sucursales Activas': data.length
+            },
+            highlights: {
+                topStores,
+                anomalies: anomalies.slice(0, 12)
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data, date]);
 
     const BranchCard = ({ branch }: { branch: BranchOp }) => {
         const color = getStoreColor(branch.name);
@@ -451,6 +513,16 @@ export default function OperationsKanbanPage() {
                         <button onClick={fetchData} className="p-2 bg-slate-50 border border-slate-200 text-[#4050B4] hover:bg-slate-100 group" title="Actualizar">
                             <RefreshCw size={14} className={cn("group-hover:rotate-180 transition-transform duration-500", loading && "animate-spin")} />
                         </button>
+
+                        <button
+                            onClick={() => setDeepSummaryOpen(true)}
+                            disabled={loading || data.length === 0}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#4050B4] border border-[#4050B4] text-white hover:bg-[#344196] text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Análisis profundo con IA de las operaciones del día (hallazgos, oportunidades, riesgos, acciones)"
+                        >
+                            <Sparkles size={13} />
+                            <span className="hidden sm:inline">Análisis Profundo IA</span>
+                        </button>
                     </div>
                 </div>
 
@@ -596,6 +668,12 @@ export default function OperationsKanbanPage() {
                 idApertura={selectedOpeningId}
                 storeName={selectedStore?.name}
                 zNumber={data.flatMap(s => s.details.openings).find(o => o.IdApertura.toString() === selectedOpeningId)?.Z}
+            />
+
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
             />
         </div>
     );

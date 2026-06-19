@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-    TrendingUp, TrendingDown, Calendar, Store, ArrowUpRight, 
-    ArrowDownRight, RefreshCcw, ChevronRight, LayoutGrid, 
+import {
+    TrendingUp, TrendingDown, Calendar, Store, ArrowUpRight,
+    ArrowDownRight, RefreshCcw, ChevronRight, LayoutGrid,
     ShoppingCart, Ticket, DollarSign, Clock, CalendarDays, CalendarRange,
-    CheckSquare, Square, Package, Tags, User, Layers, Info
+    CheckSquare, Square, Package, Tags, User, Layers, Info, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SalesTrendsChart } from '@/components/dashboard/sales-trends-chart';
 import { SalesTrendsDetails } from '@/components/dashboard/sales-trends-details';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
+import type { PageSummaryContext } from '@/components/narrative-summary';
 
 const STORE_COLOR_MAP: Record<string, string> = {
     'BODEGA 238': '#35e844',
@@ -68,6 +70,7 @@ export default function SalesTrendsPage() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
     const [stores, setStores] = useState<any[]>([]);
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
 
     // Advanced Filters
     const [filterOptions, setFilterOptions] = useState<any>({ deptos: [], familias: [], articulos: [], proveedores: [] });
@@ -232,6 +235,54 @@ export default function SalesTrendsPage() {
     const prevTotal = data?.branchTrends?.reduce((acc: number, curr: any) => acc + curr.PrevTotal, 0) || 0;
     const globalTrend = prevTotal > 0 ? ((currentTotal - prevTotal) / prevTotal) * 100 : 0;
 
+    // Contexto para el Análisis Profundo IA
+    const summaryContext: PageSummaryContext = useMemo(() => {
+        const metricLabel = metric === 'venta' ? 'Venta' : metric === 'operaciones' ? 'Operaciones' : 'Ticket Promedio';
+        const groupLabel = groupBy === 'dia' ? 'día' : groupBy === 'semana' ? 'semana' : 'mes';
+
+        const branches = data?.branchTrends || [];
+        const topStores = [...branches]
+            .sort((a: any, b: any) => (b.CurrentTotal || 0) - (a.CurrentTotal || 0))
+            .slice(0, 8)
+            .map((b: any) => ({ name: b.Tienda, value: Math.round(b.CurrentTotal || 0) }));
+
+        // Sucursales con mayor crecimiento / caída vs periodo anterior
+        const movers = branches
+            .filter((b: any) => (b.PrevTotal || 0) > 0)
+            .map((b: any) => ({
+                name: b.Tienda,
+                pct: ((b.CurrentTotal - b.PrevTotal) / b.PrevTotal) * 100
+            }))
+            .sort((a: any, b: any) => b.pct - a.pct);
+
+        const anomalies: string[] = [];
+        if (movers.length > 0) {
+            const up = movers[0];
+            const down = movers[movers.length - 1];
+            if (up && up.pct > 0) anomalies.push(`Mayor crecimiento: ${up.name} (+${up.pct.toFixed(1)}% vs periodo anterior)`);
+            if (down && down.pct < 0 && down.name !== up.name) anomalies.push(`Mayor caída: ${down.name} (${down.pct.toFixed(1)}% vs periodo anterior)`);
+        }
+
+        const scopeParts = [currentStoreTitle];
+        if (filterTitle) scopeParts.push(filterTitle.replace(/^\s*\/\s*/, ''));
+
+        return {
+            pageContext: `Tendencias de Venta (evolución por ${groupLabel}, métrica visible: ${metricLabel})`,
+            period: { fechaInicio, fechaFin },
+            scope: scopeParts.join(' · '),
+            kpis: {
+                'Venta Total': Math.round(totalSales),
+                'Operaciones': totalOps,
+                'Ticket Promedio': Math.round(ticketPromedio),
+                'Variación % vs periodo anterior': Number(globalTrend.toFixed(1)),
+                'Venta periodo actual': Math.round(currentTotal),
+                'Venta periodo anterior': Math.round(prevTotal)
+            },
+            highlights: { topStores, anomalies }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data, metric, groupBy, fechaInicio, fechaFin, totalSales, totalOps, ticketPromedio, globalTrend, currentTotal, prevTotal, currentStoreTitle, filterTitle]);
+
     return (
         <div className="space-y-6">
             {/* Header with Filters & Periods */}
@@ -285,6 +336,16 @@ export default function SalesTrendsPage() {
                         className="p-2.5 bg-slate-50 border border-slate-200 text-[#4050B4] hover:bg-slate-100 transition-colors rounded-none"
                     >
                         <RefreshCcw size={18} className={cn(loading && "animate-spin")} />
+                    </button>
+
+                    <button
+                        onClick={() => setDeepSummaryOpen(true)}
+                        disabled={loading || !data}
+                        className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-[#4050B4] border border-[#4050B4] text-white hover:bg-[#344196] text-[10px] font-black uppercase tracking-widest transition-all rounded-none disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Análisis profundo con IA de la tendencia (hallazgos, oportunidades, riesgos, acciones)"
+                    >
+                        <Sparkles size={16} />
+                        <span className="hidden sm:inline">Análisis Profundo IA</span>
                     </button>
                 </div>
             </div>
@@ -650,6 +711,12 @@ export default function SalesTrendsPage() {
                     </div>
                 </div>
             )}
+
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
+            />
         </div>
     );
 }

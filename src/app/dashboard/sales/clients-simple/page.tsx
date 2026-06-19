@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     Store, Calendar, ChevronRight, ArrowLeft, Loader2, Search,
     Wallet, CreditCard, UserCircle, FileMinus,
-    Building, Home
+    Building, Home, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
+import type { PageSummaryContext } from '@/components/narrative-summary';
 
 type Level = 'stores' | 'payment-types' | 'clients' | 'invoices';
 type PaymentType = 'contado' | 'credito' | 'publico' | 'notas';
@@ -116,6 +118,7 @@ export default function ClientsSimplePage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
 
     // Fetch al cambiar level/selección/fechas
     useEffect(() => {
@@ -229,6 +232,101 @@ export default function ClientsSimplePage() {
         );
     }, [invoicesData, searchTerm]);
 
+    // ¿Hay datos cargados para el nivel actual? (habilita el botón de Análisis IA)
+    const hasData =
+        (level === 'stores' && !!storesData) ||
+        (level === 'payment-types' && paymentTypesData.length > 0) ||
+        (level === 'clients' && clientsData.length > 0) ||
+        (level === 'invoices' && invoicesData.length > 0);
+
+    // Contexto para el Análisis Profundo IA: se adapta al nivel del drill-down activo
+    const summaryContext: PageSummaryContext = useMemo(() => {
+        const period = { fechaInicio, fechaFin };
+
+        if (level === 'stores' && storesData) {
+            const all = storesData.allStores || {};
+            const total = all.VentaTotal || 0;
+            const topStores = (storesData.stores || [])
+                .slice()
+                .sort((a, b) => (b.VentaTotal || 0) - (a.VentaTotal || 0))
+                .slice(0, 10)
+                .map(s => ({ name: s.Tienda, value: Math.round(s.VentaTotal || 0) }));
+
+            const anomalies: string[] = [];
+            if (total > 0) {
+                if (all.Notas) anomalies.push(`Notas de crédito equivalen al ${((all.Notas / total) * 100).toFixed(1)}% de la venta (${fmtMoney(all.Notas)})`);
+                if (all.Credito) anomalies.push(`Crédito representa el ${((all.Credito / total) * 100).toFixed(1)}% de la venta (${fmtMoney(all.Credito)})`);
+            }
+
+            return {
+                pageContext: 'Ventas por Sucursal desglosadas por tipo de venta (contado, crédito, público general, notas de crédito)',
+                period,
+                scope: 'Todas las sucursales',
+                kpis: {
+                    'Venta Total': Math.round(total),
+                    'Contado': Math.round(all.Contado || 0),
+                    'Crédito': Math.round(all.Credito || 0),
+                    'Público General': Math.round(all.Publico || 0),
+                    'Notas de Crédito': Math.round(all.Notas || 0),
+                    'Clientes únicos': all.ClientesUnicos || 0,
+                    'Facturas': all.Facturas || 0,
+                    'Sucursales': (storesData.stores || []).length
+                },
+                highlights: { topStores, anomalies }
+            };
+        }
+
+        if (level === 'payment-types') {
+            const total = paymentTypesData.reduce((a, p) => a + (p.monto || 0), 0);
+            const kpis: Record<string, any> = { 'Venta Total': Math.round(total) };
+            paymentTypesData.forEach(p => { kpis[p.label] = Math.round(p.monto || 0); });
+            return {
+                pageContext: `Tipos de venta de ${selectedStore?.name || 'sucursal'} (contado, crédito, público, notas)`,
+                period,
+                scope: selectedStore?.name || 'Sucursal',
+                kpis,
+                highlights: {
+                    topItems: paymentTypesData
+                        .slice()
+                        .sort((a, b) => (b.monto || 0) - (a.monto || 0))
+                        .map(p => ({ name: p.label, value: Math.round(p.monto || 0) }))
+                }
+            };
+        }
+
+        if (level === 'clients') {
+            const total = clientsData.reduce((a, c) => a + (c.Monto || 0), 0);
+            const topItems = clientsData
+                .slice()
+                .sort((a, b) => (b.Monto || 0) - (a.Monto || 0))
+                .slice(0, 10)
+                .map(c => ({ name: c.ClienteConcepto, value: Math.round(c.Monto || 0) }));
+            return {
+                pageContext: `Clientes en "${selectedType ? PAYMENT_LABELS[selectedType] : 'tipo de venta'}" · ${selectedStore?.name || 'todas las sucursales'}`,
+                period,
+                scope: selectedStore?.name || 'Todas las sucursales',
+                kpis: {
+                    'Monto Total': Math.round(total),
+                    'Clientes': clientsData.length,
+                    'Facturas': clientsData.reduce((a, c) => a + (c.Facturas || 0), 0)
+                },
+                highlights: { topItems }
+            };
+        }
+
+        // invoices
+        const totalInv = invoicesData.reduce((a, i) => a + (i.Total || 0), 0);
+        return {
+            pageContext: `Facturas del cliente "${selectedClient?.name || ''}"`,
+            period,
+            scope: selectedClient?.rfc || 'Cliente',
+            kpis: {
+                'Monto Total': Math.round(totalInv),
+                'Facturas': invoicesData.length
+            }
+        };
+    }, [level, storesData, paymentTypesData, clientsData, invoicesData, fechaInicio, fechaFin, selectedStore, selectedType, selectedClient]);
+
     return (
         <div className="p-6 pt-3 md:p-8 md:pt-4 max-w-[1600px] mx-auto min-h-screen">
             {/* Header */}
@@ -270,6 +368,16 @@ export default function ClientsSimplePage() {
                         <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)}
                             className="bg-transparent text-xs font-bold text-slate-700 outline-none border-none p-0" />
                     </div>
+
+                    <button
+                        onClick={() => setDeepSummaryOpen(true)}
+                        disabled={loading || !hasData}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#4050B4] border border-[#4050B4] text-white hover:bg-[#344196] text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Análisis profundo con IA de la vista actual (hallazgos, oportunidades, riesgos, acciones)"
+                    >
+                        <Sparkles size={13} />
+                        <span className="hidden sm:inline">Análisis Profundo IA</span>
+                    </button>
                 </div>
             </div>
 
@@ -595,6 +703,12 @@ export default function ClientsSimplePage() {
                     </div>
                 </div>
             )}
+
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
+            />
         </div>
     );
 }

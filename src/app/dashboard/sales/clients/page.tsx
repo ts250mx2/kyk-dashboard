@@ -17,11 +17,13 @@ import {
     Store,
     Check,
     X,
-    Loader2
+    Loader2,
+    Sparkles
 } from 'lucide-react';
 import { DashboardCommandBar } from '@/components/dashboard-command-bar';
 import { KpiExplainButton } from '@/components/kpi-explain-button';
 import { NarrativeSummary } from '@/components/narrative-summary';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
 import * as XLSX from 'xlsx';
 import {
     BarChart,
@@ -102,13 +104,18 @@ export default function ClientsDashboardPage() {
     const [searchingClients, setSearchingClients] = useState(false);
     const [trendGroupBy, setTrendGroupBy] = useState<'dia' | 'semana' | 'mes'>('dia');
     const [aiMode, setAiMode] = useState(false);
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
 
     // HSL Colors harmonized with Kesos iA branding
     const COLORS = ['#10B981', '#F59E0B', '#3B82F6', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#4050B4'];
 
     useEffect(() => {
         setMounted(true);
-        setFechaInicio(getMonterreyDate());
+        // Periodo por default: mes en curso (primer día del mes → hoy)
+        const mtyNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
+        const monthStart = new Date(mtyNow);
+        monthStart.setDate(1);
+        setFechaInicio(monthStart.toLocaleDateString('en-CA'));
         setFechaFin(getMonterreyDate());
     }, []);
 
@@ -310,11 +317,16 @@ export default function ClientsDashboardPage() {
     const topStoresActive = activeDesglose.stores
         ?.slice(0, 3)
         .map((s: any) => ({ name: s.Tienda, value: s.Total })) || [];
+    const topClientsActive = activeDesglose.top
+        ?.slice(0, 8)
+        .map((c: any) => ({ name: c.ClienteConcepto, value: c.Total })) || [];
     const summaryContext = {
-        pageContext: 'Dashboard de Ventas por Cliente',
+        pageContext: 'Dashboard de Ventas por Cliente (contado, crédito, público general y notas de crédito)',
         period: { fechaInicio, fechaFin },
         scope: selectedStoreNames,
         kpis: {
+            'Ventas Totales': kpis.TotalVentas,
+            'Clientes Totales': kpis.TotalClientes,
             'Ventas a Contado': kpis.ContadoMonto,
             'Clientes a Contado': kpis.ContadoClientes,
             'Ventas a Crédito': kpis.CreditoMonto,
@@ -324,7 +336,7 @@ export default function ClientsDashboardPage() {
             'Notas de Crédito': kpis.NotasMonto,
             'Operaciones Notas': kpis.NotasOperaciones
         },
-        highlights: { topStores: topStoresActive }
+        highlights: { topStores: topStoresActive, topItems: topClientsActive }
     };
 
     const kpiSharedContext = {
@@ -451,6 +463,16 @@ export default function ClientsDashboardPage() {
                         title="Actualizar Datos"
                     >
                         <RotateCcw size={18} className={cn("group-hover:rotate-180 transition-transform duration-500", loading && "animate-spin")} />
+                    </button>
+
+                    <button
+                        onClick={() => setDeepSummaryOpen(true)}
+                        disabled={loading || !data}
+                        className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-[#4050B4] border border-[#4050B4] text-white hover:bg-[#344196] text-[10px] font-black uppercase tracking-widest transition-all rounded-none shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Análisis profundo con IA de la vista actual (hallazgos, oportunidades, riesgos, acciones)"
+                    >
+                        <Sparkles size={16} />
+                        <span className="hidden sm:inline">Análisis Profundo IA</span>
                     </button>
 
                     {/* Modo IA Switch */}
@@ -1333,6 +1355,11 @@ export default function ClientsDashboardPage() {
 
             </div>
 
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
+            />
         </div>
     );
 }

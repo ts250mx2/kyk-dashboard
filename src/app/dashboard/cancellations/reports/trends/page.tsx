@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-    TrendingUp, TrendingDown, Calendar, Store, ArrowUpRight, 
-    ArrowDownRight, RefreshCcw, ChevronRight, LayoutGrid, 
+import {
+    TrendingUp, TrendingDown, Calendar, Store, ArrowUpRight,
+    ArrowDownRight, RefreshCcw, ChevronRight, LayoutGrid,
     ShoppingCart, Ticket, DollarSign, Clock, CalendarDays, CalendarRange,
-    CheckSquare, Square, Package, Tags, User, Layers, Info, Trash2
+    CheckSquare, Square, Package, Tags, User, Layers, Info, Trash2, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SalesTrendsChart } from '@/components/dashboard/sales-trends-chart';
 import { SalesTrendsDetails } from '@/components/dashboard/sales-trends-details';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
+import type { PageSummaryContext } from '@/components/narrative-summary';
 
 const STORE_COLOR_MAP: Record<string, string> = {
     'BODEGA 238': '#35e844',
@@ -69,6 +71,7 @@ export default function CancellationTrendsPage() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
     const [stores, setStores] = useState<any[]>([]);
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -151,6 +154,47 @@ export default function CancellationTrendsPage() {
     const prevTotal = data?.branchTrends?.reduce((acc: number, curr: any) => acc + curr.PrevTotal, 0) || 0;
     const globalTrend = prevTotal > 0 ? ((currentTotal - prevTotal) / prevTotal) * 100 : 0;
 
+    // Contexto para el Análisis Profundo IA (cancelaciones: subir es MALO, bajar es BUENO)
+    const summaryContext: PageSummaryContext = useMemo(() => {
+        const metricLabel = metric === 'venta' ? 'Monto cancelado' : metric === 'operaciones' ? 'Cantidad de cancelaciones' : 'Promedio por cancelación';
+        const groupLabel = groupBy === 'dia' ? 'día' : groupBy === 'semana' ? 'semana' : 'mes';
+
+        const branches = data?.branchTrends || [];
+        const topStores = [...branches]
+            .sort((a: any, b: any) => (b.CurrentTotal || 0) - (a.CurrentTotal || 0))
+            .slice(0, 8)
+            .map((b: any) => ({ name: b.Tienda, value: Math.round(b.CurrentTotal || 0) }));
+
+        const movers = branches
+            .filter((b: any) => (b.PrevTotal || 0) > 0)
+            .map((b: any) => ({ name: b.Tienda, pct: ((b.CurrentTotal - b.PrevTotal) / b.PrevTotal) * 100 }))
+            .sort((a: any, b: any) => b.pct - a.pct);
+
+        const anomalies: string[] = [];
+        if (movers.length > 0) {
+            const up = movers[0];
+            const down = movers[movers.length - 1];
+            if (up && up.pct > 0) anomalies.push(`Mayor AUMENTO de cancelaciones: ${up.name} (+${up.pct.toFixed(1)}% vs periodo anterior)`);
+            if (down && down.pct < 0 && down.name !== up.name) anomalies.push(`Mayor reducción de cancelaciones: ${down.name} (${down.pct.toFixed(1)}% vs periodo anterior)`);
+        }
+
+        return {
+            pageContext: `Tendencias de Cancelaciones / Devoluciones (evolución por ${groupLabel}, métrica visible: ${metricLabel}). IMPORTANTE: en cancelaciones un AUMENTO es negativo y una BAJA es positiva.`,
+            period: { fechaInicio, fechaFin },
+            scope: currentStoreTitle,
+            kpis: {
+                'Total cancelado': Math.round(totalSales),
+                'Cantidad de cancelaciones': totalOps,
+                'Promedio por cancelación': Math.round(ticketPromedio),
+                'Variación % vs periodo anterior': Number(globalTrend.toFixed(1)),
+                'Cancelado periodo actual': Math.round(currentTotal),
+                'Cancelado periodo anterior': Math.round(prevTotal)
+            },
+            highlights: { topStores, anomalies }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data, metric, groupBy, fechaInicio, fechaFin, totalSales, totalOps, ticketPromedio, globalTrend, currentTotal, prevTotal, currentStoreTitle]);
+
     return (
         <div className="space-y-6">
             {/* Header with Filters & Periods */}
@@ -204,6 +248,16 @@ export default function CancellationTrendsPage() {
                         className="p-2.5 bg-slate-50 border border-slate-200 text-[#E11D48] hover:bg-slate-100 transition-colors rounded-none"
                     >
                         <RefreshCcw size={18} className={cn(loading && "animate-spin")} />
+                    </button>
+
+                    <button
+                        onClick={() => setDeepSummaryOpen(true)}
+                        disabled={loading || !data}
+                        className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-[#E11D48] border border-[#E11D48] text-white hover:bg-[#be123c] text-[10px] font-black uppercase tracking-widest transition-all rounded-none disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Análisis profundo con IA de las cancelaciones (hallazgos, oportunidades, riesgos, acciones)"
+                    >
+                        <Sparkles size={16} />
+                        <span className="hidden sm:inline">Análisis Profundo IA</span>
                     </button>
                 </div>
             </div>
@@ -443,6 +497,12 @@ export default function CancellationTrendsPage() {
             </div>
             
             {loading && <LoadingScreen />}
+
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
+            />
         </div>
     );
 }

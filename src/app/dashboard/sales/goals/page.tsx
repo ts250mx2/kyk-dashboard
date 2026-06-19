@@ -1,14 +1,20 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Target, Plus, Calendar, TrendingUp, Award, BarChart3, Edit3 } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Target, Plus, Calendar, TrendingUp, Award, BarChart3, Edit3, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { GoalEditModal } from "@/components/sales/GoalEditModal";
 import { GoalGauge } from "@/components/sales/GoalGauge";
 import { GoalDetailDrilldown } from "@/components/sales/GoalDetailDrilldown";
 import { LoadingScreen } from "@/components/ui/loading-screen";
+import { DeepSummaryModal } from "@/components/dashboard/deep-summary-modal";
+import type { PageSummaryContext } from "@/components/narrative-summary";
 import { cn } from "@/lib/utils";
+
+function fmtMoney(n: number): string {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n || 0);
+}
 
 export default function GoalsPage() {
     const [goals, setGoals] = useState<any[]>([]);
@@ -22,9 +28,92 @@ export default function GoalsPage() {
     const [drilldownGoalId, setDrilldownGoalId] = useState<number | null>(null);
     const [drilldownGoalName, setDrilldownGoalName] = useState("");
 
+    // Análisis Profundo IA
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
+    const [progressByGoal, setProgressByGoal] = useState<Record<number, any>>({});
+
     useEffect(() => {
         fetchGoals();
     }, []);
+
+    // Trae el progreso (objetivo/avance/%) de cada meta para alimentar el análisis IA
+    useEffect(() => {
+        if (goals.length === 0) { setProgressByGoal({}); return; }
+        let cancelled = false;
+        (async () => {
+            try {
+                const entries = await Promise.all(goals.map(async (g) => {
+                    try {
+                        const res = await fetch(`/api/dashboard/sales/goals/progress?idMeta=${g.IdMeta}`);
+                        return [g.IdMeta, await res.json()] as const;
+                    } catch {
+                        return [g.IdMeta, null] as const;
+                    }
+                }));
+                if (!cancelled) {
+                    const map: Record<number, any> = {};
+                    for (const [id, val] of entries) map[id] = val;
+                    setProgressByGoal(map);
+                }
+            } catch (e) {
+                console.error('Error fetching goals progress:', e);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [goals]);
+
+    const summaryContext: PageSummaryContext = useMemo(() => {
+        const withProg = goals.map(g => {
+            const p = progressByGoal[g.IdMeta] || {};
+            return {
+                name: g.Meta,
+                target: p.totalTarget || 0,
+                actual: p.totalActual || 0,
+                pct: p.totalPercent || 0,
+                fechaInicio: g.FechaInicio?.split('T')[0] || p.fechaInicio || '',
+                fechaFin: g.FechaFin?.split('T')[0] || p.fechaFin || '',
+            };
+        });
+
+        const totalTarget = withProg.reduce((a, g) => a + g.target, 0);
+        const totalActual = withProg.reduce((a, g) => a + g.actual, 0);
+        const overallPct = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+        const onTrack = withProg.filter(g => g.pct >= 100).length;
+        const atRisk = withProg.filter(g => g.target > 0 && g.pct < 80).length;
+
+        const topStores = [...withProg]
+            .sort((a, b) => b.actual - a.actual)
+            .slice(0, 8)
+            .map(g => ({ name: g.name, value: Math.round(g.actual) }));
+
+        const anomalies: string[] = [];
+        withProg
+            .filter(g => g.target > 0 && g.pct < 80)
+            .sort((a, b) => a.pct - b.pct)
+            .slice(0, 6)
+            .forEach(g => {
+                const falta = Math.max(0, g.target - g.actual);
+                anomalies.push(`Meta "${g.name}": ${g.pct.toFixed(1)}% de cumplimiento (faltan ${fmtMoney(falta)})`);
+            });
+
+        const starts = withProg.map(g => g.fechaInicio).filter(Boolean).sort();
+        const ends = withProg.map(g => g.fechaFin).filter(Boolean).sort();
+
+        return {
+            pageContext: 'Metas de Ventas (objetivos comerciales y su cumplimiento)',
+            period: { fechaInicio: starts[0] || '', fechaFin: ends[ends.length - 1] || '' },
+            scope: `${goals.length} meta(s) activa(s)`,
+            kpis: {
+                'Metas activas': goals.length,
+                'Objetivo total': Math.round(totalTarget),
+                'Avance total': Math.round(totalActual),
+                'Cumplimiento global %': Number(overallPct.toFixed(1)),
+                'Metas en/sobre objetivo (≥100%)': onTrack,
+                'Metas en riesgo (<80%)': atRisk,
+            },
+            highlights: { topStores, anomalies },
+        };
+    }, [goals, progressByGoal]);
 
     const fetchGoals = async () => {
         setLoading(true);
@@ -75,17 +164,26 @@ export default function GoalsPage() {
                         <Plus size={16} />
                         Nueva Meta
                     </button>
-                    <button 
+                    <button
                         onClick={() => setIsAlDia(!isAlDia)}
                         className={cn(
                             "flex items-center gap-2 px-6 py-3 font-black text-xs uppercase tracking-[0.2em] transition-all border",
-                            isAlDia 
-                                ? "bg-emerald-600 text-white border-emerald-700 shadow-xl shadow-emerald-600/20" 
+                            isAlDia
+                                ? "bg-emerald-600 text-white border-emerald-700 shadow-xl shadow-emerald-600/20"
                                 : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
                         )}
                     >
                         <Award size={16} />
                         Al Día
+                    </button>
+                    <button
+                        onClick={() => setDeepSummaryOpen(true)}
+                        disabled={loading || goals.length === 0}
+                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#4050B4] to-violet-600 text-white font-black text-xs uppercase tracking-[0.2em] hover:from-[#344199] hover:to-violet-700 transition-all shadow-xl shadow-[#4050B4]/20 border border-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Análisis profundo con IA del cumplimiento de metas (hallazgos, oportunidades, riesgos, acciones)"
+                    >
+                        <Sparkles size={16} />
+                        Análisis Profundo IA
                     </button>
                 </div>
             </div>
@@ -197,11 +295,17 @@ export default function GoalsPage() {
                 onSaved={fetchGoals}
             />
 
-            <GoalDetailDrilldown 
+            <GoalDetailDrilldown
                 isOpen={isDrilldownOpen}
                 onClose={() => setIsDrilldownOpen(false)}
                 idMeta={drilldownGoalId}
                 metaName={drilldownGoalName}
+            />
+
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
             />
         </div>
     );

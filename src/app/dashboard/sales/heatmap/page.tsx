@@ -1,16 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Calendar,
     RotateCcw,
     Store,
     Flame,
     LayoutGrid,
-    ChevronRight
+    ChevronRight,
+    Sparkles
 } from 'lucide-react';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { cn } from '@/lib/utils';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
+import type { PageSummaryContext } from '@/components/narrative-summary';
+
+// SQL Server (DATEFIRST 7): 1=Domingo ... 7=Sábado
+const DIA_NAME: Record<number, string> = {
+    1: 'Domingo', 2: 'Lunes', 3: 'Martes', 4: 'Miércoles', 5: 'Jueves', 6: 'Viernes', 7: 'Sábado'
+};
 
 const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const HOURS = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`);
@@ -79,6 +87,7 @@ export default function HeatmapPage() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any[]>([]);
     const [stores, setStores] = useState<any[]>([]);
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -176,6 +185,73 @@ export default function HeatmapPage() {
         return new Intl.NumberFormat('es-MX').format(val);
     };
 
+    const activeStoreName = selectedStoreId === 'all'
+        ? 'Todas las sucursales'
+        : stores.find(s => s.IdTienda.toString() === selectedStoreId)?.Tienda || 'Sucursal';
+
+    // Contexto para el Análisis Profundo IA: agrega la matriz día×hora del mapa de calor
+    const summaryContext: PageSummaryContext = useMemo(() => {
+        const fmtMoney = (v: number) =>
+            new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(v || 0);
+
+        const totalVentas = data.reduce((a, d) => a + (d.TotalVentas || 0), 0);
+        const totalOps = data.reduce((a, d) => a + (d.CantidadTickets || 0), 0);
+        const ticketProm = totalOps > 0 ? totalVentas / totalOps : 0;
+
+        // Agregados por día y por hora (sobre venta)
+        const byDay: Record<number, number> = {};
+        const byHour: Record<number, number> = {};
+        data.forEach(d => {
+            byDay[d.DiaSemana] = (byDay[d.DiaSemana] || 0) + (d.TotalVentas || 0);
+            byHour[d.Hora] = (byHour[d.Hora] || 0) + (d.TotalVentas || 0);
+        });
+
+        const peakDay = Object.entries(byDay).sort((a, b) => b[1] - a[1])[0];
+        const peakHour = Object.entries(byHour).sort((a, b) => b[1] - a[1])[0];
+
+        // Top franjas (día + hora) por venta
+        const topItems = [...data]
+            .sort((a, b) => (b.TotalVentas || 0) - (a.TotalVentas || 0))
+            .slice(0, 8)
+            .map(d => ({
+                name: `${DIA_NAME[d.DiaSemana] || '?'} ${String(d.Hora).padStart(2, '0')}:00`,
+                value: Math.round(d.TotalVentas || 0)
+            }));
+
+        const anomalies: string[] = [];
+        if (peakDay) {
+            const pct = totalVentas > 0 ? (peakDay[1] / totalVentas) * 100 : 0;
+            anomalies.push(`Día más fuerte: ${DIA_NAME[Number(peakDay[0])]} concentra el ${pct.toFixed(1)}% de la venta (${fmtMoney(peakDay[1])})`);
+        }
+        if (peakHour) {
+            anomalies.push(`Hora pico: ${String(peakHour[0]).padStart(2, '0')}:00 con ${fmtMoney(peakHour[1])} acumulados en el periodo`);
+        }
+        // Franjas activas vs total posible (7×24)
+        const franjasActivas = data.filter(d => (d.TotalVentas || 0) > 0).length;
+        if (franjasActivas > 0) {
+            anomalies.push(`Solo ${franjasActivas} de 168 franjas horarias (7×24) registran venta`);
+        }
+
+        const metricLabel = selectedMetric === 'ventas' ? 'Ventas'
+            : selectedMetric === 'operaciones' ? 'Operaciones' : 'Ticket Promedio';
+
+        return {
+            pageContext: `Mapa de Calor de ventas por día y hora (métrica visible: ${metricLabel})`,
+            period: { fechaInicio, fechaFin },
+            scope: activeStoreName,
+            kpis: {
+                'Venta Total': Math.round(totalVentas),
+                'Operaciones': totalOps,
+                'Ticket Promedio': Math.round(ticketProm),
+                'Franjas con venta': franjasActivas
+            },
+            highlights: {
+                topItems,
+                anomalies
+            }
+        };
+    }, [data, fechaInicio, fechaFin, activeStoreName, selectedMetric]);
+
     return (
         <div className="space-y-6">
             {/* Header with Filters */}
@@ -269,6 +345,16 @@ export default function HeatmapPage() {
                             title="Actualizar Datos"
                         >
                             <RotateCcw size={18} className={cn(loading && "animate-spin")} />
+                        </button>
+
+                        <button
+                            onClick={() => setDeepSummaryOpen(true)}
+                            disabled={loading || data.length === 0}
+                            className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-[#4050B4] border border-[#4050B4] text-white hover:bg-[#344196] text-[10px] font-black uppercase tracking-widest transition-all rounded-none disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Análisis profundo con IA del mapa de calor (franjas pico, oportunidades, riesgos, acciones)"
+                        >
+                            <Sparkles size={15} />
+                            <span className="hidden sm:inline">Análisis Profundo IA</span>
                         </button>
                     </div>
                 </div>
@@ -475,6 +561,12 @@ export default function HeatmapPage() {
                     </div>
                 </div>
             </div>
+
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={summaryContext}
+            />
         </div>
     );
 }

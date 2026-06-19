@@ -16,7 +16,8 @@ import {
     X,
     Check,
     Calendar,
-    RotateCcw
+    RotateCcw,
+    Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
@@ -31,7 +32,8 @@ import {
     Cell
 } from 'recharts';
 import { DashboardCommandBar } from '@/components/dashboard-command-bar';
-import { NarrativeSummary } from '@/components/narrative-summary';
+import { NarrativeSummary, type PageSummaryContext } from '@/components/narrative-summary';
+import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
 import { KpiExplainButton, ExplainKpiContext } from '@/components/kpi-explain-button';
 
 const STORE_COLOR_MAP: Record<string, string> = {
@@ -138,6 +140,7 @@ export default function MargenesRentabilidadPage() {
     const [showStoreDropdown, setShowStoreDropdown] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [aiMode, setAiMode] = useState(false);
+    const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
 
     // AI Command Bar suggestions
     const commandSuggestions = [
@@ -304,6 +307,35 @@ export default function MargenesRentabilidadPage() {
         }
         return `${selectedStoreIds.length} sucursales`;
     }, [selectedStoreIds, storesCatalog]);
+
+    // Contexto dedicado para el Análisis Profundo IA (con highlights y anomalías de margen)
+    const deepContext: PageSummaryContext = useMemo(() => {
+        const groupLabel = GROUPS.find(g => g.key === groupBy)?.label || groupBy;
+        const sortedByUtil = [...rows].sort((a, b) => b.Utilidad - a.Utilidad);
+        const top = sortedByUtil.slice(0, 10).map(r => ({ name: r.Grupo || '(Sin nombre)', value: Math.round(r.Utilidad) }));
+        const negatives = rows
+            .filter(r => r.Utilidad < 0 || r.MargenPct < 0)
+            .sort((a, b) => a.Utilidad - b.Utilidad)
+            .slice(0, 6)
+            .map(r => `${r.Grupo || '(Sin nombre)'}: margen ${Number(r.MargenPct).toFixed(1)}% · utilidad ${fmtMoney(r.Utilidad)}`);
+
+        return {
+            pageContext: `Márgenes y Rentabilidad (agrupado por ${groupLabel})`,
+            period: { fechaInicio: startDate, fechaFin: endDate },
+            scope: activeStoresText,
+            kpis: {
+                'Ingreso Total': Math.round(kpis?.ingreso || 0),
+                'Costo Total': Math.round(kpis?.costo || 0),
+                'Utilidad Bruta': Math.round(kpis?.utilidad || 0),
+                'Margen Promedio %': Number((kpis?.margenPct || 0).toFixed(1)),
+                'Unidades Vendidas': kpis?.unidades || 0,
+                'Tickets/Operaciones': kpis?.tickets || 0
+            },
+            highlights: groupBy === 'sucursal'
+                ? { topStores: top, anomalies: negatives }
+                : { topItems: top, anomalies: negatives }
+        };
+    }, [rows, groupBy, startDate, endDate, activeStoresText, kpis]);
 
     return (
         <div className="p-6 pt-3 md:p-8 md:pt-4 max-w-[1600px] mx-auto min-h-screen">
@@ -535,6 +567,19 @@ export default function MargenesRentabilidadPage() {
                                 </button>
                             ))}
                         </div>
+                    </div>
+
+                    {/* Análisis Profundo IA */}
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">&nbsp;</label>
+                        <button
+                            onClick={() => setDeepSummaryOpen(true)}
+                            disabled={loading || rows.length === 0}
+                            className="flex items-center gap-2 px-3.5 py-2 bg-[#4050B4] hover:bg-[#344196] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-none text-xs font-black uppercase tracking-wider shadow transition-colors h-[38px]"
+                            title="Análisis profundo con IA de los márgenes (hallazgos, oportunidades, riesgos, acciones)"
+                        >
+                            <Sparkles className="w-4 h-4" /> <span className="hidden sm:inline">Análisis Profundo IA</span>
+                        </button>
                     </div>
                 </div>
 
@@ -851,6 +896,12 @@ export default function MargenesRentabilidadPage() {
                 * El costo unitario se toma dinámicamente de <code className="bg-slate-100 p-0.5 font-black text-slate-600">tblExistencias.CostoReal</code> por sucursal. 
                 Cuando una sucursal no registra costo para el artículo, se utiliza el costo global SAP del artículo (<code className="bg-slate-100 p-0.5 font-black text-slate-600">tblArticulos.UltimoCosto</code>).
             </p>
+
+            <DeepSummaryModal
+                open={deepSummaryOpen}
+                onClose={() => setDeepSummaryOpen(false)}
+                context={deepContext}
+            />
         </div>
     );
 }
