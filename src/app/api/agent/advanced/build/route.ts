@@ -3,7 +3,7 @@ import { anthropic } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { getUserId } from '@/lib/conversations';
 import { assertReadOnly } from '@/lib/sql-sandbox';
-import { query } from '@/lib/db';
+import { query, localizeDatesForModel } from '@/lib/db';
 import { getModel } from '@/lib/advanced-reports/models';
 import { normalizeViz } from '@/lib/advanced-reports/tools';
 import { ADVANCED_REPORT_SCHEMA_VERSION, type AdvancedReportDefinition, type ReportBlock, type ReportBlockType } from '@/lib/advanced-reports/types';
@@ -136,7 +136,7 @@ export async function POST(req: Request) {
                     expectedColumns: Array.isArray(b?.expectedColumns) ? b.expectedColumns : undefined,
                     drill: b?.drill?.sql ? { sql: String(b.drill.sql), title: b.drill.title, visualization: b.drill.visualization ? normalizeViz(b.drill.visualization) : undefined } : undefined,
                 });
-                digest.push({ title: String(b?.title || `Bloque ${i + 1}`), type, rowCount: rows.length, sample: rows.slice(0, 12) });
+                digest.push({ title: String(b?.title || `Bloque ${i + 1}`), type, rowCount: rows.length, sample: localizeDatesForModel(rows.slice(0, 12)) });
             }
 
             if (normalizedBlocks.length === 0) {
@@ -255,7 +255,7 @@ Responde SOLO con JSON válido (sin markdown), en español:
         const rows = (await query(sql)) as any[];
 
         // El modelo elegido genera la lectura del reporte con datos frescos
-        const sample = rows.slice(0, 50);
+        const sample = localizeDatesForModel(rows.slice(0, 50));
         const prompt = `Eres un consultor senior de retail. Analiza los datos del reporte "${name}" y entrega una lectura accionable.
 DATOS (${rows.length} filas, muestra de ${sample.length}): ${JSON.stringify(sample).slice(0, 8000)}
 

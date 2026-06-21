@@ -14,7 +14,7 @@
  * Los destinatarios salen de la columna Telefono de CADA alerta (splitPhones).
  */
 
-import { query } from '@/lib/db';
+import { query, localizeDatesForModel } from '@/lib/db';
 import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { sendWhatsApp, SendWhatsAppResult } from '@/lib/whatsapp/send';
@@ -280,7 +280,7 @@ export async function generateHallazgosDia(daysAgo = 0, modelId?: string | null)
     }
 
     const dataDesc = results
-        .map((r) => `[${r.area.toUpperCase()}] ${r.label}\n${JSON.stringify(r.data)}`)
+        .map((r) => `[${r.area.toUpperCase()}] ${r.label}\n${JSON.stringify(localizeDatesForModel(r.data))}`)
         .join('\n\n');
 
     const prompt = `Eres Kesito, analista senior de KYK retail. A partir de estos datos ${daysAgo === 1 ? 'del DÍA ANTERIOR (ayer)' : 'del día'}, redacta los

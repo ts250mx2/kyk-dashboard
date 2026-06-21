@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { anthropic, ANTHROPIC_MODEL, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
-import { query } from '@/lib/db';
+import { query, localizeDatesForModel } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 
 /**
@@ -146,7 +146,7 @@ Si SÍ necesitas:
                         const safeSql = assertReadOnly(plan.sql);
                         console.log(`\n\x1b[33m[AGENT SQL - EXPLICACIÓN KPI: ${(plan.purpose || 'SIN DETALLE').toUpperCase()}]\x1b[0m\n${safeSql}\n`);
                         const results = await query(safeSql);
-                        extraData = (results as any[]).slice(0, 10);
+                        extraData = localizeDatesForModel((results as any[]).slice(0, 10));
                         extraSql = safeSql;
                         extraPurpose = plan.purpose || null;
                     } catch (qErr) {

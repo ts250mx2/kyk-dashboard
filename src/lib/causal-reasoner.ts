@@ -16,7 +16,7 @@
  */
 
 import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
-import { query } from '@/lib/db';
+import { query, localizeDatesForModel } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 
 export interface CausalHypothesis {
@@ -99,7 +99,7 @@ inclúyelo (traducido a SQL). No estás obligado a incluirlos todos — solo los
 
 EVIDENCIA YA OBSERVADA (consulta principal del usuario):
 SQL ejecutado: ${firstSql || '(no disponible)'}
-Resultados (primeros 10 filas): ${JSON.stringify(firstResults.slice(0, 10))}
+Resultados (primeros 10 filas): ${JSON.stringify(localizeDatesForModel(firstResults.slice(0, 10)))}
 
 USA esta evidencia para DIRIGIR tus hipótesis:
 - Si los datos ya muestran concentración en una dimensión (ej: una sucursal, una hora, un departamento), tus hipótesis deben PROFUNDIZAR en esa dimensión, no replicarla.
@@ -330,7 +330,7 @@ HIPÓTESIS PADRE QUE CONFIRMÓ UNA CONCENTRACIÓN:
 - Pregunta original: ${parent.description}
 - Hallazgo: ${parent.evidence.summary}
 - Dimensión concentrada: ${focus.column} = "${focus.value}" (${Math.round(focus.share * 100)}% del total)
-- Datos crudos: ${JSON.stringify(parent.rows.slice(0, 5))}
+- Datos crudos: ${JSON.stringify(localizeDatesForModel(parent.rows.slice(0, 5)))}
 
 ESQUEMA DISPONIBLE (read-only):
 ${schemaContext.slice(0, 3000)}
@@ -411,7 +411,7 @@ export function formatHypothesesForPrompt(results: CausalHypothesisResult[]): st
             : r.evidence?.verdict === 'partial' ? 'EVIDENCIA PARCIAL'
                 : 'SIN EVIDENCIA';
         const evidenceLine = r.evidence ? `\n  Veredicto preliminar: ${verdictLabel} — ${r.evidence.summary}` : '';
-        const sample = JSON.stringify(r.rows.slice(0, 5));
+        const sample = JSON.stringify(localizeDatesForModel(r.rows.slice(0, 5)));
         return `[H${i + 1}] ${r.label}\n  Pregunta: ${r.description}${evidenceLine}\n  Resultados: ${sample}`;
     }).join('\n\n');
 }

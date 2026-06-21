@@ -15,7 +15,9 @@ import type { ReportParam } from './types';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function todayISO(): string {
-    return new Date().toISOString().slice(0, 10);
+    // Fecha de HOY en Monterrey (no UTC): cerca de medianoche evita saltar de día.
+    // 'en-CA' formatea como YYYY-MM-DD (compatible con DATE_RE).
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
 }
 
 function escapeLiteral(s: string): string {

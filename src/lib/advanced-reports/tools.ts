@@ -11,7 +11,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { query } from '@/lib/db';
+import { query, localizeDatesForModel } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import {
     runForecastForAgent,
@@ -464,7 +464,7 @@ export async function executeAdvancedTool(
             return {
                 sql,
                 rowCount: rows.length,
-                resultText: JSON.stringify({ ok: true, rowCount: rows.length, columns, sampleRows: sample }).slice(0, 12000),
+                resultText: JSON.stringify({ ok: true, rowCount: rows.length, columns, sampleRows: localizeDatesForModel(sample) }).slice(0, 12000),
             };
         }
         case 'get_sales_forecast': {
@@ -496,7 +496,7 @@ export async function executeAdvancedTool(
                     ok: true,
                     rowCount: rows.length,
                     columns,
-                    sampleRows: sample,
+                    sampleRows: localizeDatesForModel(sample),
                     note: rows.length === 0 ? 'La consulta no devolvió filas. Revisa filtros/período antes de guardar.' : 'Validado. Procede a save_report si se ve correcto.',
                 }).slice(0, 10000),
             };

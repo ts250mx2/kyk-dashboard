@@ -1,5 +1,21 @@
 import sql from 'mssql';
 
+// La BD guarda hora LOCAL de Monterrey (useUTC:false abajo), pero JSON.stringify de un
+// Date produce ISO en UTC (+6h). Si esos rows se pasan crudos a un LLM, lee el UTC literal
+// y reporta horas corridas (06:41 → "12:41"). Usar ANTES de serializar filas para un modelo.
+// 'sv-SE' formatea como "2026-06-20 06:41:51" (estilo ISO sin zona, inequívoco para el modelo).
+const MTY_TZ = 'America/Monterrey';
+export function localizeDatesForModel<T>(rows: T[]): T[] {
+    return rows.map((row) => {
+        if (!row || typeof row !== 'object') return row;
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+            out[k] = v instanceof Date ? v.toLocaleString('sv-SE', { timeZone: MTY_TZ }) : v;
+        }
+        return out as T;
+    });
+}
+
 const user = process.env.SQL_SERVER_USER || 'sa';
 const password = (process.env.SQL_SERVER_PASSWORD || '').replace(/\\(\$)/g, '$1');
 const database = process.env.SQL_SERVER_DATABASE || 'BDKYK';

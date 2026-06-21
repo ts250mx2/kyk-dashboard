@@ -6,7 +6,7 @@ import { getReportById } from '@/lib/advanced-reports/reports-store';
 import { substituteParams } from '@/lib/advanced-reports/params';
 import { getModel } from '@/lib/advanced-reports/models';
 import { assertReadOnly } from '@/lib/sql-sandbox';
-import { query } from '@/lib/db';
+import { query, localizeDatesForModel } from '@/lib/db';
 import { runForecastForAgent } from '@/lib/forecast/agent-tools';
 import { costUsd, costMxn, USD_MXN_RATE } from '@/lib/pricing';
 import { recordMetric } from '@/lib/metrics';
@@ -14,7 +14,7 @@ import { recordMetric } from '@/lib/metrics';
 export const runtime = 'nodejs';
 
 function buildAnalysisPrompt(title: string, description: string | undefined, rows: any[]): string {
-    const sample = rows.slice(0, 50);
+    const sample = localizeDatesForModel(rows.slice(0, 50));
     const dataStr = JSON.stringify(sample).slice(0, 8000);
     return `Eres un consultor senior de retail. Analiza los datos ACTUALES de este reporte y da una lectura accionable.
 
@@ -105,7 +105,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                     const sql = assertReadOnly(substituteParams(b.sql, def.params));
                     const rows = (await query(sql)) as any[];
                     analyzedRows += rows.length;
-                    digest.push({ title: b.title || 'Bloque', type: b.type, rowCount: rows.length, sample: rows.slice(0, 15) });
+                    digest.push({ title: b.title || 'Bloque', type: b.type, rowCount: rows.length, sample: localizeDatesForModel(rows.slice(0, 15)) });
                 } catch (e: any) {
                     digest.push({ title: b.title || 'Bloque', type: b.type, error: e?.message });
                 }

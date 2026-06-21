@@ -14,6 +14,7 @@
  */
 
 import { anthropic } from '@/lib/anthropic';
+import { localizeDatesForModel } from '@/lib/db';
 
 export interface FollowUpProposal {
     /** Pregunta breve en lenguaje natural que describe qué se está investigando */
@@ -45,7 +46,7 @@ export async function proposeFollowUp(opts: {
     const cols = Object.keys(firstRow || {});
     if (firstResults.length === 1 && cols.length === 1) return null;
 
-    const sample = JSON.stringify(firstResults.slice(0, 8));
+    const sample = JSON.stringify(localizeDatesForModel(firstResults.slice(0, 8)));
 
     const detectorPrompt = `Eres un analista senior. Te muestro los resultados de UNA consulta inicial
 que respondió a la pregunta del usuario. Tu trabajo: decidir si los datos

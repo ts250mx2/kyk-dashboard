@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
-import { query } from '@/lib/db';
+import { query, localizeDatesForModel } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import {
     runForecastForAgent,
@@ -42,6 +42,20 @@ interface WhatsAppRequest {
 
 const ANTHROPIC_MODEL = ANTHROPIC_MODEL_FAST; // configurable vía .env (ANTHROPIC_MODEL_FAST)
 const OPENAI_FALLBACK_MODEL = 'gpt-4o-mini'; // fallback cuando Anthropic devuelve 5xx/overloaded
+
+// WhatsApp debe responder rápido: timeout corto POR LLAMADA para no heredar el
+// timeout global del SDK (30 min). Configurable vía WHATSAPP_AI_TIMEOUT_MS.
+const WA_AI_TIMEOUT_MS = Number(process.env.WHATSAPP_AI_TIMEOUT_MS) || 20000;
+
+// Decide si conviene caer al fallback de OpenAI. Cubre: timeouts/red (sin status),
+// sobrecarga (429/5xx) y SALDO AGOTADO de Anthropic (400 "credit balance too low").
+function shouldFallbackToOpenAI(err: any): boolean {
+    const status = err?.status ?? err?.response?.status;
+    if (!status) return true;                       // timeout/conexión
+    if (status === 429 || status >= 500) return true; // rate limit / overloaded / 5xx
+    const msg = String(err?.error?.error?.message || err?.error?.message || err?.message || '').toLowerCase();
+    return msg.includes('credit balance') || msg.includes('billing') || msg.includes('quota') || msg.includes('insufficient');
+}
 
 const ANTHROPIC_TOOLS: any[] = [
     {
@@ -123,14 +137,13 @@ async function planWithTools(systemPrompt: string, question: string, requestId: 
             messages: [{ role: 'user', content: question }],
             tools: ANTHROPIC_TOOLS,
             tool_choice: { type: 'any' } // FORZAR uso de alguna tool: sin escape hatch de texto libre
-        });
+        }, { timeout: WA_AI_TIMEOUT_MS, maxRetries: 0 }); // fail-fast: si falla, caemos a OpenAI
         const block = resp.content.find((c: any) => c.type === 'tool_use') as any;
         if (block) return { name: block.name, args: block.input };
         throw new Error('Anthropic no devolvió tool_use');
     } catch (err: any) {
+        if (!shouldFallbackToOpenAI(err)) throw err;
         const status = err?.status ?? err?.response?.status;
-        const transient = !status || status >= 500;
-        if (!transient) throw err;
         console.warn(`[${requestId}] Claude falló (status=${status}, type=${err?.error?.error?.type || err?.error?.type}), fallback a ${OPENAI_FALLBACK_MODEL}`);
         const completion = await openai.chat.completions.create({
             model: OPENAI_FALLBACK_MODEL,
@@ -141,7 +154,7 @@ async function planWithTools(systemPrompt: string, question: string, requestId: 
             ],
             tools: OPENAI_TOOLS,
             tool_choice: 'required' // equivalente a tool_choice:any en Anthropic
-        });
+        }, { timeout: WA_AI_TIMEOUT_MS, maxRetries: 1 });
         const msg = completion.choices[0].message;
         const tc = msg.tool_calls?.[0] as any;
         if (!tc) throw new Error('OpenAI no devolvió tool_call');
@@ -155,18 +168,17 @@ async function narrate(prompt: string, maxTokens: number, requestId: string): Pr
             model: ANTHROPIC_MODEL,
             max_tokens: maxTokens,
             messages: [{ role: 'user', content: prompt }],
-        });
+        }, { timeout: WA_AI_TIMEOUT_MS, maxRetries: 0 });
         return (resp.content[0] as any)?.text || '';
     } catch (err: any) {
+        if (!shouldFallbackToOpenAI(err)) throw err;
         const status = err?.status ?? err?.response?.status;
-        const transient = !status || status >= 500;
-        if (!transient) throw err;
         console.warn(`[${requestId}] Claude (narrate) falló (status=${status}), fallback a ${OPENAI_FALLBACK_MODEL}`);
         const completion = await openai.chat.completions.create({
             model: OPENAI_FALLBACK_MODEL,
             max_tokens: maxTokens,
             messages: [{ role: 'user', content: prompt }],
-        });
+        }, { timeout: WA_AI_TIMEOUT_MS, maxRetries: 1 });
         return completion.choices[0]?.message?.content || '';
     }
 }
@@ -294,6 +306,13 @@ MAPEO LENGUAJE NATURAL → COLUMNAS
   hay decimales raros, usa BETWEEN X-1 AND X+1 para tolerancia.
 - "última semana" → [FechaCorrespondiente] >= DATEADD(day, -7, GETDATE()).
 - "cuántas veces" → COUNT(*) agrupado por las dimensiones que pida la pregunta.
+- "horario" / "a qué hora abre/cierra" / "horarios de venta" de una tienda → NO existe
+  un campo de horario oficial en la base. Deriva la VENTANA DE ACTIVIDAD DE VENTAS con
+  MIN([Fecha Venta]) y MAX([Fecha Venta]), GROUP BY [Tienda] (por defecto AYER, o el
+  período que pidan). REDACCIÓN OBLIGATORIA: di "primera venta a las HH:MM, última venta
+  a las HH:MM" — NUNCA "abrió/cerró a las...", porque eso NO es el horario oficial de la
+  tienda, solo cuándo hubo movimiento de caja. Si piden el horario oficial explícitamente,
+  aclara que solo tienes la actividad de ventas, no el horario de operación.
 
 ──────────────────────────────────────────────────────────────
 ESQUEMA DE LA BASE DE DATOS
@@ -488,7 +507,7 @@ Tu trabajo: redactar UNA respuesta corta y conversacional.
 
 PREGUNTA: ${question}
 SQL: ${safeSql}
-RESULTADOS (primeras 10 filas): ${JSON.stringify(sampleRows)}
+RESULTADOS (primeras 10 filas): ${JSON.stringify(localizeDatesForModel(sampleRows))}
 TOTAL DE FILAS: ${rows.length}
 
 REGLAS DE FORMATO WHATSAPP:
@@ -500,6 +519,9 @@ REGLAS DE FORMATO WHATSAPP:
 - Si los resultados están vacíos, dilo claramente: "No encontré cancelaciones con
   ese código y monto en la última semana" — y sugiere alternativa si aplica.
 - Si hay varias filas, resume el conteo + lista 2-3 ejemplos clave con sucursal y cajero.
+- Si el SQL usa MIN/MAX de [Fecha Venta] (ventana de actividad de una tienda), di
+  "primera venta a las HH:MM, última venta a las HH:MM" — NUNCA "abrió/cerró a las...",
+  porque eso NO es el horario oficial de la tienda, solo cuándo hubo movimiento.
 
 Devuelve SOLO el texto de la respuesta, nada más (sin JSON, sin comillas, sin prefijos).`;
 

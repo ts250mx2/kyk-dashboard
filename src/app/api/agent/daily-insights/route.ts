@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
-import { query } from '@/lib/db';
+import { query, localizeDatesForModel } from '@/lib/db';
 import { INSIGHT_SCANNERS, getScannersByPriority } from '@/lib/insights-scanners';
 import fs from 'fs';
 import path from 'path';
@@ -65,7 +65,7 @@ async function generateInsightsFromScannerData(
     model: 'claude' | 'openai' = 'claude'
 ): Promise<Insight[]> {
     const dataDescription = scannerResults
-        .map(r => `[${r.area.toUpperCase()}] ${r.label}\nDatos: ${JSON.stringify(r.data.slice(0, 5))}`)
+        .map(r => `[${r.area.toUpperCase()}] ${r.label}\nDatos: ${JSON.stringify(localizeDatesForModel(r.data.slice(0, 5)))}`)
         .join('\n\n');
 
     const systemPrompt = `Eres un Analista de Datos Senior especializado en retail. Analiza los datos

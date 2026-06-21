@@ -1,7 +1,8 @@
 const http = require('http');
 
 const PORT = process.env.PORT || 8093;
-const TARGET_PORT = process.env.TARGET_PORT || 3001;
+// El app de Next corre en :3002 (prod, pm2). Override con TARGET_PORT para dev (p.ej. 3000).
+const TARGET_PORT = process.env.TARGET_PORT || 3002;
 
 const server = http.createServer((req, res) => {
     // Permitimos las APIs de WhatsApp y los enlaces públicos compartibles

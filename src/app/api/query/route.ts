@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { openai } from '@/lib/ai';
 import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
-import { query } from '@/lib/db';
+import { query, localizeDatesForModel } from '@/lib/db';
 import { findRelevantReports } from '@/lib/available-reports';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 import { createSseStream, SSE_HEADERS } from '@/lib/sse';
@@ -239,7 +239,7 @@ export async function POST(req: Request) {
         const aiRules = aiRulesResults as any[];
         const formattedRules = aiRules.map(r => `- ${r.RuleId} ${r.Regla}`).join('\n');
 
-        const currentDateTime = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+        const currentDateTime = new Date().toLocaleString('es-MX', { timeZone: 'America/Monterrey' });
 
         const availableReports = `
 REPORTES DISPONIBLES EN LA APLICACIÓN:
@@ -1422,7 +1422,7 @@ separadas. Tu respuesta debe contar la historia completa: el dato inicial
 
 Pregunta de la investigación: ${followUp.question}
 SQL de la investigación: ${followUp.sql}
-Resultados de la investigación (primeros 10): ${JSON.stringify(followUp.results.slice(0, 10))}
+Resultados de la investigación (primeros 10): ${JSON.stringify(localizeDatesForModel(followUp.results.slice(0, 10)))}
 ` : '';
 
     const subCount = (causalResults || []).filter(r => r.label.startsWith('↳')).length;
@@ -1497,7 +1497,7 @@ REGLAS DE VISUALIZACIÓN:
 ──────────────────────────────────────────────
 Pregunta del usuario: ${prompt}
 SQL ejecutado: ${sql}
-Resultados (primeros 10): ${JSON.stringify(results.slice(0, 10))}${followUpSection}${causalSection}${forecastSection}
+Resultados (primeros 10): ${JSON.stringify(localizeDatesForModel(results.slice(0, 10)))}${followUpSection}${causalSection}${forecastSection}
 ──────────────────────────────────────────────
 
 Empieza la respuesta directamente, sin preámbulos.`;
