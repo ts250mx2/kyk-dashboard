@@ -382,11 +382,14 @@ export default function CedisDistributionsPage() {
     useEffect(() => {
         setVisibleCount(50);
         fetchData();
-    }, [fechaInicio, fechaFin]);
+        // kanbanFilter is sent to the server (&status=...), so refetch when it changes;
+        // otherwise client-side filtering operates on a server-pre-filtered subset of rows.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fechaInicio, fechaFin, kanbanFilter]);
 
     useEffect(() => {
         setVisibleCount(50);
-    }, [search, kanbanFilter]);
+    }, [search]);
 
     const fetchOrderDetails = async (row: CedisRow) => {
         if (!idComputadora) return;
