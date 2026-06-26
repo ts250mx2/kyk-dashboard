@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx-js-style';
 import { jsPDF } from 'jspdf';
 import { LoadingScreen } from './ui/loading-screen';
+import { ModelPicker } from '@/components/model-picker';
+import { getStoredModel } from '@/lib/chat-models';
 
 interface ParetoAnalysisModalProps {
     isOpen: boolean;
@@ -141,13 +143,17 @@ export function ParetoAnalysisModal({
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [aiSummary, setAiSummary] = useState<string | null>(null);
     const [aiLoading, setAiLoading] = useState(false);
+    const [aiModel, setAiModel] = useState(getStoredModel());
 
-    const handleAISummary = async () => {
+    const handleAISummary = async (useModel?: string) => {
+        // Si no se pasa modelo (abrir), hereda el elegido en el chat.
+        const m = useModel ?? getStoredModel();
+        setAiModel(m);
         setAiLoading(true);
         setIsAIModalOpen(true);
         setAiSummary(null);
         try {
-            const res = await fetch(`/api/dashboard/pareto-analysis/summary?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&storeId=${idTienda || ''}&storeName=${storeName || 'Global'}`);
+            const res = await fetch(`/api/dashboard/pareto-analysis/summary?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&storeId=${idTienda || ''}&storeName=${storeName || 'Global'}&model=${encodeURIComponent(m)}`);
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             setAiSummary(data.summary);
@@ -157,6 +163,12 @@ export function ParetoAnalysisModal({
         } finally {
             setAiLoading(false);
         }
+    };
+
+    /** Cambia el modelo solo para este análisis y lo regenera. */
+    const handleAiModelChange = (m: string) => {
+        setAiModel(m);
+        handleAISummary(m);
     };
 
     const exportToPDF = () => {
@@ -417,7 +429,7 @@ export function ParetoAnalysisModal({
                             />
                         </div>
                         <button
-                            onClick={handleAISummary}
+                            onClick={() => handleAISummary()}
                             disabled={loading || details.length === 0}
                             className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 transition-all text-[10px] font-black uppercase tracking-widest border border-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed mr-2 shadow-lg shadow-indigo-200"
                         >
@@ -629,14 +641,17 @@ export function ParetoAnalysisModal({
                         </div>
 
                         <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center">
-                            <button
-                                onClick={exportToPDF}
-                                disabled={!aiSummary || aiLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-widest hover:border-indigo-600 hover:text-indigo-600 transition-all shadow-sm disabled:opacity-50"
-                            >
-                                <Download size={14} />
-                                DESCARGAR PDF
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <ModelPicker value={aiModel} onChange={handleAiModelChange} disabled={aiLoading} />
+                                <button
+                                    onClick={exportToPDF}
+                                    disabled={!aiSummary || aiLoading}
+                                    className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-widest hover:border-indigo-600 hover:text-indigo-600 transition-all shadow-sm disabled:opacity-50"
+                                >
+                                    <Download size={14} />
+                                    DESCARGAR PDF
+                                </button>
+                            </div>
                             <button
                                 onClick={() => setIsAIModalOpen(false)}
                                 className="px-6 py-2 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20"

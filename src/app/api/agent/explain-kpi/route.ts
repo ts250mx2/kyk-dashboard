@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { anthropic, ANTHROPIC_MODEL, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
+import { generateText } from '@/lib/llm';
 import { query, localizeDatesForModel } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 
@@ -36,6 +37,7 @@ import { assertReadOnly } from '@/lib/sql-sandbox';
  */
 
 interface ExplainKpiRequest {
+    model?: string;
     kpiName: string;
     value: number;
     format?: 'currency' | 'number' | 'percent';
@@ -59,7 +61,7 @@ function formatValue(value: number, format?: string): string {
 export async function POST(req: Request) {
     try {
         const body: ExplainKpiRequest = await req.json();
-        const { kpiName, value, format, period, filters, comparison, pageContext, relatedKpis } = body;
+        const { model, kpiName, value, format, period, filters, comparison, pageContext, relatedKpis } = body;
 
         if (!kpiName || value === undefined || !period?.fechaInicio || !period?.fechaFin) {
             return NextResponse.json({ error: 'kpiName, value y period son requeridos' }, { status: 400 });
@@ -200,12 +202,12 @@ RESPONDE SOLO EN JSON:
   "followUpQuestions": ["Pregunta 1", "Pregunta 2", "Pregunta 3"]
 }`;
 
-        const explainResp = await anthropic.messages.create({
-            model: ANTHROPIC_MODEL,
-            max_tokens: 1500,
-            messages: [{ role: 'user', content: explainPrompt }]
+        const { text } = await generateText({
+            model,
+            fallback: ANTHROPIC_MODEL,
+            prompt: explainPrompt,
+            maxTokens: 1500,
         });
-        const text = (explainResp.content[0] as any)?.text || '';
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
 

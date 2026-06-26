@@ -7,6 +7,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { CancellationDetailModal } from '@/components/cancellation-detail-modal';
 import { DeepSummaryModal } from '@/components/dashboard/deep-summary-modal';
 import type { PageSummaryContext } from '@/components/narrative-summary';
+import { ModelPicker } from '@/components/model-picker';
+import { getStoredModel, modelLabel } from '@/lib/chat-models';
 
 type Metric = 'venta' | 'operaciones' | 'ticket' | 'cantidadDia';
 
@@ -38,6 +40,7 @@ export default function CancellationAlertsPage() {
     const [data, setData] = useState<any>(null);
     const [aiSummary, setAiSummary] = useState<string|null>(null);
     const [aiLoading, setAiLoading] = useState(false);
+    const [aiModel, setAiModel] = useState(getStoredModel());
     const [deepSummaryOpen, setDeepSummaryOpen] = useState(false);
     const [detailModal, setDetailModal] = useState<{
         isOpen: boolean;
@@ -77,20 +80,25 @@ export default function CancellationAlertsPage() {
         });
     };
 
-    const generateAISummary = async () => {
+    const generateAISummary = async (useModel?: string) => {
         if (!data) return;
+        // Si no se pasa modelo (abrir), hereda el elegido en el chat.
+        const m = useModel ?? getStoredModel();
+        setAiModel(m);
         setAiLoading(true); setAiSummary('');
         try {
-            const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'gpt-4o' : 'gpt-4o';
             const res = await fetch('/api/dashboard/cancellations/alerts/summary', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fechaInicio, fechaFin, model: selectedModel, avgPerStore: data.avgPerStore, topCajeros: data.topCajeros, topSupervisores: data.topSupervisores, perStore: data.perStore, hourly: data.hourly })
+                body: JSON.stringify({ fechaInicio, fechaFin, model: m, avgPerStore: data.avgPerStore, topCajeros: data.topCajeros, topSupervisores: data.topSupervisores, perStore: data.perStore, hourly: data.hourly })
             });
             const json = await res.json();
             setAiSummary(json.summary || 'No se pudo generar el resumen.');
         } catch (e) { console.error(e); setAiSummary('Error al generar resumen.'); }
         finally { setAiLoading(false); }
     };
+
+    /** Cambia el modelo solo para este resumen y lo regenera. */
+    const handleAiModelChange = (m: string) => { setAiModel(m); generateAISummary(m); };
 
     const fmt = (v: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(v);
     const fmtMetric = (v: number) => metric === 'venta' ? fmt(v) : metric === 'ticket' ? fmt(v) : v.toLocaleString();
@@ -230,7 +238,7 @@ export default function CancellationAlertsPage() {
                     <button onClick={fetchData} className="p-2.5 bg-slate-50 border border-slate-200 text-[#E11D48] hover:bg-slate-100 transition-colors">
                         <RefreshCcw size={18} className={cn(loading&&"animate-spin")} />
                     </button>
-                    <button onClick={generateAISummary} disabled={aiLoading||!data}
+                    <button onClick={() => generateAISummary()} disabled={aiLoading||!data}
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[10px] font-black uppercase tracking-widest hover:from-purple-700 hover:to-indigo-700 transition-all disabled:opacity-50 shadow-lg shadow-purple-500/20">
                         <Sparkles size={14} className={cn(aiLoading&&"animate-spin")} /> Resumen IA
                     </button>
@@ -457,7 +465,12 @@ export default function CancellationAlertsPage() {
                     <div className="bg-white w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}>
                         <div className="p-4 bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center justify-between shrink-0">
                             <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2"><Sparkles size={16} /> Resumen IA — Cancelaciones</h3>
-                            <button onClick={()=>setAiSummary(null)} className="p-1 text-white/70 hover:text-white transition-colors"><X size={18} /></button>
+                            <div className="flex items-center gap-2">
+                                <div className="bg-white/90 rounded-md">
+                                    <ModelPicker value={aiModel} onChange={handleAiModelChange} disabled={aiLoading} />
+                                </div>
+                                <button onClick={()=>setAiSummary(null)} className="p-1 text-white/70 hover:text-white transition-colors"><X size={18} /></button>
+                            </div>
                         </div>
                         <div className="flex-1 overflow-auto p-6">
                             {aiLoading ? (
@@ -467,7 +480,7 @@ export default function CancellationAlertsPage() {
                             )}
                         </div>
                         <div className="p-3 bg-slate-50 border-t border-slate-100 text-[10px] font-bold text-slate-400 uppercase shrink-0">
-                            Periodo: {fechaInicio} a {fechaFin} · Generado por GPT-4o
+                            Periodo: {fechaInicio} a {fechaFin} · Generado por {modelLabel(aiModel)}
                         </div>
                     </div>
                 </div>

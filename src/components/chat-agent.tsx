@@ -11,6 +11,7 @@ import { PlaybooksPanel, PlaybookSummary } from '@/components/playbooks-panel';
 import { ProactivePromptsBanner } from '@/components/proactive-prompts-banner';
 import { readSseStream } from '@/lib/sse-client';
 import { cn } from '@/lib/utils';
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from '@/lib/chat-models';
 import {
     X,
     Maximize2,
@@ -28,6 +29,7 @@ import {
     Copy,
     Check,
     RotateCw,
+    Cpu,
     ThumbsUp,
     ThumbsDown
 } from 'lucide-react';
@@ -60,6 +62,9 @@ interface Message {
     // Feedback
     messageId?: string;
     feedbackRating?: 'up' | 'down' | null;
+    // Respuesta generada con un modelo alterno (botón "Otro modelo"),
+    // agregada debajo sin borrar la respuesta original.
+    isAltModel?: boolean;
 }
 
 const STREAM_PHASE_LABELS: Record<NonNullable<Message['streamPhase']>, string> = {
@@ -160,15 +165,8 @@ const DEFAULT_FALLBACK = [
     'Oportunidades de optimización identificadas'
 ];
 
-/** Modelos seleccionables en Kesito. El backend respeta los Claude permitidos
- *  y cae a GPT-4o para cualquier otro. Se persiste en localStorage 'ai_query_model'. */
-const CHAT_MODELS = [
-    { id: 'claude-fable-5', label: 'Fable 5' },
-    { id: 'claude-opus-4-8', label: 'Opus 4.8' },
-    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-    { id: 'gpt-4o', label: 'GPT-4o' },
-];
-const DEFAULT_CHAT_MODEL = 'claude-opus-4-8';
+// CHAT_MODELS y DEFAULT_CHAT_MODEL viven en '@/lib/chat-models' (fuente única,
+// compartida con el selector de los análisis profundos de las páginas).
 
 interface ChatAgentProps {
     /**
@@ -203,6 +201,18 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
     /** Genera un ID de conversación nuevo (UUID v4 simplificado) */
     const generateConversationId = (): string => {
         return 'conv_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    };
+
+    /**
+     * Devuelve la pregunta del usuario asociada a una respuesta. Sube desde el
+     * índice dado hasta el último mensaje 'user' (en respuestas alternativas el
+     * mensaje en index-1 es otra respuesta del asistente, no la pregunta).
+     */
+    const questionFor = (index: number): string => {
+        for (let i = index - 1; i >= 0; i--) {
+            if (messages[i].role === 'user') return messages[i].content;
+        }
+        return '';
     };
 
     /** Guarda la conversación actual en el backend (debounced) */
@@ -298,8 +308,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
 
         // Si ya tiene el mismo rating, toggle (lo quitamos del UI; el backend guarda historial)
         const isToggleOff = msg.feedbackRating === rating;
-        const userPrev = index > 0 ? messages[index - 1] : null;
-        const promptText = userPrev?.role === 'user' ? userPrev.content : null;
+        const promptText = questionFor(index) || null;
 
         setMessages(prev => prev.map((m, i) => i === index ? { ...m, feedbackRating: isToggleOff ? null : rating } : m));
 
@@ -338,12 +347,25 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
      */
     const handleRegenerate = async (assistantIndex: number) => {
         if (assistantIndex <= 0) return;
-        const userMsg = messages[assistantIndex - 1];
-        if (userMsg?.role !== 'user') return;
-        // Removemos el mensaje del asistente y todos los siguientes
+        // Removemos el mensaje del asistente (y lo que venga después) y lo
+        // regeneramos en su lugar con el mismo modelo.
         setMessages(prev => prev.slice(0, assistantIndex));
         // Pequeño delay para que el state se propague antes del nuevo send
-        setTimeout(() => handleSend(userMsg.content), 50);
+        setTimeout(() => handleSend('', { retryOfIndex: assistantIndex }), 50);
+    };
+
+    /** Índice del mensaje cuyo menú "Otro modelo" está abierto (o null) */
+    const [openModelMenuFor, setOpenModelMenuFor] = useState<number | null>(null);
+
+    /**
+     * Genera la misma respuesta con un modelo distinto SIN borrar la anterior:
+     * la nueva versión se agrega debajo, marcada como "Respuesta alternativa".
+     * El modelo elegido aplica solo a esta respuesta (no cambia el default).
+     */
+    const handleRegenerateWithModel = (assistantIndex: number, modelId: string) => {
+        if (assistantIndex <= 0) return;
+        setOpenModelMenuFor(null);
+        handleSend('', { modelOverride: modelId, retryOfIndex: assistantIndex, asAlternative: true });
     };
 
     /**
@@ -555,30 +577,53 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
         scrollToBottom();
     }, [messages, isHistoryLoaded, saveCurrentConversation]);
 
-    const handleSend = async (prompt: string) => {
+    const handleSend = async (
+        prompt: string,
+        opts: { modelOverride?: string; retryOfIndex?: number; asAlternative?: boolean } = {}
+    ) => {
+        const { modelOverride, retryOfIndex, asAlternative } = opts;
+        const isRetry = typeof retryOfIndex === 'number';
+
+        // En modo retry ("Regenerar" / "Otro modelo") reconstruimos la pregunta
+        // original: el último mensaje del usuario por encima del índice indicado.
+        let questionIndex = -1;
+        if (isRetry) {
+            for (let i = retryOfIndex! - 1; i >= 0; i--) {
+                if (messages[i].role === 'user') { questionIndex = i; break; }
+            }
+            if (questionIndex < 0) return;
+            prompt = messages[questionIndex].content;
+        }
+
         if (!prompt.trim()) return;
 
         let finalPrompt = prompt;
-        const lowerPrompt = prompt.toLowerCase();
-        const isRefinement = lowerPrompt.startsWith('por ') ||
-            lowerPrompt.startsWith('de ') ||
-            lowerPrompt.startsWith('en ') ||
-            lowerPrompt.startsWith('este ') ||
-            lowerPrompt.startsWith('esta ');
+        // En un reintento NO agregamos un nuevo mensaje de usuario (reusamos la
+        // pregunta original) ni aplicamos el atajo de refinamiento "por/de/en…".
+        if (!isRetry) {
+            const lowerPrompt = prompt.toLowerCase();
+            const isRefinement = lowerPrompt.startsWith('por ') ||
+                lowerPrompt.startsWith('de ') ||
+                lowerPrompt.startsWith('en ') ||
+                lowerPrompt.startsWith('este ') ||
+                lowerPrompt.startsWith('esta ');
 
-        if (isRefinement) {
-            const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-            if (lastUserMsg) {
-                const cleanLast = lastUserMsg.content.replace(/\?$/, '');
-                finalPrompt = `${cleanLast} ${prompt}`;
+            if (isRefinement) {
+                const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+                if (lastUserMsg) {
+                    const cleanLast = lastUserMsg.content.replace(/\?$/, '');
+                    finalPrompt = `${cleanLast} ${prompt}`;
+                }
             }
-        }
 
-        const userMsg: Message = { role: 'user', content: finalPrompt, timestamp: Date.now() };
-        setMessages((prev) => [...prev, userMsg]);
+            const userMsg: Message = { role: 'user', content: finalPrompt, timestamp: Date.now() };
+            setMessages((prev) => [...prev, userMsg]);
+        }
         setLoading(true);
 
-        const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-4-8' : 'claude-opus-4-8';
+        // Un modelOverride (botón "Otro modelo") tiene prioridad sobre el modelo
+        // por defecto guardado, pero NO modifica la preferencia persistida.
+        const selectedModel = modelOverride || (typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-4-8' : 'claude-opus-4-8');
         const useStreaming = selectedModel.includes('claude');
 
         // Aborta cualquier stream previo
@@ -601,7 +646,8 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                 streaming: useStreaming,
                 streamPhase: useStreaming ? 'thinking' : undefined,
                 ai_model: selectedModel,
-                messageId: assistantMessageId
+                messageId: assistantMessageId,
+                isAltModel: !!asAlternative
             }];
         });
 
@@ -617,9 +663,12 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
         };
 
         try {
-            // Construir historial: los últimos N turnos previos al actual
-            // (excluyendo el user que acabamos de agregar y el assistant vacío)
-            const history = messages
+            // Construir historial: los últimos N turnos previos al actual.
+            // En un reintento usamos el contexto previo a la pregunta original
+            // (sin la propia pregunta ni las respuestas ya generadas), para que
+            // el nuevo modelo responda de forma independiente.
+            const historySource = isRetry ? messages.slice(0, questionIndex) : messages;
+            const history = historySource
                 .filter(m => m.content && m.content.trim())
                 .slice(-12)
                 .map(m => ({ role: m.role, content: m.content }));
@@ -1067,13 +1116,24 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                     </div>
                                                 )}
 
-                                                {/* Model Annotation */}
-                                                {message.ai_model && (
-                                                    <div className="flex items-center justify-end mb-2">
-                                                        <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                                                            <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
-                                                            Modelo: {message.ai_model}
-                                                        </span>
+                                                {/* Model Annotation + etiqueta de respuesta alternativa */}
+                                                {(message.ai_model || message.isAltModel) && (
+                                                    <div className={cn(
+                                                        "flex items-center mb-2",
+                                                        message.isAltModel ? "justify-between" : "justify-end"
+                                                    )}>
+                                                        {message.isAltModel && (
+                                                            <span className="px-2 py-0.5 bg-violet-50 border border-violet-200 rounded-md text-[9px] font-bold text-violet-500 uppercase tracking-wider flex items-center gap-1">
+                                                                <RotateCw className="w-2.5 h-2.5" />
+                                                                Respuesta alternativa
+                                                            </span>
+                                                        )}
+                                                        {message.ai_model && (
+                                                            <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                                                <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
+                                                                Modelo: {message.ai_model}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 )}
 
@@ -1148,7 +1208,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                                 <ShareMenu
                                                                     variant="pill"
                                                                     payload={{
-                                                                        question: messages[index - 1]?.content || '',
+                                                                        question: questionFor(index),
                                                                         analysis: message.content || '',
                                                                         keyInsights: message.key_insights,
                                                                         recommendations: message.recommendations,
@@ -1175,7 +1235,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                         <AgentDataView
                                                             data={message.results}
                                                             suggestedViz={message.visualization as any}
-                                                            question={messages[index - 1]?.content || ''}
+                                                            question={questionFor(index)}
                                                         />
                                                     </div>
                                                 )}
@@ -1293,6 +1353,53 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
                                                 <RotateCw className="w-3 h-3" />
                                                 <span>Regenerar</span>
                                             </button>
+                                        )}
+                                        {index === messages.length - 1 && (
+                                            <div className="relative">
+                                                <button
+                                                    onClick={() => setOpenModelMenuFor(openModelMenuFor === index ? null : index)}
+                                                    className={cn(
+                                                        "inline-flex items-center gap-1 px-2 py-1 text-[10.5px] font-medium rounded-md transition-colors",
+                                                        openModelMenuFor === index
+                                                            ? "bg-slate-100 text-slate-800"
+                                                            : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+                                                    )}
+                                                    title="Ver esta respuesta con otro modelo"
+                                                >
+                                                    <Cpu className="w-3 h-3" />
+                                                    <span>Otro modelo</span>
+                                                    <ChevronDown className="w-2.5 h-2.5" />
+                                                </button>
+                                                {openModelMenuFor === index && (
+                                                    <>
+                                                        <div
+                                                            className="fixed inset-0 z-10"
+                                                            onClick={() => setOpenModelMenuFor(null)}
+                                                        />
+                                                        <div className="absolute left-0 bottom-full mb-1 z-20 w-44 bg-white border border-slate-200 rounded-xl shadow-xl py-1 animate-in fade-in slide-in-from-bottom-1 duration-150">
+                                                            <div className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                                                Reintentar con
+                                                            </div>
+                                                            {CHAT_MODELS.map(m => {
+                                                                const isCurrent = m.id === message.ai_model;
+                                                                return (
+                                                                    <button
+                                                                        key={m.id}
+                                                                        onClick={() => handleRegenerateWithModel(index, m.id)}
+                                                                        className={cn(
+                                                                            "w-full flex items-center justify-between px-3 py-1.5 text-[12px] text-left hover:bg-slate-50 transition-colors",
+                                                                            isCurrent ? "text-indigo-600 font-semibold" : "text-slate-700"
+                                                                        )}
+                                                                    >
+                                                                        <span>{m.label}</span>
+                                                                        {isCurrent && <Check className="w-3 h-3 text-indigo-500" />}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
                                         )}
                                         <button
                                             onClick={() => handleFeedback(index, 'up')}

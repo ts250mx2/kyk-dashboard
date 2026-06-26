@@ -11,6 +11,8 @@ import autoTable from 'jspdf-autotable';
 import { cn } from '@/lib/utils';
 import { InlineMarkdown } from '@/components/inline-markdown';
 import { ProductExplainModal } from '@/components/dashboard/product-explain-modal';
+import { ModelPicker } from '@/components/model-picker';
+import { getStoredModel } from '@/lib/chat-models';
 
 type Action = 'stock_up' | 'push' | 'monitor' | 'reduce';
 
@@ -64,17 +66,18 @@ export function ProductRecommendationsModal({ storeIds, horizonDays, scopeLabel,
     const [error, setError] = useState<string | null>(null);
     const [actionFilter, setActionFilter] = useState<Action | 'all'>('all');
     const [explainProduct, setExplainProduct] = useState<ProductRec | null>(null);
+    const [model, setModel] = useState(getStoredModel());
 
     const fetchKey = useMemo(() => `${horizonDays}-${[...storeIds].sort((a, b) => a - b).join(',')}`, [storeIds, horizonDays]);
 
-    const fetchRecommendations = useCallback(async () => {
+    const fetchRecommendations = useCallback(async (useModel: string) => {
         setLoading(true);
         setError(null);
         try {
             const res = await fetch('/api/dashboard/forecast/product-recommendations', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ storeIds, horizonDays }),
+                body: JSON.stringify({ storeIds, horizonDays, model: useModel }),
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || 'Error generando sugerencias');
@@ -87,8 +90,14 @@ export function ProductRecommendationsModal({ storeIds, horizonDays, scopeLabel,
     }, [storeIds, horizonDays]);
 
     useEffect(() => {
-        fetchRecommendations();
+        fetchRecommendations(getStoredModel());
     }, [fetchKey, fetchRecommendations]);
+
+    /** Cambia el modelo solo para este análisis y lo regenera. */
+    const handleModelChange = (m: string) => {
+        setModel(m);
+        fetchRecommendations(m);
+    };
 
     const handleExportXlsx = () => {
         if (!data || data.products.length === 0) return;
@@ -145,6 +154,7 @@ export function ProductRecommendationsModal({ storeIds, horizonDays, scopeLabel,
                         </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                        <ModelPicker value={model} onChange={handleModelChange} disabled={loading} />
                         <button
                             onClick={handleExportXlsx}
                             disabled={!data || loading || data.products.length === 0}
@@ -164,7 +174,7 @@ export function ProductRecommendationsModal({ storeIds, horizonDays, scopeLabel,
                             PDF
                         </button>
                         <button
-                            onClick={fetchRecommendations}
+                            onClick={() => fetchRecommendations(model)}
                             disabled={loading}
                             className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-none text-xs font-bold hover:bg-slate-50 disabled:opacity-50"
                             title="Regenerar sugerencias"
@@ -195,7 +205,7 @@ export function ProductRecommendationsModal({ storeIds, horizonDays, scopeLabel,
                         <div className="m-5 flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
                             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                             <span className="flex-1">{error}</span>
-                            <button onClick={fetchRecommendations} className="text-xs font-bold underline">Reintentar</button>
+                            <button onClick={() => fetchRecommendations(model)} className="text-xs font-bold underline">Reintentar</button>
                         </div>
                     )}
 

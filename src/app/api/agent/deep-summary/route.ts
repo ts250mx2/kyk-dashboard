@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
+import { ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
+import { generateText } from '@/lib/llm';
 
 /**
  * POST /api/agent/deep-summary
@@ -13,6 +14,7 @@ import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
  */
 
 interface DeepSummaryRequest {
+    model?: string;
     pageContext?: string;
     period?: { fechaInicio?: string; fechaFin?: string };
     scope?: string;
@@ -33,7 +35,7 @@ function formatPeriod(p?: { fechaInicio?: string; fechaFin?: string }): string {
 export async function POST(req: Request) {
     try {
         const body: DeepSummaryRequest = await req.json();
-        const { pageContext = 'el dashboard', period, scope, kpis = {}, highlights } = body;
+        const { model, pageContext = 'el dashboard', period, scope, kpis = {}, highlights } = body;
 
         const periodText = formatPeriod(period);
         const scopeText = scope || 'todas las sucursales';
@@ -103,13 +105,12 @@ REGLAS:
 
 Devuelve SOLO el JSON.`;
 
-        const response = await anthropic.messages.create({
-            model: ANTHROPIC_MODEL_FAST,
-            max_tokens: 2000,
-            messages: [{ role: 'user', content: prompt }]
+        const { text } = await generateText({
+            model,
+            fallback: ANTHROPIC_MODEL_FAST,
+            prompt,
+            maxTokens: 2000,
         });
-
-        const text = (response.content[0] as any)?.text || '';
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
 

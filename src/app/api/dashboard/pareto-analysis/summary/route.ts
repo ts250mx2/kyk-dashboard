@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { openai } from '@/lib/ai';
+import { generateText } from '@/lib/llm';
 
 async function getParetoData(fechaInicio: string, fechaFin: string, storeId: string | null, groupBy: string) {
     const startStr = `'${fechaInicio} 00:00:00'`;
@@ -72,6 +72,7 @@ export async function GET(req: Request) {
         const fechaFin = searchParams.get('fechaFin');
         const storeId = searchParams.get('storeId');
         const storeName = searchParams.get('storeName') || 'Global';
+        const model = searchParams.get('model') || undefined;
 
         if (!fechaInicio || !fechaFin) {
             return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
@@ -152,17 +153,17 @@ TOP FAMILIAS:
 ${topFamilies}
 `;
 
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o',
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt },
-            ],
+        const { text: summary } = await generateText({
+            model,
+            fallback: 'gpt-4o',
+            system: systemPrompt,
+            prompt: userPrompt,
+            maxTokens: 2048,
             temperature: 0.7,
         });
 
         return NextResponse.json({
-            summary: completion.choices[0].message.content,
+            summary,
             period: { fechaInicio, fechaFin, prevFechaInicio, prevFechaFin },
             store: storeName
         });

@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { Sparkles, Loader2, X, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InlineMarkdown } from '@/components/inline-markdown';
+import { ModelPicker } from '@/components/model-picker';
+import { getStoredModel } from '@/lib/chat-models';
 
 export interface ExplainKpiContext {
     kpiName: string;
@@ -39,6 +41,7 @@ export function KpiExplainButton({ context, variant = 'subtle' }: KpiExplainButt
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [result, setResult] = useState<ExplainResult | null>(null);
+    const [model, setModel] = useState(getStoredModel());
     const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
     const triggerRef = useRef<HTMLSpanElement>(null);
     const popupRef = useRef<HTMLDivElement>(null);
@@ -97,22 +100,14 @@ export function KpiExplainButton({ context, variant = 'subtle' }: KpiExplainButt
         };
     }, [isOpen]);
 
-    const handleTriggerClick = async (e: React.MouseEvent | React.KeyboardEvent) => {
-        e.stopPropagation();
-        if (isOpen) {
-            setIsOpen(false);
-            return;
-        }
-        setIsOpen(true);
-        if (result) return;
-
+    const runExplain = async (useModel: string) => {
         setLoading(true);
         setError(null);
         try {
             const r = await fetch('/api/agent/explain-kpi', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(context)
+                body: JSON.stringify({ ...context, model: useModel })
             });
             const data = await r.json();
             if (!r.ok) {
@@ -125,6 +120,27 @@ export function KpiExplainButton({ context, variant = 'subtle' }: KpiExplainButt
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleTriggerClick = (e: React.MouseEvent | React.KeyboardEvent) => {
+        e.stopPropagation();
+        if (isOpen) {
+            setIsOpen(false);
+            return;
+        }
+        setIsOpen(true);
+        if (result) return;
+        // Hereda el modelo del chat al abrir.
+        const m = getStoredModel();
+        setModel(m);
+        runExplain(m);
+    };
+
+    /** Cambia el modelo solo para esta explicación y la regenera. */
+    const handleModelChange = (m: string) => {
+        setModel(m);
+        setResult(null);
+        runExplain(m);
     };
 
     return (
@@ -168,13 +184,16 @@ export function KpiExplainButton({ context, variant = 'subtle' }: KpiExplainButt
                                 {context.kpiName}
                             </span>
                         </div>
-                        <button
-                            onClick={() => setIsOpen(false)}
-                            className="p-0.5 hover:bg-slate-200 transition-colors text-slate-400"
-                            aria-label="Cerrar"
-                        >
-                            <X className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                            <ModelPicker value={model} onChange={handleModelChange} disabled={loading} />
+                            <button
+                                onClick={() => setIsOpen(false)}
+                                className="p-0.5 hover:bg-slate-200 transition-colors text-slate-400"
+                                aria-label="Cerrar"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Content */}

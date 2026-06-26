@@ -7,6 +7,8 @@ import {
 import { cn } from '@/lib/utils';
 import { InlineMarkdown } from '@/components/inline-markdown';
 import type { PageSummaryContext } from '@/components/narrative-summary';
+import { ModelPicker } from '@/components/model-picker';
+import { getStoredModel } from '@/lib/chat-models';
 
 interface DeepSummaryModalProps {
     open: boolean;
@@ -26,15 +28,16 @@ export function DeepSummaryModal({ open, onClose, context }: DeepSummaryModalPro
     const [data, setData] = useState<DeepSummary | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [model, setModel] = useState(getStoredModel());
 
-    const load = async () => {
+    const load = async (useModel: string) => {
         setLoading(true);
         setError(null);
         try {
             const r = await fetch('/api/agent/deep-summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(context)
+                body: JSON.stringify({ ...context, model: useModel })
             });
             const json = await r.json();
             if (!r.ok) throw new Error(json.error || 'Error generando análisis');
@@ -46,9 +49,18 @@ export function DeepSummaryModal({ open, onClose, context }: DeepSummaryModalPro
         }
     };
 
+    /** Cambia el modelo solo para este análisis y lo regenera. */
+    const handleModelChange = (m: string) => {
+        setModel(m);
+        load(m);
+    };
+
     useEffect(() => {
         if (open && !data && !loading) {
-            load();
+            // Hereda el modelo elegido en el chat al abrir.
+            const m = getStoredModel();
+            setModel(m);
+            load(m);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
@@ -85,9 +97,10 @@ export function DeepSummaryModal({ open, onClose, context }: DeepSummaryModalPro
                             </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        <ModelPicker value={model} onChange={handleModelChange} disabled={loading} />
                         <button
-                            onClick={load}
+                            onClick={() => load(model)}
                             disabled={loading}
                             className="p-1.5 hover:bg-slate-100 rounded-md text-slate-400 hover:text-slate-700 transition-colors disabled:opacity-40"
                             title="Regenerar análisis"

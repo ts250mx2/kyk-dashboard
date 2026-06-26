@@ -12,6 +12,8 @@ import {
 import jsPDF from 'jspdf';
 import { cn } from '@/lib/utils';
 import { InlineMarkdown } from '@/components/inline-markdown';
+import { ModelPicker } from '@/components/model-picker';
+import { getStoredModel } from '@/lib/chat-models';
 
 type Action = 'stock_up' | 'push' | 'monitor' | 'reduce';
 
@@ -69,8 +71,9 @@ export function ProductExplainModal({
     const [data, setData] = useState<ExplainResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [model, setModel] = useState(getStoredModel());
 
-    const fetchExplain = useCallback(async () => {
+    const fetchExplain = useCallback(async (useModel: string) => {
         setLoading(true);
         setError(null);
         try {
@@ -80,6 +83,7 @@ export function ProductExplainModal({
                 body: JSON.stringify({
                     codigoInterno, storeIds, horizonDays,
                     action: initialAction, reason: initialReason,
+                    model: useModel,
                 }),
             });
             const json = await res.json();
@@ -92,7 +96,13 @@ export function ProductExplainModal({
         }
     }, [codigoInterno, storeIds, horizonDays, initialAction, initialReason]);
 
-    useEffect(() => { fetchExplain(); }, [fetchExplain]);
+    useEffect(() => { fetchExplain(getStoredModel()); }, [fetchExplain]);
+
+    /** Cambia el modelo solo para este análisis y lo regenera. */
+    const handleModelChange = (m: string) => {
+        setModel(m);
+        fetchExplain(m);
+    };
 
     const actionMeta = ACTION_META[data?.action || initialAction];
     const ActionIcon = actionMeta.icon;
@@ -156,6 +166,7 @@ export function ProductExplainModal({
                         </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                        <ModelPicker value={model} onChange={handleModelChange} disabled={loading} />
                         <button
                             onClick={() => data && exportProductExplainToPdf({ data, codigoInterno, horizonDays, scopeLabel })}
                             disabled={!data || loading}
@@ -166,7 +177,7 @@ export function ProductExplainModal({
                             PDF
                         </button>
                         <button
-                            onClick={fetchExplain}
+                            onClick={() => fetchExplain(model)}
                             disabled={loading}
                             className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-none text-xs font-bold hover:bg-slate-50 disabled:opacity-50"
                             title="Regenerar análisis"
@@ -197,7 +208,7 @@ export function ProductExplainModal({
                         <div className="m-5 flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
                             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                             <span className="flex-1">{error}</span>
-                            <button onClick={fetchExplain} className="text-xs font-bold underline">Reintentar</button>
+                            <button onClick={() => fetchExplain(model)} className="text-xs font-bold underline">Reintentar</button>
                         </div>
                     )}
 

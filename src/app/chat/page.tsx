@@ -6,6 +6,7 @@ import { ChatInput } from '@/components/chat-input';
 import { ResultsDisplay } from '@/components/results-display';
 import { cn } from '@/lib/utils';
 import { Search, Trash2, Minimize2, Sparkles } from 'lucide-react';
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from '@/lib/chat-models';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -28,15 +29,7 @@ const DEFAULT_SUGGESTIONS = [
     'Resumen de cancelaciones'
 ];
 
-/** Modelos seleccionables. El backend respeta los Claude permitidos y cae a
- *  GPT-4o para cualquier otro. Se persiste en localStorage 'ai_query_model'. */
-const CHAT_MODELS = [
-    { id: 'claude-fable-5', label: 'Fable 5' },
-    { id: 'claude-opus-4-8', label: 'Opus 4.8' },
-    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-    { id: 'gpt-4o', label: 'GPT-4o' },
-];
-const DEFAULT_CHAT_MODEL = 'claude-opus-4-8';
+// CHAT_MODELS y DEFAULT_CHAT_MODEL viven en '@/lib/chat-models' (fuente única).
 
 export default function ChatFullPage() {
     const router = useRouter();

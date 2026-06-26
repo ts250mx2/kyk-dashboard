@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
+import { ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
+import { generateText } from '@/lib/llm';
 
 /**
  * POST /api/agent/page-summary
@@ -26,6 +27,7 @@ import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
  */
 
 interface PageSummaryRequest {
+    model?: string;
     pageContext?: string;
     period?: { fechaInicio?: string; fechaFin?: string };
     scope?: string;
@@ -46,7 +48,7 @@ function formatPeriod(p?: { fechaInicio?: string; fechaFin?: string }): string {
 export async function POST(req: Request) {
     try {
         const body: PageSummaryRequest = await req.json();
-        const { pageContext = 'el dashboard', period, scope, kpis = {}, highlights } = body;
+        const { model, pageContext = 'el dashboard', period, scope, kpis = {}, highlights } = body;
 
         const periodText = formatPeriod(period);
         const scopeText = scope || 'todas las sucursales';
@@ -103,13 +105,12 @@ RESPONDE SOLO EN JSON (sin markdown):
   "tone": "positive" | "attention" | "neutral"
 }`;
 
-        const response = await anthropic.messages.create({
-            model: ANTHROPIC_MODEL_CHEAP,
-            max_tokens: 800,
-            messages: [{ role: 'user', content: prompt }]
+        const { text } = await generateText({
+            model,
+            fallback: ANTHROPIC_MODEL_CHEAP,
+            prompt,
+            maxTokens: 800,
         });
-
-        const text = (response.content[0] as any)?.text || '';
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
 

@@ -45,8 +45,23 @@ export function validateReadOnlySql(sql: string): SqlValidationResult {
         return { valid: false, reason: 'SQL vacio' };
     }
 
+    // Remueve strings y comentarios PRIMERO, para no falsear positivos sobre
+    // literales ni sobre comentarios. Hacerlo antes del check de inicio evita
+    // bloquear SELECTs legítimos que vienen precedidos de un comentario
+    // explicativo (común en algunos modelos como Sonnet).
+    const stripped = trimmed
+        .replace(/'(?:[^']|'')*'/g, "''")
+        .replace(/"(?:[^"]|"")*"/g, '""')
+        .replace(/--[^\n]*/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .trim();
+
+    // Normaliza: ignora `;` y espacios iniciales. `;WITH ...` es un idiom
+    // válido de T-SQL para terminar un statement previo y no debe bloquearse.
+    const normalized = stripped.replace(/^[\s;]+/, '').trim();
+
     // Permite solo statements que arranquen con SELECT o WITH (CTE)
-    const startsWithReadOp = /^(\s*WITH\b|\s*SELECT\b|\s*\(\s*SELECT\b)/i.test(trimmed);
+    const startsWithReadOp = /^(WITH\b|SELECT\b|\(\s*SELECT\b)/i.test(normalized);
     if (!startsWithReadOp) {
         return {
             valid: false,
@@ -54,15 +69,8 @@ export function validateReadOnlySql(sql: string): SqlValidationResult {
         };
     }
 
-    // Remueve strings y comentarios para no falsear positivos sobre literales
-    const stripped = trimmed
-        .replace(/'(?:[^']|'')*'/g, "''")
-        .replace(/"(?:[^"]|"")*"/g, '""')
-        .replace(/--[^\n]*/g, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '');
-
     // Tokenize palabras
-    const upper = stripped.toUpperCase();
+    const upper = normalized.toUpperCase();
     for (const kw of FORBIDDEN_KEYWORDS) {
         const re = new RegExp(`\\b${kw}\\b`, 'i');
         if (re.test(upper)) {
@@ -73,9 +81,9 @@ export function validateReadOnlySql(sql: string): SqlValidationResult {
         }
     }
 
-    // Patrones peligrosos
+    // Patrones peligrosos (sobre el SQL ya normalizado, sin `;` inicial)
     for (const { pattern, reason } of FORBIDDEN_PATTERNS) {
-        if (pattern.test(stripped)) {
+        if (pattern.test(normalized)) {
             return { valid: false, reason };
         }
     }

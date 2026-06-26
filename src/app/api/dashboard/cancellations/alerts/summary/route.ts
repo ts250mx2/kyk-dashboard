@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { openai } from '@/lib/ai';
-import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
+import { generateText } from '@/lib/llm';
+import { ANTHROPIC_MODEL } from '@/lib/anthropic';
 
 export async function POST(req: Request) {
     try {
@@ -55,30 +55,16 @@ ${storeTxt || 'Sin datos'}
 POR HORA DEL DÍA:
 ${hourTxt || 'Sin datos'}`;
 
-        const isAnthropic = model && model.includes('claude');
-        let summary = '';
+        const { text: summary, model: usedModel } = await generateText({
+            model,
+            fallback: ANTHROPIC_MODEL,
+            system: systemPrompt,
+            prompt: userPrompt,
+            maxTokens: 4096,
+            temperature: 0.7,
+        });
 
-        if (isAnthropic) {
-            const response = await anthropic.messages.create({
-                model: ANTHROPIC_MODEL,
-                max_tokens: 4096,
-                system: systemPrompt,
-                messages: [{ role: 'user', content: userPrompt }],
-            });
-            summary = (response.content[0] as any).text || '';
-        } else {
-            const completion = await openai.chat.completions.create({
-                model: 'gpt-4o',
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt },
-                ],
-                temperature: 0.7,
-            });
-            summary = completion.choices[0].message.content || '';
-        }
-
-        return NextResponse.json({ summary, model: isAnthropic ? 'claude' : 'gpt-4o' });
+        return NextResponse.json({ summary, model: usedModel });
 
     } catch (error: any) {
         console.error('Cancellation AI Summary Error:', error);

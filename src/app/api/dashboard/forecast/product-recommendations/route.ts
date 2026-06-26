@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
+import { ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
+import { generateText } from '@/lib/llm';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -215,13 +216,12 @@ RESPONDE SOLO EN JSON (sin markdown alrededor):
   ]
 }`;
 
-        const response = await anthropic.messages.create({
-            model: ANTHROPIC_MODEL_CHEAP,
-            max_tokens: 2500,
-            messages: [{ role: 'user', content: prompt }],
+        const { text } = await generateText({
+            model: body.model,
+            fallback: ANTHROPIC_MODEL_CHEAP,
+            prompt,
+            maxTokens: 2500,
         });
-
-        const text = (response.content[0] as { text?: string })?.text || '';
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
         let aiResult: {

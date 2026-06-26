@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { openai } from '@/lib/ai';
+import { openai, glm, GLM_MODEL, kimi, KIMI_MODEL } from '@/lib/ai';
 import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
 import { query, localizeDatesForModel } from '@/lib/db';
 import { findRelevantReports } from '@/lib/available-reports';
@@ -496,6 +496,28 @@ algún incidente operativo."
         // En el fallback a OpenAI (catch más abajo) se sobreescribe a 'gpt-4o'.
         if (isAnthropic) selectedModel = anthropicModel;
 
+        // Modelos compatibles con la API de OpenAI. Si el cliente pide un modelo
+        // GLM (Zhipu/Z.ai) lo enrutamos a su cliente/endpoint; cualquier otro
+        // modelo no-Claude cae a GPT-4o. Esto cubre tanto la rama non-streaming
+        // como la auto-corrección de SQL y la generación de metadata.
+        const lowerModel = selectedModel.toLowerCase();
+        const isGlm = !isAnthropic && lowerModel.includes('glm');
+        const isKimi = !isAnthropic && (lowerModel.includes('kimi') || lowerModel.includes('moonshot'));
+        // Modelos OpenAI que el cliente puede elegir directamente; cualquier otro
+        // no-Claude/no-GLM/no-Kimi cae a gpt-4o.
+        const ALLOWED_OPENAI_MODELS = new Set([
+            'gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5.5',
+        ]);
+        const compatClient = isGlm ? glm : isKimi ? kimi : openai;
+        const compatModel = isGlm
+            ? (lowerModel === 'glm' ? GLM_MODEL : selectedModel)
+            : isKimi
+                ? (lowerModel === 'kimi' ? KIMI_MODEL : selectedModel)
+                : (ALLOWED_OPENAI_MODELS.has(selectedModel) ? selectedModel : 'gpt-4o');
+        // Modelos de razonamiento (gpt-5*, o-series): no aceptan temperature
+        // custom ni parallel_tool_calls. Omitimos ambos para evitar 400.
+        const isReasoningModel = /^(gpt-5|o\d)/i.test(compatModel);
+
         let message: any;
         let toolCalls: any[] = [];
 
@@ -528,8 +550,8 @@ algún incidente operativo."
         }
         
         if (!isAnthropic) {
-            const completion = await openai.chat.completions.create({
-                model: 'gpt-4o',
+            const completion = await compatClient.chat.completions.create({
+                model: compatModel,
                 messages: [
                     { role: 'system', content: systemPrompt },
                     ...messagesForModel.map(m => ({ role: m.role, content: m.content }))
@@ -634,8 +656,11 @@ algún incidente operativo."
                     }
                 ],
                 tool_choice: 'auto',
-                temperature: 0,
-                parallel_tool_calls: false
+                // temperature custom no la aceptan los modelos de razonamiento (gpt-5/o-series).
+                ...(isReasoningModel ? {} : { temperature: 0 }),
+                // parallel_tool_calls no es universal: GLM/Kimi pueden rechazarlo y
+                // los modelos de razonamiento no lo soportan. Solo a GPT no-razonador.
+                ...(isGlm || isKimi || isReasoningModel ? {} : { parallel_tool_calls: false })
             });
 
             const openaiMsg = completion.choices[0].message;
@@ -831,6 +856,7 @@ INSTRUCCIONES:
                     try {
                         safeSql = assertReadOnly(args.sql);
                     } catch (sandboxError: any) {
+                        console.warn(`[${requestId}] SQL bloqueado por sandbox (modelo=${selectedModel}): ${sandboxError.message}\n--- SQL ---\n${args.sql}\n-----------`);
                         emit({
                             event: 'error',
                             data: {
@@ -1183,6 +1209,7 @@ INSTRUCCIONES:
                 try {
                     safeSql = assertReadOnly(args.sql);
                 } catch (sandboxError: any) {
+                    console.warn(`[${requestId}] SQL bloqueado por sandbox (modelo=${selectedModel}): ${sandboxError.message}\n--- SQL ---\n${args.sql}\n-----------`);
                     return NextResponse.json({
                         error: sandboxError.message,
                         sql: args.sql,
@@ -1209,8 +1236,8 @@ INSTRUCCIONES:
                         });
                         correctedSql = (correction.content[0] as any).text.replace(/```sql|```/g, '').trim();
                     } else {
-                        const correction = await openai.chat.completions.create({
-                            model: 'gpt-4o',
+                        const correction = await compatClient.chat.completions.create({
+                            model: compatModel,
                             messages: [
                                 { role: 'system', content: correctionPrompt },
                                 { role: 'user', content: safeSql }
@@ -1228,35 +1255,42 @@ INSTRUCCIONES:
 
                 const metaPromptNS = buildMetaPrompt(prompt, lastSql, results);
 
-                let meta: any;
+                // Usamos el MISMO prompt de dos partes (prosa + marcador + JSON)
+                // para todos los modelos. Antes la rama compatible-OpenAI usaba
+                // response_format json_object pidiendo un "summary" en el JSON, lo
+                // que en modelos de razonamiento (GLM-5/5.2) devolvía el summary
+                // vacío → "Análisis completado". Con el marcador, el resumen es la
+                // prosa que todos los modelos sí generan.
+                let metaText: string;
                 if (isAnthropic) {
                     const metaCompletion = await anthropic.messages.create({
                         model: anthropicModel,
                         max_tokens: 2048,
                         messages: [{ role: 'user', content: metaPromptNS }]
                     });
-                    const content = (metaCompletion.content[0] as any).text;
-                    const markerIdx = content.indexOf(META_MARKER);
-                    if (markerIdx >= 0) {
-                        const summary = content.substring(0, markerIdx).trim();
-                        const metaBlock = content.substring(markerIdx + META_MARKER.length);
-                        try {
-                            const start = metaBlock.indexOf('{');
-                            const end = metaBlock.lastIndexOf('}');
-                            meta = start >= 0 && end > start
-                                ? { summary, ...JSON.parse(metaBlock.substring(start, end + 1)) }
-                                : { summary };
-                        } catch { meta = { summary }; }
-                    } else {
-                        meta = { summary: content };
-                    }
+                    metaText = (metaCompletion.content[0] as any).text || '';
                 } else {
-                    const metaCompletion = await openai.chat.completions.create({
-                        model: 'gpt-4o',
-                        messages: [{ role: 'user', content: metaPromptNS + '\n\nRETORNA SOLO JSON sin marcadores: {"summary":"...", "key_insights":[...], "recommendations":[...], "visualization":"...", "suggested_questions":[...]}' }],
-                        response_format: { type: 'json_object' }
+                    const metaCompletion = await compatClient.chat.completions.create({
+                        model: compatModel,
+                        messages: [{ role: 'user', content: metaPromptNS }]
                     });
-                    meta = JSON.parse(metaCompletion.choices[0].message.content || '{}');
+                    metaText = metaCompletion.choices[0].message.content || '';
+                }
+
+                let meta: any;
+                const markerIdx = metaText.indexOf(META_MARKER);
+                if (markerIdx >= 0) {
+                    const summary = metaText.substring(0, markerIdx).trim();
+                    const metaBlock = metaText.substring(markerIdx + META_MARKER.length);
+                    try {
+                        const start = metaBlock.indexOf('{');
+                        const end = metaBlock.lastIndexOf('}');
+                        meta = start >= 0 && end > start
+                            ? { summary, ...JSON.parse(metaBlock.substring(start, end + 1)) }
+                            : { summary };
+                    } catch { meta = { summary }; }
+                } else {
+                    meta = { summary: metaText.trim() };
                 }
 
                 const shortSummary = meta.summary || meta.analysis || "Análisis completado.";
