@@ -455,13 +455,191 @@ Devuelve SOLO los dos bloques separados por "---", sin comillas ni prefijos.`;
     return { title, full, short, rows: porTienda };
 }
 
+// ─── 6) Productos con baja de ventas (últimos 30 días vs últimos 30 días año pasado)
+export async function generateProductosBajasVentas(userId: string = '', daysAgo = 0, modelId?: string | null): Promise<EndOfDayContent> {
+    const today = new Date();
+    today.setDate(today.getDate() - daysAgo);
+    const year = today.getFullYear();
+    const lastYear = year - 1;
+    const month = today.getMonth() + 1;
+    const day = today.getDate();
+
+    // Pareto 80%: últimos 90 días de venta (para tener universo robusto)
+    const hace90 = new Date(today);
+    hace90.setDate(hace90.getDate() - 90);
+    const paretoStart = `${hace90.getFullYear()}-${String(hace90.getMonth() + 1).padStart(2, '0')}-${String(hace90.getDate()).padStart(2, '0')}`;
+    const paretoEnd = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    console.log(`[PRODUCTOS_BAJA] Pareto últimos 90 días: ${paretoStart} a ${paretoEnd}`);
+
+    // Pareto 80% POR SUCURSAL
+    const paretoRows = (await query(`
+        WITH ParetoCalc AS (
+            SELECT Tienda, Descripcion,
+                   SUM(Cantidad * [Precio Venta]) AS Venta,
+                   SUM(SUM(Cantidad * [Precio Venta])) OVER (PARTITION BY Tienda) AS TotalTienda,
+                   SUM(SUM(Cantidad * [Precio Venta])) OVER (PARTITION BY Tienda ORDER BY SUM(Cantidad * [Precio Venta]) DESC
+                       ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS AcumuladoTienda
+            FROM Ventas
+            WHERE CAST([Fecha Venta] AS DATE) >= CAST(? AS DATE)
+              AND CAST([Fecha Venta] AS DATE) <= CAST(? AS DATE)
+            GROUP BY Tienda, Descripcion
+        )
+        SELECT Tienda, Descripcion, CAST(100.0 * AcumuladoTienda / NULLIF(TotalTienda, 0) AS NUMERIC(5,2)) AS PctAcum
+        FROM ParetoCalc WHERE CAST(100.0 * AcumuladoTienda / NULLIF(TotalTienda, 0) AS NUMERIC(5,2)) <= 80
+        ORDER BY Tienda, AcumuladoTienda DESC
+    `, [paretoStart, paretoEnd])) as any[];
+
+    const productosPareto = new Set<string>();
+    const paretoByTienda = new Map<string, Set<string>>();
+
+    for (const row of paretoRows) {
+        productosPareto.add(row.Descripcion);
+        if (!paretoByTienda.has(row.Tienda)) {
+            paretoByTienda.set(row.Tienda, new Set());
+        }
+        paretoByTienda.get(row.Tienda)!.add(row.Descripcion);
+    }
+
+    console.log(`[PRODUCTOS_BAJA] Sucursales con Pareto: ${paretoByTienda.size}`);
+    console.log(`[PRODUCTOS_BAJA] Productos únicos en Pareto 80%: ${productosPareto.size}`);
+
+    if (productosPareto.size === 0) {
+        const title = `Análisis de productos con baja de ventas — ${targetDateLabel(daysAgo)}`;
+        return { title, full: '📉 Sin datos.', short: '📉 Sin datos.', rows: [] };
+    }
+
+    // Últimos 30 días: ESTE AÑO vs AÑO PASADO (misma época)
+    const hace30 = new Date(today);
+    hace30.setDate(hace30.getDate() - 30);
+    const hace30AñoPasado = new Date(hace30);
+    hace30AñoPasado.setFullYear(lastYear);
+
+    const periodEsteAñoStart = `${hace30.getFullYear()}-${String(hace30.getMonth() + 1).padStart(2, '0')}-${String(hace30.getDate()).padStart(2, '0')}`;
+    const periodEsteAñoEnd = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const periodAñoPasadoStart = `${lastYear}-${String(hace30AñoPasado.getMonth() + 1).padStart(2, '0')}-${String(hace30AñoPasado.getDate()).padStart(2, '0')}`;
+    const periodAñoPasadoEnd = `${lastYear}-${String(hace30AñoPasado.getMonth() + 1 + (hace30AñoPasado.getDate() < day ? 1 : 0)).padStart(2, '0')}-${String(Math.min(hace30AñoPasado.getDate() + (day - hace30.getDate()), 28)).padStart(2, '0')}`;
+
+    console.log(`[PRODUCTOS_BAJA] Período Este Año: ${periodEsteAñoStart} a ${periodEsteAñoEnd}`);
+    console.log(`[PRODUCTOS_BAJA] Período Año Pasado: ${periodAñoPasadoStart} a ${periodAñoPasadoEnd}`);
+
+    const clausulaProductos = Array.from(productosPareto).map(p => `'${p.replace(/'/g, "''")}'`).join(',');
+
+    // Comparación: CANTIDAD (no dinero). Solo Pareto 80% de cada sucursal
+    const allComparisons = (await query(`
+        WITH EsteAño AS (
+            SELECT Tienda, Descripcion, SUM(CAST(Cantidad AS INT)) AS Cantidad
+            FROM Ventas
+            WHERE CAST([Fecha Venta] AS DATE) >= CAST(? AS DATE)
+              AND CAST([Fecha Venta] AS DATE) <= CAST(? AS DATE)
+              AND Descripcion IN (${clausulaProductos})
+            GROUP BY Tienda, Descripcion
+        ),
+        AñoPasado AS (
+            SELECT Tienda, Descripcion, SUM(CAST(Cantidad AS INT)) AS Cantidad
+            FROM Ventas
+            WHERE CAST([Fecha Venta] AS DATE) >= CAST(? AS DATE)
+              AND CAST([Fecha Venta] AS DATE) <= CAST(? AS DATE)
+              AND Descripcion IN (${clausulaProductos})
+            GROUP BY Tienda, Descripcion
+        )
+        SELECT COALESCE(E.Tienda, A.Tienda) AS Tienda,
+               COALESCE(E.Descripcion, A.Descripcion) AS Descripcion,
+               ISNULL(E.Cantidad, 0) AS CantidadEsteAño,
+               ISNULL(A.Cantidad, 0) AS CantidadAñoPasado,
+               ISNULL(A.Cantidad, 0) - ISNULL(E.Cantidad, 0) AS DisminucionCantidad,
+               CAST(100.0 * (ISNULL(A.Cantidad, 0) - ISNULL(E.Cantidad, 0)) / NULLIF(ISNULL(A.Cantidad, 1), 0) AS NUMERIC(5,2)) AS DisminucionPct
+        FROM EsteAño E FULL OUTER JOIN AñoPasado A
+            ON E.Tienda = A.Tienda AND E.Descripcion = A.Descripcion
+        WHERE ISNULL(A.Cantidad, 0) > ISNULL(E.Cantidad, 0)
+          AND ISNULL(A.Cantidad, 0) > 0
+        ORDER BY DisminucionCantidad DESC
+    `, [periodEsteAñoStart, periodEsteAñoEnd, periodAñoPasadoStart, periodAñoPasadoEnd])) as any[];
+
+    console.log(`[PRODUCTOS_BAJA] Productos con comparación: ${allComparisons.length}`);
+
+    if (allComparisons.length === 0) {
+        const title = `Análisis de productos con baja de ventas — ${targetDateLabel(daysAgo)}`;
+        return { title, full: '📉 Sin datos en el período.', short: '📉 Sin datos.', rows: [] };
+    }
+
+    // TOP 5 rotativo (WhatsApp): excluir ya reportados este mes
+    const alreadyReported = userId ? (await query(
+        `SELECT CONCAT(Tienda, '|', Descripcion) AS Clave FROM tblAgentProductosBajasLog WHERE IdUsuario = ? AND Mes = ? AND Año = ?`,
+        [userId, month, year]
+    )) as any[] : [];
+    const reportedSet = new Set(alreadyReported.map(r => r.Clave));
+
+    const candidatos = allComparisons.filter(r => !reportedSet.has(`${r.Tienda}|${r.Descripcion}`));
+    const top5 = candidatos.slice(0, 5);
+    const top20 = allComparisons.slice(0, 20);
+
+    // Registrar TOP 5 como reportado (rotación)
+    for (const item of top5) {
+        if (userId) {
+            await query(
+                `INSERT INTO tblAgentProductosBajasLog (IdUsuario, Mes, Año, Descripcion, Tienda, DisminucionDinero)
+                 VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (IdUsuario, Mes, Año, Descripcion, Tienda) DO NOTHING`,
+                [userId, month, year, item.Descripcion, item.Tienda, item.DisminucionCantidad]
+            ).catch(() => { });
+        }
+    }
+
+    const dayHeader = daysAgo === 1 ? '📉 Top 5 productos con baja de cantidad (ayer)' : '📉 Top 5 productos con baja de cantidad';
+    const title = `Análisis de baja de cantidad en ventas — ${targetDateLabel(daysAgo)}`;
+
+    // Datos para IA (CANTIDAD, no dinero)
+    const datos5 = top5.map((p, i) => `${i + 1}. ${p.Descripcion} (${p.Tienda}): ${p.CantidadAñoPasado} unidades → ${p.CantidadEsteAño} unidades | ↓${p.DisminucionCantidad} unidades (${p.DisminucionPct || 0}%)`).join('\n');
+    const datos20 = top20.map((p, i) => `${i + 1}. ${p.Descripcion} (${p.Tienda}): ↓${p.DisminucionCantidad} unidades`).join('\n');
+
+    const prompt = `Eres Kesito, analista senior de KYK retail. Analiza DISMINUCIÓN DE CANTIDAD (unidades vendidas) últimos 30 días: ${hace30.toLocaleDateString('es-MX')} — ${today.toLocaleDateString('es-MX')} vs hace 1 año.
+
+TOP 5 (nuevo hoy, por cantidad):
+${datos5}
+
+TOP 20 (panorama completo):
+${datos20}
+
+Devuelve DOS versiones separadas por "---":
+
+VERSIÓN COMPLETA (página + detalle por sucursal):
+- Empieza con "${dayHeader}".
+- Análisis de 10-15 líneas: cuáles productos bajaron en cantidad, en cuáles sucursales, magnitud (unidades perdidas).
+- Destaca top 5, luego contexto del top 20 (tendencias, patrones por sucursal).
+- Usa cantidades y %, estructura clara.
+- Tono ejecutivo (tutea).
+
+---
+
+VERSIÓN CORTA (WhatsApp, ≤300 caracteres):
+- Una línea: "${dayHeader}:" + top 1 producto + sucursal + cantidad perdida + link.
+
+Devuelve SOLO dos bloques separados por "---".`;
+
+    const raw = await narrate(prompt, 1500, modelId);
+    const fallbackFull = `${dayHeader}\n\n${datos5}\n\nPanorama TOP 20 en reporte detallado.`;
+    const fallbackShort = `${dayHeader}: ${top5[0]?.Descripcion || '...'} (${top5[0]?.Tienda || '...'}) ↓${top5[0]?.DisminucionCantidad || 0} unidades.`;
+    const { full, short } = raw ? splitFullShort(raw) : { full: fallbackFull, short: fallbackShort };
+
+    // TOP 20 + detalle por sucursal para reporte
+    const porTienda = new Map<string, typeof allComparisons>();
+    for (const comp of allComparisons) {
+        if (!porTienda.has(comp.Tienda)) porTienda.set(comp.Tienda, []);
+        porTienda.get(comp.Tienda)!.push(comp);
+    }
+
+    const rows = top20;
+
+    return { title, full, short, rows };
+}
+
 /**
  * Envía resumen o hallazgos a los destinatarios y registra el evento.
  * daysAgo=1 reporta el día anterior (envío manual de madrugada).
  * El envío manual NO toca FechaUltimaEvaluacion para no suprimir el envío
  * automático de las 11 PM (el cron hace su propio UPDATE aparte).
  */
-const END_OF_DAY_GENERATORS: Record<EndOfDayClave, (daysAgo: number, modelId?: string | null) => Promise<EndOfDayContent>> = {
+const END_OF_DAY_GENERATORS: Record<Exclude<EndOfDayClave, 'productos_baja_ventas'>, (daysAgo: number, modelId?: string | null) => Promise<EndOfDayContent>> = {
     resumen_dia: generateResumenDia,
     hallazgos_dia: generateHallazgosDia,
     resumen_cancelaciones: generateResumenCancelaciones,
@@ -477,7 +655,9 @@ export async function runEndOfDayMessage(
     dedupe = false
 ): Promise<{ sent: number }> {
     const modelId = await getSystemAlertModel(userId).catch(() => null);
-    const gen = await END_OF_DAY_GENERATORS[clave](daysAgo, modelId);
+    const gen = clave === 'productos_baja_ventas'
+        ? await generateProductosBajasVentas(userId, daysAgo, modelId)
+        : await END_OF_DAY_GENERATORS[clave](daysAgo, modelId);
 
     // Liga pública para profundizar: congela la versión completa + datos como
     // snapshot /r/<uuid> (mismo sistema de shares del chat de WhatsApp).

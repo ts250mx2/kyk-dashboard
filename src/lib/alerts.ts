@@ -112,6 +112,20 @@ export async function ensureAlertTables(): Promise<void> {
                 PRIMARY KEY (IdUsuario, Clave, EventoKey, Fecha)
             )
         `);
+        // Tracking de productos reportados en alertas de baja de ventas: rotación diaria, reset mensual.
+        await query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tblAgentProductosBajasLog' AND xtype='U')
+            CREATE TABLE tblAgentProductosBajasLog (
+                IdUsuario VARCHAR(64) NOT NULL,
+                Mes INT NOT NULL,
+                Año INT NOT NULL,
+                Descripcion NVARCHAR(500) NOT NULL,
+                Tienda NVARCHAR(200) NOT NULL,
+                DisminucionDinero NUMERIC(15,2) NOT NULL,
+                FechaReporte DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
+                PRIMARY KEY (IdUsuario, Mes, Año, Descripcion, Tienda)
+            )
+        `);
         tablesEnsured = true;
     } catch (e) {
         console.error('No se pudo asegurar tablas de alertas:', e);
@@ -190,7 +204,7 @@ export async function listAlerts(userId: string): Promise<AlertRule[]> {
 
 export const SYSTEM_ALERT_CLAVES = [
     'inicio_operaciones', 'resumen_dia', 'hallazgos_dia',
-    'resumen_cancelaciones', 'resumen_devoluciones',
+    'resumen_cancelaciones', 'resumen_devoluciones', 'productos_baja_ventas',
     'cancelaciones_anomalas', 'devoluciones_anomalas',
     'retiros_inusuales', 'supervisor_sello',
 ] as const;
@@ -208,7 +222,7 @@ export function isManualEventClave(clave: string | null | undefined): boolean {
 }
 
 /** Alertas de sistema que mandan un mensaje a una hora fija del día. */
-export type EndOfDayClave = 'resumen_dia' | 'hallazgos_dia' | 'resumen_cancelaciones' | 'resumen_devoluciones';
+export type EndOfDayClave = 'resumen_dia' | 'hallazgos_dia' | 'resumen_cancelaciones' | 'resumen_devoluciones' | 'productos_baja_ventas';
 
 /** Hora default 'HH:MM' (Monterrey). El usuario puede cambiarla por alerta (HoraEnvio). */
 export const END_OF_DAY_TIMES: Record<EndOfDayClave, string> = {
@@ -216,6 +230,7 @@ export const END_OF_DAY_TIMES: Record<EndOfDayClave, string> = {
     hallazgos_dia: '23:00',
     resumen_cancelaciones: '19:00',
     resumen_devoluciones: '19:30',
+    productos_baja_ventas: '20:00',
 };
 
 export function isEndOfDayClave(clave: string | null | undefined): clave is EndOfDayClave {
@@ -286,6 +301,12 @@ const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; f
         name: 'Supervisor con demasiadas autorizaciones',
         description: 'Avisa por WhatsApp cuando un mismo supervisor autoriza demasiadas cancelaciones y devoluciones en el día (posible "sello de goma").',
         frequency: '5min',
+    },
+    {
+        clave: 'productos_baja_ventas',
+        name: 'Productos con baja de ventas',
+        description: 'Análisis diario de productos con mayor disminución de ventas comparando el período del mes actual vs el mismo período del año pasado. Filtrado a productos del grupo de 80% de ventas.',
+        frequency: 'daily',
     },
 ];
 
