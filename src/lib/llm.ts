@@ -13,7 +13,7 @@ export const ALLOWED_ANTHROPIC_MODELS = new Set([
     'claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001',
 ]);
 export const ALLOWED_OPENAI_MODELS = new Set([
-    'gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5.5',
+    'gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5.5', 'gpt-5.6',
 ]);
 
 export type CompatProvider = 'anthropic' | 'openai' | 'glm' | 'kimi';

@@ -7,8 +7,10 @@
 export const CHAT_MODELS: Array<{ id: string; label: string }> = [
     { id: 'claude-opus-4-8', label: 'Opus 4.8' },
     { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+    { id: 'claude-fable-5', label: 'Fable 5' },
     { id: 'gpt-4o', label: 'GPT-4o' },
     { id: 'gpt-5.5', label: 'GPT-5.5' },
+    { id: 'gpt-5.6', label: 'GPT-5.6' },
     { id: 'glm-5.2', label: 'GLM-5.2' },
     { id: 'kimi-k2-0711-preview', label: 'Kimi K2' },
 ];
