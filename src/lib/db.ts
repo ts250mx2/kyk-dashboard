@@ -56,7 +56,7 @@ export async function getPool() {
     }
 }
 
-export async function query(queryString: string, params: (string | number | boolean | Date | null | undefined)[] = []) {
+export async function query(queryString: string, params: (string | number | boolean | Date | Buffer | null | undefined)[] = []) {
     try {
         const pool = await getPool();
         const request = pool.request();

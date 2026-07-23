@@ -46,19 +46,29 @@ function buildAuthHeader(
     return header;
 }
 
-/** GET con Digest auth: primer request obtiene el challenge 401, el segundo va firmado. */
+export interface DigestFetchOptions {
+    /** Cuerpo del request firmado (ej. imagen JPEG binaria). No se envía en el primer intento (challenge). */
+    body?: ArrayBuffer | Uint8Array | string;
+    /** Headers extra para el request firmado (ej. Content-Type). */
+    headers?: Record<string, string>;
+}
+
+/** Fetch con Digest auth: primer request obtiene el challenge 401, el segundo va firmado. */
 export async function digestFetch(
     url: string,
     user: string,
     pass: string,
     method = 'GET',
-    timeoutMs = 8000
+    timeoutMs = 8000,
+    options: DigestFetchOptions = {}
 ): Promise<Response> {
     const u = new URL(url);
     const uri = u.pathname + u.search;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const body = options.body as BodyInit | undefined;
     try {
+        // El primer intento va sin cuerpo: sólo buscamos el challenge del equipo.
         const first = await fetch(url, { method, signal: ctrl.signal });
         if (first.status !== 401) return first;
         const wa = first.headers.get('www-authenticate') || '';
@@ -70,7 +80,12 @@ export async function digestFetch(
         const nc = '00000001';
         const cnonce = crypto.randomBytes(8).toString('hex');
         const auth = buildAuthHeader(user, pass, method, uri, challenge, nc, cnonce);
-        return await fetch(url, { method, headers: { Authorization: auth }, signal: ctrl.signal });
+        return await fetch(url, {
+            method,
+            headers: { ...options.headers, Authorization: auth },
+            body,
+            signal: ctrl.signal,
+        });
     } finally {
         clearTimeout(timer);
     }

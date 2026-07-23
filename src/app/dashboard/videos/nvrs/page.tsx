@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import {
     Video, Plus, Pencil, Trash2, X, Eye, EyeOff,
-    RefreshCcw, Server, Search, Wifi, WifiOff, ExternalLink, Loader2,
+    RefreshCcw, Server, Search, Wifi, WifiOff, ExternalLink, Loader2, ScanFace, UserX, UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LoadingScreen } from "@/components/ui/loading-screen";
+import { FaceListModal, type FaceListKind } from "@/components/videos/FaceListModal";
+import { NvrFacesViewModal } from "@/components/videos/NvrFacesViewModal";
 
 interface Store { IdTienda: number; Tienda: string; }
 
@@ -63,6 +65,10 @@ export default function NvrsPage() {
     // Estado en vivo (alcanzabilidad por IP).
     const [pings, setPings] = useState<Record<number, NvrPing>>({});
     const [pinging, setPinging] = useState(false);
+
+    // Modales de listas faciales (SQL → NVR's) y visor por equipo.
+    const [faceList, setFaceList] = useState<FaceListKind | null>(null);
+    const [viewFacesNvr, setViewFacesNvr] = useState<Nvr | null>(null);
 
     const fetchStatus = useCallback(async () => {
         setPinging(true);
@@ -221,6 +227,22 @@ export default function NvrsPage() {
                 </div>
                 <div className="flex gap-2">
                     <button
+                        onClick={() => setFaceList("black")}
+                        className="flex items-center gap-2 px-4 py-3 bg-slate-900 text-white font-black text-xs uppercase tracking-widest hover:bg-slate-700 transition-all"
+                        title="Lista negra (SQL, se sincroniza a los NVR's)"
+                    >
+                        <UserX size={16} />
+                        <span className="hidden sm:inline">Lista negra</span>
+                    </button>
+                    <button
+                        onClick={() => setFaceList("white")}
+                        className="flex items-center gap-2 px-4 py-3 bg-emerald-700 text-white font-black text-xs uppercase tracking-widest hover:bg-emerald-600 transition-all"
+                        title="Lista blanca (SQL, se sincroniza a los NVR's)"
+                    >
+                        <UserCheck size={16} />
+                        <span className="hidden sm:inline">Lista blanca</span>
+                    </button>
+                    <button
                         onClick={fetchStatus}
                         disabled={pinging}
                         className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all disabled:opacity-50"
@@ -326,6 +348,15 @@ export default function NvrsPage() {
                                     <td className="px-4 py-3">
                                         <div className="flex items-center justify-end gap-2">
                                             {nvr.IP && (
+                                                <button
+                                                    onClick={() => setViewFacesNvr(nvr)}
+                                                    className="p-2 text-slate-400 hover:text-[#4050B4] hover:bg-[#4050B4]/10 transition-all"
+                                                    title="Ver rostros cargados en el equipo (solo consulta)"
+                                                >
+                                                    <ScanFace size={16} />
+                                                </button>
+                                            )}
+                                            {nvr.IP && (
                                                 <a
                                                     href={`http://${nvr.IP}`}
                                                     target="_blank"
@@ -358,6 +389,16 @@ export default function NvrsPage() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Modales de listas faciales (uno por lista) y visor por equipo */}
+            {faceList && <FaceListModal list={faceList} onClose={() => setFaceList(null)} />}
+            {viewFacesNvr && (
+                <NvrFacesViewModal
+                    idNvr={viewFacesNvr.IdNVR}
+                    nvrName={viewFacesNvr.Descripcion || viewFacesNvr.Tienda || `NVR #${viewFacesNvr.IdNVR}`}
+                    onClose={() => setViewFacesNvr(null)}
+                />
+            )}
 
             {/* Modal */}
             {isModalOpen && (
