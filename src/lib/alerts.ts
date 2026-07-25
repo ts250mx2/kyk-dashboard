@@ -206,7 +206,7 @@ export const SYSTEM_ALERT_CLAVES = [
     'inicio_operaciones', 'resumen_dia', 'hallazgos_dia',
     'resumen_cancelaciones', 'resumen_devoluciones', 'productos_baja_ventas',
     'cancelaciones_anomalas', 'devoluciones_anomalas',
-    'retiros_inusuales', 'supervisor_sello',
+    'retiros_inusuales', 'supervisor_sello', 'cedis_transito',
 ] as const;
 
 /**
@@ -222,7 +222,7 @@ export function isManualEventClave(clave: string | null | undefined): boolean {
 }
 
 /** Alertas de sistema que mandan un mensaje a una hora fija del día. */
-export type EndOfDayClave = 'resumen_dia' | 'hallazgos_dia' | 'resumen_cancelaciones' | 'resumen_devoluciones' | 'productos_baja_ventas';
+export type EndOfDayClave = 'resumen_dia' | 'hallazgos_dia' | 'resumen_cancelaciones' | 'resumen_devoluciones' | 'productos_baja_ventas' | 'cedis_transito';
 
 /** Hora default 'HH:MM' (Monterrey). El usuario puede cambiarla por alerta (HoraEnvio). */
 export const END_OF_DAY_TIMES: Record<EndOfDayClave, string> = {
@@ -231,6 +231,7 @@ export const END_OF_DAY_TIMES: Record<EndOfDayClave, string> = {
     resumen_cancelaciones: '19:00',
     resumen_devoluciones: '19:30',
     productos_baja_ventas: '20:00',
+    cedis_transito: '09:00',
 };
 
 export function isEndOfDayClave(clave: string | null | undefined): clave is EndOfDayClave {
@@ -306,6 +307,12 @@ const SYSTEM_ALERTS: Array<{ clave: string; name: string; description: string; f
         clave: 'productos_baja_ventas',
         name: 'Productos con baja de ventas',
         description: 'Análisis diario de productos con mayor disminución de ventas comparando el período del mes actual vs el mismo período del año pasado. Filtrado a productos del grupo de 80% de ventas.',
+        frequency: 'daily',
+    },
+    {
+        clave: 'cedis_transito',
+        name: 'CEDIS: salidas en tránsito atoradas',
+        description: 'Aviso diario por WhatsApp de las transferencias que salieron del CEDIS hace más de 3 días y que ninguna tienda ha registrado como recibidas, con el valor en riesgo.',
         frequency: 'daily',
     },
 ];

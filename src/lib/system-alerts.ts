@@ -15,6 +15,7 @@
  */
 
 import { query, localizeDatesForModel } from '@/lib/db';
+import { mysqlQuery } from '@/lib/mysql';
 import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { sendWhatsApp, SendWhatsAppResult } from '@/lib/whatsapp/send';
@@ -633,6 +634,88 @@ Devuelve SOLO dos bloques separados por "---".`;
     return { title, full, short, rows };
 }
 
+// ─── CEDIS: salidas en tránsito atoradas (aviso matutino) ───────────────────
+// Transferencias que salieron del CEDIS (IdTienda 64, en MySQL) hace más de
+// N días y que ninguna tienda ha registrado como recibidas. Contenido
+// determinístico (sin IA): folios, tiendas, días y valor en riesgo.
+const CEDIS_ID_ALMACEN = 64;
+const CEDIS_TRANSITO_DIAS = Math.max(1, Number(process.env.CEDIS_TRANSITO_DIAS) || 3);
+const CEDIS_TRANSITO_LOOKBACK_DIAS = 60;
+
+interface TransitoRow {
+    Folio: string;
+    Tienda: string | null;
+    Fecha: string;
+    Dias: number;
+    Valor: number | null;
+}
+
+export async function generateCedisTransito(): Promise<EndOfDayContent> {
+    const selectFor = (table: string) => `
+        SELECT s.FolioSalida AS Folio,
+               t.Tienda,
+               DATE_FORMAT(s.FechaSalida, '%Y-%m-%d') AS Fecha,
+               TIMESTAMPDIFF(DAY, s.FechaSalida, NOW()) AS Dias,
+               d.Valor
+        FROM ${table} s
+        LEFT JOIN tblTiendas t ON t.IdTienda = s.IdTiendaDestino
+        LEFT JOIN (
+            SELECT IdTransferenciaSalida, IdTienda, SUM(Mov * Costo) AS Valor
+            FROM tblDetalleTransferenciasSalidas
+            WHERE IdTienda = ${CEDIS_ID_ALMACEN}
+            GROUP BY IdTransferenciaSalida, IdTienda
+        ) d ON d.IdTransferenciaSalida = s.IdTransferenciaSalida AND d.IdTienda = s.IdTienda
+        WHERE s.IdTienda = ${CEDIS_ID_ALMACEN} AND s.Status = 0
+          AND s.FechaEntrada <= '2000-01-01'
+          AND (s.FolioEntrada IS NULL OR s.FolioEntrada = '')
+          AND s.FechaSalida < DATE_SUB(NOW(), INTERVAL ${CEDIS_TRANSITO_DIAS} DAY)
+          AND s.FechaSalida >= DATE_SUB(NOW(), INTERVAL ${CEDIS_TRANSITO_LOOKBACK_DIAS} DAY)`;
+
+    const [normales, facturas] = await Promise.all([
+        mysqlQuery(selectFor('tblTransferenciasSalidas')) as Promise<TransitoRow[]>,
+        mysqlQuery(selectFor('tblTransferenciasSalidasFacturas')) as Promise<TransitoRow[]>,
+    ]);
+    const stuck = [...(normales ?? []), ...(facturas ?? [])]
+        .map((r) => ({ ...r, Valor: Number(r.Valor ?? 0), Tienda: r.Tienda || 'Tienda desconocida' }))
+        .sort((a, b) => b.Dias - a.Dias || b.Valor - a.Valor);
+
+    const title = `CEDIS: salidas en tránsito atoradas — ${targetDateLabel(0)}`;
+    if (stuck.length === 0) {
+        return {
+            title,
+            full: `🚚 Sin salidas atoradas: todo lo enviado por el CEDIS en los últimos ${CEDIS_TRANSITO_LOOKBACK_DIAS} días ya fue recibido (umbral ${CEDIS_TRANSITO_DIAS} días).`,
+            short: '🚚 CEDIS al día: sin salidas en tránsito atoradas.',
+            rows: [],
+        };
+    }
+
+    const valorTotal = stuck.reduce((acc, s) => acc + s.Valor, 0);
+    const lineas = stuck.slice(0, 20).map(
+        (s) => `• ${s.Folio} → ${s.Tienda}: ${s.Dias} días (salió ${s.Fecha}) · ${fmtMxn(s.Valor)}`
+    );
+    const porTienda = new Map<string, number>();
+    for (const s of stuck) porTienda.set(s.Tienda!, (porTienda.get(s.Tienda!) ?? 0) + 1);
+    const tiendasResumen = [...porTienda.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([tienda, n]) => `${tienda} (${n})`)
+        .join(', ');
+
+    const full = [
+        `🚚 CEDIS: ${stuck.length} salidas con más de ${CEDIS_TRANSITO_DIAS} días sin que la tienda registre su entrada. Valor en riesgo: ${fmtMxn(valorTotal)}.`,
+        '',
+        ...lineas,
+        stuck.length > 20 ? `… y ${stuck.length - 20} más.` : '',
+        '',
+        `Tiendas con pendientes: ${tiendasResumen}.`,
+        'Revisar físicamente y registrar la transferencia de entrada en cada tienda, o cancelar la salida si no procede.',
+    ].filter(Boolean).join('\n');
+
+    const top = stuck[0];
+    const short = `🚚 CEDIS: ${stuck.length} salidas atoradas (+${CEDIS_TRANSITO_DIAS}d) por ${fmtMxn(valorTotal)}. Peor: ${top.Folio} → ${top.Tienda} (${top.Dias} días, ${fmtMxn(top.Valor)}).`;
+
+    return { title, full, short, rows: stuck.slice(0, 100) as unknown as Record<string, any>[] };
+}
+
 /**
  * Envía resumen o hallazgos a los destinatarios y registra el evento.
  * daysAgo=1 reporta el día anterior (envío manual de madrugada).
@@ -644,6 +727,7 @@ const END_OF_DAY_GENERATORS: Record<Exclude<EndOfDayClave, 'productos_baja_venta
     hallazgos_dia: generateHallazgosDia,
     resumen_cancelaciones: generateResumenCancelaciones,
     resumen_devoluciones: generateResumenDevoluciones,
+    cedis_transito: generateCedisTransito,
 };
 
 export async function runEndOfDayMessage(

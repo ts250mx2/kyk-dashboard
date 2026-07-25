@@ -53,6 +53,7 @@ const menuSections: MenuSection[] = [
             { name: "Inventarios Tienda", emoji: "🏬", href: "/dashboard/inventory/store" },
             { name: "Auditoria por Proveedor", emoji: "🚚", href: "/dashboard/inventory/provider" },
             { name: "Auditoria por zona", emoji: "📍", href: "/dashboard/inventory/zone" },
+            { name: "Auditoria Cedis", emoji: "🏭", href: "/dashboard/inventory/cedis" },
             { name: "Quiebres de Stock", emoji: "🚨", href: "/dashboard/inventory/stockouts" },
         ]
     },
