@@ -796,6 +796,8 @@ interface CancHeader {
     IdCajero: number | null;
     FechaCancelacion: Date;
     Total: number;
+    Tienda: string | null;
+    Cajero: string | null;
 }
 
 const cancelKey = (h: { IdTienda: unknown; IdComputadora: unknown; IdCancelacion: unknown }) =>
@@ -881,9 +883,12 @@ export async function runCancelacionesAnomalas(
             WHERE A.FechaCancelacion >= CAST(GETDATE() AS DATE)
             GROUP BY A.IdTienda, A.IdComputadora, A.IdCancelacion, C.IdCajero
         )
-        SELECT IdTienda, IdComputadora, IdCancelacion, IdCajero, FechaCancelacion, Total
-        FROM Canc
-        ORDER BY IdCajero, FechaCancelacion
+        SELECT c.IdTienda, c.IdComputadora, c.IdCancelacion, c.IdCajero, c.FechaCancelacion, c.Total,
+               T.Tienda, U.Usuario AS Cajero
+        FROM Canc c
+        INNER JOIN tblTiendas T ON c.IdTienda = T.IdTienda
+        LEFT JOIN tblUsuarios U ON c.IdCajero = U.IdUsuario
+        ORDER BY c.IdCajero, c.FechaCancelacion
     `)) as CancHeader[];
     if (!headers.length) return nada();
 
@@ -941,39 +946,98 @@ export async function runCancelacionesAnomalas(
     }
     candidatas.sort((a, b) => new Date(b.h.FechaCancelacion).getTime() - new Date(a.h.FechaCancelacion).getTime());
 
-    const cap = manual ? 30 : CANCEL_MAX_PER_PASS;
-    if (candidatas.length > cap) {
-        console.log(`[cancelaciones_anomalas] ${candidatas.length} atípicas; mando ${cap}, el resto ${manual ? 'se omite' : 'en la siguiente pasada'}.`);
+    // ── UN solo mensaje por pasada (las ráfagas generaban lluvia de WhatsApps) ──
+    // Resumen corto por WhatsApp + liga /r/<uuid> con el detalle completo de
+    // cada cancelación (productos, cajero, supervisor).
+    const motivoCorto = (r: { big: boolean; burst: number }) =>
+        r.big && r.burst > CANCEL_BURST_COUNT ? 'monto+ráfaga'
+            : r.big ? 'monto alto'
+                : `ráfaga ${r.burst} en <${CANCEL_BURST_WINDOW_MIN} min`;
+
+    const fmtFecha = (d: Date | string) => {
+        try {
+            return new Date(d).toLocaleString('es-MX', {
+                timeZone: 'America/Monterrey', day: '2-digit', month: '2-digit',
+                hour: '2-digit', minute: '2-digit',
+            });
+        } catch { return String(d); }
+    };
+
+    // Detalle completo por cancelación (para la página de la liga; acotado por costo).
+    const detailCap = manual ? 30 : CANCEL_MAX_PER_PASS;
+    const detalles: string[] = [];
+    for (const r of candidatas.slice(0, detailCap)) {
+        const t = await buildCancelacionMessage(r.h, r.big, r.burst).catch(() => null);
+        if (t) detalles.push(t);
     }
 
-    let sent = 0;
-    let anomalias = 0;
-    for (const r of candidatas.slice(0, cap)) {
-        const text = await buildCancelacionMessage(r.h, r.big, r.burst).catch(() => null);
-        if (!text) continue;
+    const totalMonto = candidatas.reduce((acc, r) => acc + (Number(r.h.Total) || 0), 0);
+    const rows = candidatas.map((r) => ({
+        Sucursal: r.h.Tienda || `Tienda ${r.h.IdTienda}`,
+        Folio: `${r.h.IdComputadora}-${r.h.IdCancelacion}`,
+        Fecha: fmtFecha(r.h.FechaCancelacion),
+        Cajero: r.h.Cajero || '—',
+        Total: Number(r.h.Total) || 0,
+        Motivo: motivoCorto(r),
+    }));
 
-        // cron: dedup de envío activado; manual: directo (acción deliberada del usuario).
-        sent += await sendToAll(recipients, text, !manual);
+    // Liga pública con el detalle (mismo sistema de shares de los resúmenes).
+    let link = '';
+    try {
+        const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+        if (base && detalles.length) {
+            const uuid = await createShare({
+                question: `Cancelaciones atípicas — ${targetDateLabel(0)}`,
+                answer: detalles.join('\n\n──────────\n\n'),
+                tool: 'cancelaciones_anomalas',
+                viz: null,
+                rows,
+                tenantId: userId,
+            });
+            link = ` Ver detalle: ${base}/r/${uuid}`;
+        }
+    } catch { /* sin liga, el resumen corto sale igual */ }
 
+    let text: string;
+    if (candidatas.length === 1 && detalles.length === 1) {
+        // Una sola: el mensaje detallado clásico + liga.
+        text = detalles[0].slice(0, 700) + link;
+    } else {
+        const lineas = candidatas.slice(0, 6).map(
+            (r) => `• ${r.h.Tienda || `Tienda ${r.h.IdTienda}`} · ${r.h.Cajero || 'cajero —'} · ${fmtMxn(r.h.Total)} (${motivoCorto(r)})`
+        );
+        const resto = candidatas.length > 6 ? `… y ${candidatas.length - 6} más.` : '';
+        text = [
+            `🚨 ${candidatas.length} cancelaciones atípicas · total ${fmtMxn(totalMonto)}`,
+            ...lineas,
+            resto,
+        ].filter(Boolean).join('\n').slice(0, 700) + link;
+    }
+
+    // cron: dedup de envío activado; manual: directo (acción deliberada del usuario).
+    const sent = await sendToAll(recipients, text, !manual);
+
+    // Todas quedan marcadas como avisadas (van TODAS en el mensaje agrupado).
+    for (const r of candidatas) {
         const motivo = r.big && r.burst > CANCEL_BURST_COUNT ? 'ambos' : r.big ? 'grande' : 'rafaga';
         await query(
             `INSERT INTO tblAgentCancelacionAlertLog (IdUsuario, CancelKey, Fecha, Motivo)
              VALUES (?, ?, CAST(GETDATE() AS DATE), ?)`,
             [userId, cancelKey(r.h), motivo]
         ).catch(() => { /* si ya estaba (cron previo o pasadas que chocan), la PK evita el duplicado */ });
-
-        await recordAlertEvent({
-            alertId,
-            userId,
-            observedValue: Number(r.h.Total) || null,
-            message: `Cancelación atípica · Folio ${r.h.IdComputadora}-${r.h.IdCancelacion} · ${fmtMxn(r.h.Total)}`,
-            resultsJson: JSON.stringify({ ...r.h, motivo }),
-            touchLastEvaluation: !manual, // el envío manual no debe correr el reloj del cron
-        }).catch(() => { });
-        anomalias++;
     }
 
-    return { sent, anomalias };
+    // Un solo evento en el panel por el grupo completo.
+    await recordAlertEvent({
+        alertId,
+        userId,
+        observedValue: candidatas.length,
+        message: `${candidatas.length} cancelación(es) atípica(s) · ${fmtMxn(totalMonto)}`,
+        resultsJson: JSON.stringify(rows.slice(0, 10)),
+        touchLastEvaluation: !manual, // el envío manual no debe correr el reloj del cron
+    }).catch(() => { });
+
+    return { sent, anomalias: candidatas.length };
 }
 
 // ─── Helpers compartidos de alertas de evento (devoluciones, retiros, supervisor) ─
