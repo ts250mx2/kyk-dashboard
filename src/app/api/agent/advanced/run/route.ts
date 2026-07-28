@@ -66,7 +66,7 @@ export async function POST(req: Request) {
 
     // La conversación (preguntas/propuestas) usa un modelo más barato por defecto;
     // el modelo de GENERACIÓN del reporte se elige al armarlo (endpoint /build).
-    const model = getModel(body?.model || process.env.ADVANCED_CONVERSATION_MODEL || 'claude-sonnet-4-6');
+    const model = getModel(body?.model || process.env.ADVANCED_CONVERSATION_MODEL || 'claude-sonnet-5');
     const system = buildAdvancedSystemPrompt(getAdvancedSchemaString());
     const baseMessages = buildMessages(prompt, body?.history);
     const estCostUsd: number | undefined = typeof body?.estimate?.estCostUsd === 'number' ? body.estimate.estCostUsd : undefined;

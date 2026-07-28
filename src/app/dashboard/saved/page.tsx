@@ -21,7 +21,10 @@ interface FolderItem { idFolder: number; nombre: string; }
 
 const VIZ_EMOJI: Record<string, string> = { bar: "📊", line: "📈", pie: "🥧", area: "🌄", table: "📋", treemap: "🟦" };
 const MODEL_LABELS: Record<string, string> = {
-    "claude-opus-4-8": "Opus 4.8", "claude-sonnet-4-6": "Sonnet 4.6", "claude-haiku-4-5-20251001": "Haiku 4.5",
+    "claude-opus-5": "Opus 5", "claude-sonnet-5": "Sonnet 5",
+    // Ids anteriores: se conservan para que los reportes históricos sigan mostrando etiqueta.
+    "claude-opus-4-8": "Opus 4.8", "claude-sonnet-4-6": "Sonnet 4.6",
+    "claude-haiku-4-5-20251001": "Haiku 4.5",
     "gpt-4o": "GPT-4o", "gpt-4o-mini": "GPT-4o mini",
 };
 const modelLabel = (id: string | null) => (id ? MODEL_LABELS[id] || id : null);

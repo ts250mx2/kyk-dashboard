@@ -148,7 +148,7 @@ export interface AdvancedReportDefinition {
     suggestedQuestions: string[];
     rowLimit?: number;                     // tope de filas a renderizar (default 500)
     createdWith: {
-        model: string;                     // ej. claude-opus-4-8
+        model: string;                     // ej. claude-opus-5
         createdAt: string;                 // ISO
         promptSummary?: string;            // resumen de la petición original
     };

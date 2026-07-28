@@ -107,7 +107,7 @@ export default function ChatFullPage() {
         setLoading(true);
 
         try {
-            const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-4-8' : 'claude-opus-4-8';
+            const selectedModel = typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-5' : 'claude-opus-5';
             const response = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

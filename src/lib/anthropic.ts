@@ -14,6 +14,6 @@ export const anthropic = new Anthropic({
 // ANTHROPIC_MODEL        -> agente principal (/api/query, compras)
 // ANTHROPIC_MODEL_FAST   -> WhatsApp (prioriza velocidad/costo)
 // ANTHROPIC_MODEL_CHEAP  -> tareas internas (razonador causal, prompts proactivos)
-export const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
-export const ANTHROPIC_MODEL_FAST = process.env.ANTHROPIC_MODEL_FAST || 'claude-sonnet-4-6';
+export const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5';
+export const ANTHROPIC_MODEL_FAST = process.env.ANTHROPIC_MODEL_FAST || 'claude-sonnet-5';
 export const ANTHROPIC_MODEL_CHEAP = process.env.ANTHROPIC_MODEL_CHEAP || 'claude-haiku-4-5-20251001';

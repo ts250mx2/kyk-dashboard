@@ -219,7 +219,7 @@ export default function AgentConsolePage() {
                 const saved = localStorage.getItem("advanced_agent_model");
                 setBuildModel((saved && list.some((m) => m.id === saved) ? saved : null) || d.defaultModelId || list[0]?.id || "");
                 const savedConv = localStorage.getItem("advanced_conv_model");
-                setConvModel((savedConv && list.some((m) => m.id === savedConv) ? savedConv : null) || "claude-sonnet-4-6");
+                setConvModel((savedConv && list.some((m) => m.id === savedConv) ? savedConv : null) || "claude-sonnet-5");
             } catch { /* noop */ }
         })();
     }, []);
@@ -309,7 +309,7 @@ export default function AgentConsolePage() {
                                 const r = await fetch("/api/agent/advanced/build", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ definition: def, name: def.title, model: def.recommendedModel || "claude-sonnet-4-6", idReporte: editingId, mode: "overwrite" }),
+                                    body: JSON.stringify({ definition: def, name: def.title, model: def.recommendedModel || "claude-sonnet-5", idReporte: editingId, mode: "overwrite" }),
                                 });
                                 const d = await r.json();
                                 if (!r.ok) throw new Error(d?.error || "No se pudo actualizar");

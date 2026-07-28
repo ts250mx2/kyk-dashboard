@@ -623,7 +623,7 @@ export function ChatAgent({ mode = 'floating' }: ChatAgentProps = {}) {
 
         // Un modelOverride (botón "Otro modelo") tiene prioridad sobre el modelo
         // por defecto guardado, pero NO modifica la preferencia persistida.
-        const selectedModel = modelOverride || (typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-4-8' : 'claude-opus-4-8');
+        const selectedModel = modelOverride || (typeof window !== 'undefined' ? localStorage.getItem('ai_query_model') || 'claude-opus-5' : 'claude-opus-5');
         const useStreaming = selectedModel.includes('claude');
 
         // Aborta cualquier stream previo
