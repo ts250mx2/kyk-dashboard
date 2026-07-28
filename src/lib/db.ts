@@ -40,7 +40,10 @@ const sqlConfig: sql.config = {
         trustServerCertificate: true,
         useUTC: false
     },
-    requestTimeout: 60000 // 60 seconds timeout for queries
+    // Timeout por consulta. Configurable vía SQL_REQUEST_TIMEOUT_MS (default 60s);
+    // subirlo ayuda a consultas pesadas (comparativos de varios años) que de otro
+    // modo se cortan antes de terminar.
+    requestTimeout: Number(process.env.SQL_REQUEST_TIMEOUT_MS) || 60000
 };
 
 let pool: sql.ConnectionPool | null = null;

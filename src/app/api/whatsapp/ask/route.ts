@@ -43,9 +43,11 @@ interface WhatsAppRequest {
 const ANTHROPIC_MODEL = ANTHROPIC_MODEL_FAST; // configurable vía .env (ANTHROPIC_MODEL_FAST)
 const OPENAI_FALLBACK_MODEL = 'gpt-4o-mini'; // fallback cuando Anthropic devuelve 5xx/overloaded
 
-// WhatsApp debe responder rápido: timeout corto POR LLAMADA para no heredar el
-// timeout global del SDK (30 min). Configurable vía WHATSAPP_AI_TIMEOUT_MS.
-const WA_AI_TIMEOUT_MS = Number(process.env.WHATSAPP_AI_TIMEOUT_MS) || 20000;
+// WhatsApp debe responder rápido: timeout POR LLAMADA para no heredar el timeout
+// global del SDK (30 min). Configurable vía WHATSAPP_AI_TIMEOUT_MS. OJO: debe
+// quedar POR DEBAJO del timeout que el puente (Axon) espera la respuesta; si no,
+// Axon se rinde antes y manda su propio mensaje de "sistema lento".
+const WA_AI_TIMEOUT_MS = Number(process.env.WHATSAPP_AI_TIMEOUT_MS) || 40000;
 
 // Decide si conviene caer al fallback de OpenAI. Cubre: timeouts/red (sin status),
 // sobrecarga (429/5xx) y SALDO AGOTADO de Anthropic (400 "credit balance too low").
