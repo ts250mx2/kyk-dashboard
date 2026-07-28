@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic, ANTHROPIC_MODEL, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL, ANTHROPIC_MODEL_CHEAP, anthropicText } from '@/lib/anthropic';
 import { generateText } from '@/lib/llm';
 import { query, localizeDatesForModel } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
@@ -138,7 +138,7 @@ Si SÍ necesitas:
                 max_tokens: 800,
                 messages: [{ role: 'user', content: planPrompt }]
             });
-            const planText = (planResp.content[0] as any)?.text || '';
+            const planText = anthropicText(planResp);
             const start = planText.indexOf('{');
             const end = planText.lastIndexOf('}');
             if (start >= 0 && end > start) {

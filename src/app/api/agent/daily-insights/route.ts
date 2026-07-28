@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL, anthropicText } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { query, localizeDatesForModel } from '@/lib/db';
 import { INSIGHT_SCANNERS, getScannersByPriority } from '@/lib/insights-scanners';
@@ -116,7 +116,7 @@ RETORNA JSON:
                     { role: 'user', content: `${systemPrompt}\n\nDATOS A ANALIZAR:\n${dataDescription}\n\nRETORNA SOLO JSON VÁLIDO.` }
                 ]
             });
-            const content = (response.content[0] as any).text;
+            const content = anthropicText(response);
             const jsonStr = content.substring(content.indexOf('{'), content.lastIndexOf('}') + 1);
             parsed = JSON.parse(jsonStr);
         } else {
@@ -183,7 +183,7 @@ Genera SOLO el párrafo de briefing, sin comillas, sin metadata, sin JSON.`;
             max_tokens: 512,
             messages: [{ role: 'user', content: briefingPrompt }]
         });
-        const text = (response.content[0] as any).text;
+        const text = anthropicText(response);
         return text.trim();
     } catch (e) {
         console.error('Error generando briefing:', e);

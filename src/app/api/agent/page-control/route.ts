@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_CHEAP, anthropicText } from '@/lib/anthropic';
 
 interface PageControlRequest {
     prompt: string;
@@ -213,7 +213,7 @@ Responde SOLO con el JSON.`;
             messages: [{ role: 'user', content: systemPrompt }]
         });
 
-        const text = (response.content[0] as any)?.text || '';
+        const text = anthropicText(response);
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
         if (start < 0 || end <= start) {

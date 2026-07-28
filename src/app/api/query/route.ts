@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { openai, glm, GLM_MODEL, kimi, KIMI_MODEL } from '@/lib/ai';
-import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL, anthropicText } from '@/lib/anthropic';
 import { query, localizeDatesForModel } from '@/lib/db';
 import { findRelevantReports } from '@/lib/available-reports';
 import { assertReadOnly } from '@/lib/sql-sandbox';
@@ -779,7 +779,7 @@ INSTRUCCIONES:
                             max_tokens: 1024,
                             messages: [{ role: 'user', content: narratePrompt }],
                         });
-                        const text = ((narrationResp.content[0] as { text?: string })?.text || '').trim();
+                        const text = anthropicText(narrationResp).trim();
                         emit({ event: 'text-delta', data: { text } });
                         emit({
                             event: 'metadata',
@@ -829,7 +829,7 @@ INSTRUCCIONES:
                             max_tokens: 1200,
                             messages: [{ role: 'user', content: narratePrompt }],
                         });
-                        const text = ((narrationResp.content[0] as { text?: string })?.text || '').trim();
+                        const text = anthropicText(narrationResp).trim();
                         emit({ event: 'text-delta', data: { text } });
                         emit({
                             event: 'metadata',
@@ -884,7 +884,7 @@ INSTRUCCIONES:
                             max_tokens: 1024,
                             messages: [{ role: 'user', content: `${correctionPrompt}\n\nSQL Original: ${safeSql}` }]
                         });
-                        const correctedSql = (correction.content[0] as any).text.replace(/```sql|```/g, '').trim();
+                        const correctedSql = anthropicText(correction).replace(/```sql|```/g, '').trim();
                         const safeCorrected = assertReadOnly(correctedSql);
                         lastSql = safeCorrected;
                         executedQueries.push({ label: 'Consulta Principal (Auto-Corregida)', sql: safeCorrected });
@@ -1234,7 +1234,7 @@ INSTRUCCIONES:
                             max_tokens: 1024,
                             messages: [{ role: 'user', content: `${correctionPrompt}\n\nSQL Original: ${safeSql}` }]
                         });
-                        correctedSql = (correction.content[0] as any).text.replace(/```sql|```/g, '').trim();
+                        correctedSql = anthropicText(correction).replace(/```sql|```/g, '').trim();
                     } else {
                         const correction = await compatClient.chat.completions.create({
                             model: compatModel,
@@ -1268,7 +1268,7 @@ INSTRUCCIONES:
                         max_tokens: 2048,
                         messages: [{ role: 'user', content: metaPromptNS }]
                     });
-                    metaText = (metaCompletion.content[0] as any).text || '';
+                    metaText = anthropicText(metaCompletion);
                 } else {
                     const metaCompletion = await compatClient.chat.completions.create({
                         model: compatModel,
@@ -1350,7 +1350,7 @@ INSTRUCCIONES:
                         content: `Eres Kesito. Acabas de correr el modelo OFICIAL de Proyección de Ventas.\n\nPREGUNTA: ${prompt}\n\nDATOS:\n${block}\n\nResponde en 3-6 oraciones, prosa fluida, cifras INLINE en **negritas Markdown**, sin bullets ni encabezados.`
                     }],
                 });
-                const text = ((narrationResp.content[0] as { text?: string })?.text || '').trim();
+                const text = anthropicText(narrationResp).trim();
                 finalResponse = {
                     data: [],
                     sql: null,
@@ -1374,7 +1374,7 @@ INSTRUCCIONES:
                         content: `Eres Kesito. Acabas de cruzar venta reciente con mismo período LY para sugerir productos.\n\nPREGUNTA: ${prompt}\n\nDATOS:\n${block}\n\nResponde en 4-7 oraciones, cifras en **negritas**, sin bullets. Menciona 3-6 productos por nombre.`
                     }],
                 });
-                const text = ((narrationResp.content[0] as { text?: string })?.text || '').trim();
+                const text = anthropicText(narrationResp).trim();
                 finalResponse = {
                     data: rec.products,
                     sql: null,

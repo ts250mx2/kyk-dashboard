@@ -12,7 +12,7 @@
  */
 
 import { query } from '@/lib/db';
-import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_CHEAP, anthropicText } from '@/lib/anthropic';
 
 let tableEnsured = false;
 
@@ -196,7 +196,7 @@ Genera EXACTAMENTE ${candidates.length} prompts en el mismo orden del input. Dev
             max_tokens: 2000,
             messages: [{ role: 'user', content: reformulationPrompt }]
         });
-        const text = (resp.content[0] as any)?.text || '';
+        const text = anthropicText(resp);
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
         if (start >= 0 && end > start) {

@@ -16,7 +16,7 @@
 
 import { query, localizeDatesForModel } from '@/lib/db';
 import { mysqlQuery } from '@/lib/mysql';
-import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_FAST, anthropicText, NO_THINKING } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { sendWhatsApp, SendWhatsAppResult } from '@/lib/whatsapp/send';
 import { recordAlertEvent, getSystemAlertModel, EndOfDayClave } from '@/lib/alerts';
@@ -77,8 +77,9 @@ async function narrate(prompt: string, maxTokens = 700, modelId?: string | null)
             model,
             max_tokens: maxTokens,
             messages: [{ role: 'user', content: prompt }],
+            ...NO_THINKING,
         });
-        return ((r.content[0] as any)?.text || '').trim();
+        return anthropicText(r).trim();
     };
     const askOpenAI = async (model: string) => {
         const c = await openai.chat.completions.create({

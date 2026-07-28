@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mysqlQuery } from '@/lib/mysql';
-import { anthropic, ANTHROPIC_MODEL } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL, anthropicText } from '@/lib/anthropic';
 
 export async function POST(request: Request) {
     try {
@@ -143,7 +143,7 @@ Responde SOLO con el JSON válido, sin texto adicional, sin markdown, sin backti
                 ],
             });
 
-            let content = (response.content[0] as any).text?.trim();
+            let content = anthropicText(response).trim();
             // Strip markdown code fences if Claude wraps the JSON
             if (content?.startsWith('```')) {
                 content = content.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();

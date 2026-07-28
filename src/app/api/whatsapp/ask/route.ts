@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic, ANTHROPIC_MODEL_FAST } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_FAST, anthropicText, NO_THINKING } from '@/lib/anthropic';
 import { openai } from '@/lib/ai';
 import { query, localizeDatesForModel } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
@@ -140,7 +140,8 @@ async function planWithTools(systemPrompt: string, question: string, requestId: 
             system: systemPrompt,
             messages: [{ role: 'user', content: question }],
             tools: ANTHROPIC_TOOLS,
-            tool_choice: { type: 'any' } // FORZAR uso de alguna tool: sin escape hatch de texto libre
+            tool_choice: { type: 'any' }, // FORZAR uso de alguna tool: sin escape hatch de texto libre
+            ...NO_THINKING,
         }, { timeout: WA_AI_TIMEOUT_MS, maxRetries: 0 }); // fail-fast: si falla, caemos a OpenAI
         const block = resp.content.find((c: any) => c.type === 'tool_use') as any;
         if (block) return { name: block.name, args: block.input };
@@ -172,8 +173,9 @@ async function narrate(prompt: string, maxTokens: number, requestId: string): Pr
             model: ANTHROPIC_MODEL,
             max_tokens: maxTokens,
             messages: [{ role: 'user', content: prompt }],
+            ...NO_THINKING,
         }, { timeout: WA_AI_TIMEOUT_MS, maxRetries: 0 });
-        return (resp.content[0] as any)?.text || '';
+        return anthropicText(resp);
     } catch (err: any) {
         if (!shouldFallbackToOpenAI(err)) throw err;
         const status = err?.status ?? err?.response?.status;

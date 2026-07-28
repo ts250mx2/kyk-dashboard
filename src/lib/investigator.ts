@@ -13,7 +13,7 @@
  *   - El SQL propuesto pasa por el sandbox antes de ejecutarse
  */
 
-import { anthropic } from '@/lib/anthropic';
+import { anthropic, anthropicText } from '@/lib/anthropic';
 import { localizeDatesForModel } from '@/lib/db';
 
 export interface FollowUpProposal {
@@ -100,7 +100,7 @@ Devuelve SOLO el JSON, sin markdown ni explicaciones extra.`;
             messages: [{ role: 'user', content: detectorPrompt }]
         });
 
-        const text = (response.content[0] as any)?.text || '';
+        const text = anthropicText(response);
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
         if (start < 0 || end <= start) return null;

@@ -15,7 +15,7 @@
  *     con instrucción de eliminar hipótesis y concluir causa raíz)
  */
 
-import { anthropic, ANTHROPIC_MODEL_CHEAP } from '@/lib/anthropic';
+import { anthropic, ANTHROPIC_MODEL_CHEAP, anthropicText } from '@/lib/anthropic';
 import { query, localizeDatesForModel } from '@/lib/db';
 import { assertReadOnly } from '@/lib/sql-sandbox';
 
@@ -157,7 +157,7 @@ Genera entre 4 y 6 hipótesis. Devuelve SOLO el JSON.`;
             messages: [{ role: 'user', content: designerPrompt }]
         });
 
-        const text = (response.content[0] as any)?.text || '';
+        const text = anthropicText(response);
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
         if (start < 0 || end <= start) return [];
@@ -367,7 +367,7 @@ Devuelve SOLO el JSON.`;
             messages: [{ role: 'user', content: designerPrompt }]
         });
 
-        const text = (response.content[0] as any)?.text || '';
+        const text = anthropicText(response);
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
         if (start < 0 || end <= start) return [];
