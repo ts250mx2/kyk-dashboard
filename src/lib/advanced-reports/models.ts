@@ -38,8 +38,9 @@ export const MODEL_REGISTRY: ModelInfo[] = [
     { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 (rápido)', provider: 'anthropic', inputUsdPerMTok: 3, outputUsdPerMTok: 15 },
     { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (económico)', provider: 'anthropic', inputUsdPerMTok: 1, outputUsdPerMTok: 5 },
     // --- OpenAI (GPT) ---
+    // El proyecto de OpenAI solo tiene acceso a gpt-4o (los -mini dan 403), así
+    // que no ofrecemos gpt-4o-mini en el selector.
     { id: 'gpt-4o', label: 'GPT-4o', provider: 'openai', inputUsdPerMTok: 2.5, outputUsdPerMTok: 10 },
-    { id: 'gpt-4o-mini', label: 'GPT-4o mini (económico)', provider: 'openai', inputUsdPerMTok: 0.15, outputUsdPerMTok: 0.6 },
 ];
 
 export const DEFAULT_MODEL_ID = process.env.ANTHROPIC_MODEL || 'claude-opus-5';

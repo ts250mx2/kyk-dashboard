@@ -91,12 +91,21 @@ async function narrate(prompt: string, maxTokens = 700, modelId?: string | null)
     try {
         if (chosen?.provider === 'openai') return await askOpenAI(chosen.id);
         return await askAnthropic(chosen?.id || ANTHROPIC_MODEL_FAST);
-    } catch {
+    } catch (primaryErr: any) {
+        // Fallback al OTRO proveedor. gpt-4o (no -mini): el proyecto de OpenAI
+        // solo tiene acceso a gpt-4o; con gpt-4o-mini daba 403 y narrate volvía
+        // vacío → "No pude generar los hallazgos".
         try {
             return chosen?.provider === 'openai'
                 ? await askAnthropic(ANTHROPIC_MODEL_FAST)
-                : await askOpenAI('gpt-4o-mini');
-        } catch {
+                : await askOpenAI('gpt-4o');
+        } catch (fallbackErr: any) {
+            // Log explícito: antes se tragaba en silencio y el fallo era invisible.
+            console.error(
+                '[system-alerts narrate] ambos proveedores fallaron.',
+                'primario:', primaryErr?.status ?? primaryErr?.message ?? primaryErr,
+                '| fallback:', fallbackErr?.status ?? fallbackErr?.message ?? fallbackErr
+            );
             return '';
         }
     }

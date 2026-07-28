@@ -23,7 +23,8 @@ import path from 'path';
  */
 
 const ANTHROPIC_MODEL = ANTHROPIC_MODEL_FAST;
-const OPENAI_FALLBACK_MODEL = 'gpt-4o-mini';
+// gpt-4o (no -mini): el proyecto de OpenAI solo tiene acceso a gpt-4o.
+const OPENAI_FALLBACK_MODEL = 'gpt-4o';
 
 const PROPOSE_TOOL = {
     name: 'propose_alert',
