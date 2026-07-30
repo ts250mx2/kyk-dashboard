@@ -222,6 +222,9 @@ export async function POST(req: Request) {
         }
 
         console.log(`[${requestId}] whatsapp ask from=${fromPhone} tenant=${tenantId} q="${question.slice(0, 80)}"`);
+        // Modelo que atiende esta consulta (visible en el log de PM2). Si Anthropic
+        // falla, los warns de planWithTools/narrate muestran el cambio a OpenAI.
+        console.log(`[${requestId}] modelo IA: ${ANTHROPIC_MODEL} (respaldo OpenAI: ${OPENAI_FALLBACK_MODEL})`);
 
         const schemaPath = path.join(process.cwd(), 'database-schema-ia.md');
         const schemaString = fs.readFileSync(schemaPath, 'utf-8');
