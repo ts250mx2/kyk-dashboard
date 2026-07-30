@@ -149,7 +149,8 @@ async function planWithTools(systemPrompt: string, question: string, requestId: 
     } catch (err: any) {
         if (!shouldFallbackToOpenAI(err)) throw err;
         const status = err?.status ?? err?.response?.status;
-        console.warn(`[${requestId}] Claude falló (status=${status}, type=${err?.error?.error?.type || err?.error?.type}), fallback a ${OPENAI_FALLBACK_MODEL}`);
+        // console.log (no warn) para que salga en el out.log de PM2 junto a "modelo IA".
+        console.log(`[${requestId}] ⚠️ FALLBACK: Claude falló (status=${status}, type=${err?.error?.error?.type || err?.error?.type}) → respondiendo con ${OPENAI_FALLBACK_MODEL} (plan)`);
         const completion = await openai.chat.completions.create({
             model: OPENAI_FALLBACK_MODEL,
             max_tokens: 1024,
@@ -179,7 +180,8 @@ async function narrate(prompt: string, maxTokens: number, requestId: string): Pr
     } catch (err: any) {
         if (!shouldFallbackToOpenAI(err)) throw err;
         const status = err?.status ?? err?.response?.status;
-        console.warn(`[${requestId}] Claude (narrate) falló (status=${status}), fallback a ${OPENAI_FALLBACK_MODEL}`);
+        // console.log (no warn) para que salga en el out.log de PM2 junto a "modelo IA".
+        console.log(`[${requestId}] ⚠️ FALLBACK: Claude (narrate) falló (status=${status}) → respondiendo con ${OPENAI_FALLBACK_MODEL} (narrate)`);
         const completion = await openai.chat.completions.create({
             model: OPENAI_FALLBACK_MODEL,
             max_tokens: maxTokens,
