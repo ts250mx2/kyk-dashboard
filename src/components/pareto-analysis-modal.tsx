@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     X, Search, FileSpreadsheet, Minimize2,
-    Maximize2, TrendingUp, ChevronUp, ChevronDown, Percent,
-    Bot, Sparkles, Cpu, Brain, Download
+    Maximize2, TrendingUp, TrendingDown, ChevronUp, ChevronDown, Percent,
+    Bot, Sparkles, Cpu, Brain, Download, Minus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx-js-style';
@@ -34,7 +34,10 @@ export function ParetoAnalysisModal({
     const [loading, setLoading] = useState(false);
     const [isMaximized, setIsMaximized] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [groupBy, setGroupBy] = useState<'articulo' | 'departamento' | 'familia'>('articulo');
+    const [groupBy, setGroupBy] = useState<'articulo' | 'departamento' | 'familia' | 'sucursal'>('articulo');
+    const [compareWith, setCompareWith] = useState<'periodo' | 'anio'>('periodo');
+    const [trendFilter, setTrendFilter] = useState<'todos' | 'suben' | 'bajan' | 'nuevos'>('todos');
+    const [comparePeriod, setComparePeriod] = useState<{ fechaInicio: string; fechaFin: string } | null>(null);
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({ key: 'TotalItemVenta', direction: 'desc' });
 
     // Position Persistence
@@ -98,19 +101,27 @@ export function ParetoAnalysisModal({
         } else {
             setDetails([]);
             setSearchTerm('');
+            setTrendFilter('todos');
+            setComparePeriod(null);
             setIsMaximized(false);
         }
-    }, [isOpen, idTienda, fechaInicio, fechaFin, groupBy]);
+    }, [isOpen, idTienda, fechaInicio, fechaFin, groupBy, compareWith]);
 
     const fetchPareto = async () => {
         setLoading(true);
         try {
-            let url = `/api/dashboard/pareto-analysis?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&groupBy=${groupBy}`;
+            let url = `/api/dashboard/pareto-analysis?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&groupBy=${groupBy}&compareWith=${compareWith}`;
             if (idTienda && idTienda !== 'null' && idTienda !== 'undefined') url += `&storeId=${idTienda}`;
 
             const res = await fetch(url);
             const json = await res.json();
-            setDetails(Array.isArray(json) ? json : []);
+            if (Array.isArray(json)) {
+                setDetails(json);
+                setComparePeriod(null);
+            } else {
+                setDetails(Array.isArray(json?.rows) ? json.rows : []);
+                setComparePeriod(json?.compare ?? null);
+            }
         } catch (error) {
             console.error('Error fetching Pareto analysis:', error);
         } finally {
@@ -130,14 +141,35 @@ export function ParetoAnalysisModal({
         return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
     };
 
-    const filteredDetails = details.filter(i =>
+    const matchesSearch = (i: any) =>
         (groupBy === 'articulo' ? i.CodigoBarras?.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
         i.Descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (groupBy === 'articulo' ? i.Familia?.toLowerCase().includes(searchTerm.toLowerCase()) : false)
-    );
+        (groupBy === 'articulo' ? i.Familia?.toLowerCase().includes(searchTerm.toLowerCase()) : false);
+
+    const matchesTrend = (i: any) => {
+        if (trendFilter === 'suben') return !i.EsNuevo && (i.VariacionImporte ?? 0) > 0;
+        if (trendFilter === 'bajan') return (i.VariacionImporte ?? 0) < 0;
+        if (trendFilter === 'nuevos') return i.EsNuevo === 1;
+        return true;
+    };
+
+    const filteredDetails = details.filter(i => matchesSearch(i) && matchesTrend(i));
 
     const top80Items = details.filter(i => i.CumulativePercentage <= 80 || (i.CumulativePercentage - i.IndividualPercentage < 80));
     const rest20Items = details.filter(i => !top80Items.includes(i));
+
+    // Estadísticas de incrementos / decrementos vs periodo de comparación
+    const incItems = details.filter(i => !i.EsNuevo && (i.VariacionImporte ?? 0) > 0);
+    const decItems = details.filter(i => (i.VariacionImporte ?? 0) < 0);
+    const newItems = details.filter(i => i.EsNuevo === 1);
+    const incTotal = incItems.reduce((acc, i) => acc + (i.VariacionImporte ?? 0), 0);
+    const decTotal = decItems.reduce((acc, i) => acc + (i.VariacionImporte ?? 0), 0);
+    const totalActual = details.reduce((acc, i) => acc + (i.TotalItemVenta ?? 0), 0);
+    const totalAnterior = details.reduce((acc, i) => acc + (i.VentaAnterior ?? 0), 0);
+    const netVar = totalActual - totalAnterior;
+    const netVarPct = totalAnterior > 0 ? (netVar / totalAnterior) * 100 : null;
+
+    const unitLabel = groupBy === 'articulo' ? 'Items' : groupBy === 'departamento' ? 'Deptos' : groupBy === 'familia' ? 'Familias' : 'Sucursales';
 
     // AI Summary State
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -255,21 +287,27 @@ export function ParetoAnalysisModal({
     const sortedDetails = [...filteredDetails].sort((a, b) => {
         if (!sortConfig) return 0;
         const { key, direction } = sortConfig;
-        let aValue = a[key];
-        let bValue = b[key];
-        if (typeof aValue === 'string') {
-            return direction === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        const aValue = a[key];
+        const bValue = b[key];
+        if (typeof aValue === 'string' || typeof bValue === 'string') {
+            const aStr = String(aValue ?? '');
+            const bStr = String(bValue ?? '');
+            return direction === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
         }
-        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+        // Los nulos (ej. Var % de items nuevos) siempre van al final
+        const aNum = aValue ?? -Infinity;
+        const bNum = bValue ?? -Infinity;
+        return direction === 'asc' ? aNum - bNum : bNum - aNum;
     });
 
     const exportToExcel = () => {
         if (sortedDetails.length === 0) return;
 
         // Header and Data rows
+        const dimensionHeader = groupBy === 'departamento' ? 'Departamento' : groupBy === 'familia' ? 'Familia' : 'Sucursal';
         const headers = groupBy === 'articulo'
-            ? ['Código', 'Descripción', 'Familia', 'Ventas', '% Indiv', '% Acum', 'Cantidad', 'Operaciones']
-            : [groupBy === 'departamento' ? 'Departamento' : 'Familia', 'Ventas', '% Indiv', '% Acum', 'Cantidad', 'Operaciones'];
+            ? ['Código', 'Descripción', 'Familia', 'Ventas', 'Venta Anterior', 'Var $', 'Var %', '% Indiv', '% Acum', 'Cantidad', 'Operaciones']
+            : [dimensionHeader, 'Ventas', 'Venta Anterior', 'Var $', 'Var %', '% Indiv', '% Acum', 'Cantidad', 'Operaciones'];
 
         const data = sortedDetails.map(i => {
             const isTop80 = i.CumulativePercentage <= 80 || (i.CumulativePercentage - i.IndividualPercentage < 80);
@@ -304,12 +342,43 @@ export function ParetoAnalysisModal({
                 s: { alignment: { horizontal: 'right' } }
             };
 
+            const variacion = i.VariacionImporte ?? 0;
+            const varColor = i.EsNuevo ? '4F46E5' : variacion > 0 ? '059669' : variacion < 0 ? 'E11D48' : '94A3B8';
+
+            const prevSalesCell = {
+                v: i.VentaAnterior ?? 0,
+                t: 'n',
+                z: '"$"#,##0.00',
+                s: { font: { color: { rgb: '94A3B8' } }, alignment: { horizontal: 'right' } }
+            };
+
+            const varCell = {
+                v: variacion,
+                t: 'n',
+                z: '"$"#,##0.00',
+                s: { font: { color: { rgb: varColor }, bold: true }, alignment: { horizontal: 'right' } }
+            };
+
+            const varPctCell = i.EsNuevo
+                ? { v: 'NUEVO', t: 's', s: { font: { color: { rgb: '4F46E5' }, bold: true }, alignment: { horizontal: 'right' } } }
+                : (i.VariacionPct !== null && i.VariacionPct !== undefined)
+                    ? {
+                        v: i.VariacionPct / 100,
+                        t: 'n',
+                        z: '0.0%',
+                        s: { font: { color: { rgb: varColor }, bold: true }, alignment: { horizontal: 'right' } }
+                    }
+                    : { v: '', t: 's' };
+
             if (groupBy === 'articulo') {
                 return [
                     i.CodigoBarras,
                     i.Descripcion,
                     i.Familia || 'SIN FAMILIA',
                     salesCell,
+                    prevSalesCell,
+                    varCell,
+                    varPctCell,
                     indivPctCell,
                     accumPctCell,
                     i.CantidadVendida,
@@ -319,6 +388,9 @@ export function ParetoAnalysisModal({
                 return [
                     i.Descripcion,
                     salesCell,
+                    prevSalesCell,
+                    varCell,
+                    varPctCell,
                     indivPctCell,
                     accumPctCell,
                     i.CantidadVendida,
@@ -345,13 +417,13 @@ export function ParetoAnalysisModal({
         }
 
         const wscols = groupBy === 'articulo'
-            ? [{ wch: 15 }, { wch: 45 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }]
-            : [{ wch: 45 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+            ? [{ wch: 15 }, { wch: 45 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }]
+            : [{ wch: 45 }, { wch: 15 }, { wch: 15 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
 
         worksheet['!cols'] = wscols;
 
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, `Participación ${groupBy === 'articulo' ? '80-20' : groupBy === 'departamento' ? 'Deptos' : 'Familias'}`);
+        XLSX.utils.book_append_sheet(workbook, worksheet, `Participación ${groupBy === 'articulo' ? '80-20' : groupBy === 'departamento' ? 'Deptos' : groupBy === 'familia' ? 'Familias' : 'Sucursales'}`);
 
         const fileName = `Participacion_${groupBy}_${storeName || 'Global'}_${new Date().toISOString().split('T')[0]}.xlsx`;
         XLSX.writeFile(workbook, fileName);
@@ -398,7 +470,8 @@ export function ParetoAnalysisModal({
                                     {[
                                         { id: 'articulo', label: 'Artículos' },
                                         { id: 'departamento', label: 'Deptos' },
-                                        { id: 'familia', label: 'Familias' }
+                                        { id: 'familia', label: 'Familias' },
+                                        { id: 'sucursal', label: 'Sucursales' }
                                     ].map((tab) => (
                                         <button
                                             key={tab.id}
@@ -459,6 +532,103 @@ export function ParetoAnalysisModal({
                     </div>
                 </div>
 
+                {/* Barra Incrementos / Decrementos */}
+                {!loading && details.length > 0 && (
+                    <div className="flex items-stretch justify-between gap-3 px-4 py-2.5 bg-slate-50/70 border-b border-slate-200 shrink-0 overflow-x-auto">
+                        <div className="flex items-stretch gap-2">
+                            <div className={cn(
+                                "flex flex-col justify-center px-3 py-1.5 border rounded-none min-w-[130px]",
+                                netVar >= 0 ? "bg-white border-emerald-200" : "bg-white border-rose-200"
+                            )}>
+                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                    {netVar >= 0 ? <TrendingUp size={10} className="text-emerald-500" /> : <TrendingDown size={10} className="text-rose-500" />}
+                                    Variación Neta
+                                </span>
+                                <span className={cn("text-xs font-black", netVar >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                                    {netVar >= 0 ? '+' : ''}{formatCurrency(netVar)}
+                                    {netVarPct !== null && (
+                                        <span className="text-[9px] font-bold ml-1 opacity-70">({netVarPct >= 0 ? '+' : ''}{netVarPct.toFixed(1)}%)</span>
+                                    )}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setTrendFilter(trendFilter === 'suben' ? 'todos' : 'suben')}
+                                className={cn(
+                                    "flex flex-col items-start justify-center px-3 py-1.5 border rounded-none min-w-[120px] transition-all text-left",
+                                    trendFilter === 'suben'
+                                        ? "bg-emerald-600 border-emerald-700 text-white shadow-lg shadow-emerald-200"
+                                        : "bg-white border-slate-200 hover:border-emerald-400"
+                                )}
+                            >
+                                <span className={cn("text-[8px] font-black uppercase tracking-widest flex items-center gap-1", trendFilter === 'suben' ? "text-emerald-100" : "text-slate-400")}>
+                                    <TrendingUp size={10} className={trendFilter === 'suben' ? "text-white" : "text-emerald-500"} /> Incrementos
+                                </span>
+                                <span className={cn("text-xs font-black", trendFilter === 'suben' ? "text-white" : "text-emerald-600")}>
+                                    {incItems.length} <span className="text-[9px] font-bold opacity-70">· +{formatCurrency(incTotal)}</span>
+                                </span>
+                            </button>
+                            <button
+                                onClick={() => setTrendFilter(trendFilter === 'bajan' ? 'todos' : 'bajan')}
+                                className={cn(
+                                    "flex flex-col items-start justify-center px-3 py-1.5 border rounded-none min-w-[120px] transition-all text-left",
+                                    trendFilter === 'bajan'
+                                        ? "bg-rose-600 border-rose-700 text-white shadow-lg shadow-rose-200"
+                                        : "bg-white border-slate-200 hover:border-rose-400"
+                                )}
+                            >
+                                <span className={cn("text-[8px] font-black uppercase tracking-widest flex items-center gap-1", trendFilter === 'bajan' ? "text-rose-100" : "text-slate-400")}>
+                                    <TrendingDown size={10} className={trendFilter === 'bajan' ? "text-white" : "text-rose-500"} /> Decrementos
+                                </span>
+                                <span className={cn("text-xs font-black", trendFilter === 'bajan' ? "text-white" : "text-rose-600")}>
+                                    {decItems.length} <span className="text-[9px] font-bold opacity-70">· {formatCurrency(decTotal)}</span>
+                                </span>
+                            </button>
+                            <button
+                                onClick={() => setTrendFilter(trendFilter === 'nuevos' ? 'todos' : 'nuevos')}
+                                className={cn(
+                                    "flex flex-col items-start justify-center px-3 py-1.5 border rounded-none min-w-[90px] transition-all text-left",
+                                    trendFilter === 'nuevos'
+                                        ? "bg-indigo-600 border-indigo-700 text-white shadow-lg shadow-indigo-200"
+                                        : "bg-white border-slate-200 hover:border-indigo-400"
+                                )}
+                            >
+                                <span className={cn("text-[8px] font-black uppercase tracking-widest flex items-center gap-1", trendFilter === 'nuevos' ? "text-indigo-100" : "text-slate-400")}>
+                                    <Sparkles size={10} className={trendFilter === 'nuevos' ? "text-white" : "text-indigo-500"} /> Nuevos
+                                </span>
+                                <span className={cn("text-xs font-black", trendFilter === 'nuevos' ? "text-white" : "text-indigo-600")}>
+                                    {newItems.length} <span className="text-[9px] font-bold opacity-70">{unitLabel}</span>
+                                </span>
+                            </button>
+                        </div>
+                        <div className="flex flex-col items-end justify-center gap-1 shrink-0">
+                            <div className="flex items-center bg-slate-100 p-0.5 rounded-none border border-slate-200">
+                                {[
+                                    { id: 'periodo', label: 'VS Periodo Ant.' },
+                                    { id: 'anio', label: 'VS Año Ant.' }
+                                ].map((mode) => (
+                                    <button
+                                        key={mode.id}
+                                        onClick={() => setCompareWith(mode.id as 'periodo' | 'anio')}
+                                        className={cn(
+                                            "px-2 py-0.5 text-[9px] font-black uppercase tracking-tighter transition-all rounded-none",
+                                            compareWith === mode.id
+                                                ? "bg-white text-[#4050B4] shadow-sm ring-1 ring-black/5"
+                                                : "text-slate-400 hover:text-slate-600"
+                                        )}
+                                    >
+                                        {mode.label}
+                                    </button>
+                                ))}
+                            </div>
+                            {comparePeriod && (
+                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">
+                                    Comparado: {comparePeriod.fechaInicio} a {comparePeriod.fechaFin}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Content */}
                 <div className="flex-1 overflow-auto bg-white relative">
                     {loading ? (
@@ -474,10 +644,19 @@ export function ParetoAnalysisModal({
                                             </th>
                                         )}
                                         <th onClick={() => handleSort('Descripcion')} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
-                                            <div className="flex items-center">{groupBy === 'articulo' ? 'Descripción' : groupBy === 'departamento' ? 'Departamento' : 'Familia'} {renderSortIcon('Descripcion')}</div>
+                                            <div className="flex items-center">{groupBy === 'articulo' ? 'Descripción' : groupBy === 'departamento' ? 'Departamento' : groupBy === 'familia' ? 'Familia' : 'Sucursal'} {renderSortIcon('Descripcion')}</div>
                                         </th>
                                         <th onClick={() => handleSort('TotalItemVenta')} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
                                             <div className="flex items-center justify-end">Ventas {renderSortIcon('TotalItemVenta')}</div>
+                                        </th>
+                                        <th onClick={() => handleSort('VentaAnterior')} className="hidden xl:table-cell px-4 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors border-l border-slate-100">
+                                            <div className="flex items-center justify-end">V. Anterior {renderSortIcon('VentaAnterior')}</div>
+                                        </th>
+                                        <th onClick={() => handleSort('VariacionImporte')} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors border-l border-slate-100">
+                                            <div className="flex items-center justify-end">Var $ {renderSortIcon('VariacionImporte')}</div>
+                                        </th>
+                                        <th onClick={() => handleSort('VariacionPct')} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors">
+                                            <div className="flex items-center justify-end">Var % {renderSortIcon('VariacionPct')}</div>
                                         </th>
                                         <th onClick={() => handleSort('IndividualPercentage')} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors border-l border-slate-100">
                                             <div className="flex items-center justify-end">% Indiv {renderSortIcon('IndividualPercentage')}</div>
@@ -518,6 +697,39 @@ export function ParetoAnalysisModal({
                                                 <td className="px-4 py-3 whitespace-nowrap text-right text-[12px] font-black text-slate-900">
                                                     {formatCurrency(item.TotalItemVenta)}
                                                 </td>
+                                                <td className="hidden xl:table-cell px-4 py-3 whitespace-nowrap text-right text-[11px] font-bold text-slate-400 border-l border-slate-100/50">
+                                                    {formatCurrency(item.VentaAnterior ?? 0)}
+                                                </td>
+                                                <td className={cn(
+                                                    "px-4 py-3 whitespace-nowrap text-right text-[11px] font-black border-l border-slate-100/50",
+                                                    item.EsNuevo ? "text-indigo-600" : (item.VariacionImporte ?? 0) > 0 ? "text-emerald-600" : (item.VariacionImporte ?? 0) < 0 ? "text-rose-600" : "text-slate-400"
+                                                )}>
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        {item.EsNuevo ? (
+                                                            <Sparkles size={11} />
+                                                        ) : (item.VariacionImporte ?? 0) > 0 ? (
+                                                            <TrendingUp size={11} />
+                                                        ) : (item.VariacionImporte ?? 0) < 0 ? (
+                                                            <TrendingDown size={11} />
+                                                        ) : (
+                                                            <Minus size={11} />
+                                                        )}
+                                                        {(item.VariacionImporte ?? 0) > 0 ? '+' : ''}{formatCurrency(item.VariacionImporte ?? 0)}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-right text-[11px] font-black">
+                                                    {item.EsNuevo ? (
+                                                        <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black rounded-none uppercase tracking-tighter">Nuevo</span>
+                                                    ) : item.VariacionPct !== null && item.VariacionPct !== undefined ? (
+                                                        <span className={cn(
+                                                            item.VariacionPct > 0 ? "text-emerald-600" : item.VariacionPct < 0 ? "text-rose-600" : "text-slate-400"
+                                                        )}>
+                                                            {item.VariacionPct > 0 ? '+' : ''}{Number(item.VariacionPct).toFixed(1)}%
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-300">—</span>
+                                                    )}
+                                                </td>
                                                 <td className={cn(
                                                     "px-4 py-3 whitespace-nowrap text-right text-[12px] font-black border-l transition-colors",
                                                     (item.CumulativePercentage <= 80 || (item.CumulativePercentage - item.IndividualPercentage < 80))
@@ -544,7 +756,7 @@ export function ParetoAnalysisModal({
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={6} className="px-4 py-12 text-center bg-white">
+                                            <td colSpan={10} className="px-4 py-12 text-center bg-white">
                                                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">No hay datos suficientes para el análisis</p>
                                             </td>
                                         </tr>
@@ -560,25 +772,31 @@ export function ParetoAnalysisModal({
                     <div className="flex items-center gap-6">
                         <div className="flex flex-col">
                             <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Participación 80%</span>
-                            <span className="text-sm font-black text-emerald-600">{top80Items.length} <span className="text-[10px] text-slate-400 font-bold ml-1">{groupBy === 'articulo' ? 'Items' : groupBy === 'departamento' ? 'Deptos' : 'Familias'}</span></span>
+                            <span className="text-sm font-black text-emerald-600">{top80Items.length} <span className="text-[10px] text-slate-400 font-bold ml-1">{unitLabel}</span></span>
                         </div>
                         <div className="flex flex-col border-l border-slate-200 pl-6">
                             <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Participación 20%</span>
-                            <span className="text-sm font-black text-amber-600">{rest20Items.length} <span className="text-[10px] text-slate-400 font-bold ml-1">{groupBy === 'articulo' ? 'Items' : groupBy === 'departamento' ? 'Deptos' : 'Familias'}</span></span>
+                            <span className="text-sm font-black text-amber-600">{rest20Items.length} <span className="text-[10px] text-slate-400 font-bold ml-1">{unitLabel}</span></span>
                         </div>
                         <div className="flex flex-col border-l border-slate-200 pl-6">
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Artículos Totales</span>
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total {unitLabel}</span>
                             <span className="text-sm font-black text-slate-900">{details.length}</span>
                         </div>
                         <div className="flex flex-col border-l border-slate-200 pl-6">
                             <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Venta Total</span>
-                            <span className="text-sm font-black text-[#4050B4]">{formatCurrency(details.reduce((acc, i) => acc + i.TotalItemVenta, 0))}</span>
+                            <span className="text-sm font-black text-[#4050B4]">{formatCurrency(totalActual)}</span>
+                        </div>
+                        <div className="flex flex-col border-l border-slate-200 pl-6">
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Venta Comparada</span>
+                            <span className="text-sm font-black text-slate-500">{formatCurrency(totalAnterior)}</span>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
                         <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-100 text-amber-700 rounded-none">
                             <Percent size={14} className="text-amber-500" />
-                            <span className="text-[9px] font-bold uppercase tracking-wider italic">Análisis basado en el volumen de venta acumulado</span>
+                            <span className="text-[9px] font-bold uppercase tracking-wider italic">
+                                Variaciones vs {compareWith === 'anio' ? 'mismo periodo del año anterior' : 'periodo inmediato anterior'}
+                            </span>
                         </div>
                         <button
                             onClick={onClose}
