@@ -5,9 +5,45 @@ import { jwtVerify } from 'jose';
 const secret = process.env.JWT_SECRET;
 const SECRET_KEY = new TextEncoder().encode(secret || 'dev-secret-key-replaces-this-in-prod');
 
+// CORS para el preview web de la app móvil (Expo en modo web). Se permiten
+// solo orígenes locales o de red privada (RFC1918) — un sitio público nunca
+// puede presentar estos orígenes; las apps nativas no usan CORS.
+function isAllowedCorsOrigin(origin: string): boolean {
+    try {
+        const url = new URL(origin);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+        const host = url.hostname;
+        if (host === 'localhost' || host === '127.0.0.1') return true;
+        return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
+    } catch {
+        return false;
+    }
+}
+
+function withCors(response: NextResponse, origin: string) {
+    response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Vary', 'Origin');
+    return response;
+}
+
 export async function middleware(request: NextRequest) {
     const session = request.cookies.get('session');
     const { pathname } = request.nextUrl;
+
+    // CORS para el preview web de la app móvil: responder el preflight y
+    // marcar el origen permitido en las respuestas de /api.
+    const origin = request.headers.get('origin') || '';
+    const corsAllowed = pathname.startsWith('/api') && !!origin && isAllowedCorsOrigin(origin);
+    if (corsAllowed && request.method === 'OPTIONS') {
+        return withCors(new NextResponse(null, {
+            status: 204,
+            headers: {
+                'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                'Access-Control-Max-Age': '86400',
+            },
+        }), origin);
+    }
 
     // 1. Si está activa la variable ONLY_WHATSAPP, bloqueamos todo excepto las APIs de
     //    WhatsApp y los enlaces públicos compartibles (página /r/<uuid> + su API /api/share).
@@ -40,7 +76,8 @@ export async function middleware(request: NextRequest) {
                 // Token inválido, dejarlo en login
             }
         }
-        return NextResponse.next();
+        const response = NextResponse.next();
+        return corsAllowed ? withCors(response, origin) : response;
     }
 
     // 3. Proteger la ruta raíz y cualquier otra página no excluida arriba
